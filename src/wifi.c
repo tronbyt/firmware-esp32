@@ -131,3 +131,12 @@ void wifi_shutdown() {
   esp_wifi_stop();
   esp_wifi_deinit();
 }
+
+int wifi_get_mac(uint8_t mac[6]) {
+  esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, mac);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get MAC address: %s", esp_err_to_name(err));
+    return 1;
+  }
+  return 0;
+}

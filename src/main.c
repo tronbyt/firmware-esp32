@@ -53,7 +53,13 @@ void app_main(void) {
     ESP_LOGW("URL", "Keyword 'next' not found in URL.");
   }
 
-  ESP_LOGW(TAG,"Main Loop Start");
+  uint8_t mac[6];
+  if (!wifi_get_mac(mac)) {
+    ESP_LOGI(TAG, "WiFi MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1],
+             mac[2], mac[3], mac[4], mac[5]);
+  }
+
+  ESP_LOGW(TAG, "Main Loop Start");
   for (;;) {
 
     uint8_t* webp;
