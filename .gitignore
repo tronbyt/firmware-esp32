@@ -2,3 +2,4 @@
 sdkconfig.old
 .vscode
 .production
+secrets.json
