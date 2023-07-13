@@ -48,7 +48,14 @@ void app_main(void) {
       gfx_update(webp, len);
       free(webp);
     }
-
+    
+    #ifdef TIDBYT_REFRESH_INTERVAL_SECONDS
+    vTaskDelay(pdMS_TO_TICKS(TIDBYT_REFRESH_INTERVAL_SECONDS * 1000));
+    #else
     vTaskDelay(pdMS_TO_TICKS(10000));
+    #endif
+
+
+    
   }
 }
