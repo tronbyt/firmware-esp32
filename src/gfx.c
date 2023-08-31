@@ -188,28 +188,31 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
 
     int lastTimestamp = 0;
     int delay = 0;
+    TickType_t drawStartTick = xTaskGetTickCount();
     // Draw each frame, and sleep for the delay
     for (int j = 0; j < animation.frame_count; j++) {
 
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
-      vTaskDelay(pdMS_TO_TICKS(delay));
+      if (delay > 0)
+        xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+      drawStartTick = xTaskGetTickCount();
       display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0, 1,
                   2);
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
     if (delay > 0) {
-      vTaskDelay(pdMS_TO_TICKS(delay));  // Yield CPU for the delay time
+      xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
     } else {
       vTaskDelay(pdMS_TO_TICKS(10));  // Add a small fallback delay to yield CPU
     }
 
     // In case of a single frame, sleep for app_dwell_secs
     if (animation.frame_count == 1) {
-      ESP_LOGI(TAG,"single frame delay");
-      vTaskDelay(pdMS_TO_TICKS(app_dwell_secs * 1000));
+      ESP_LOGI(TAG, "single frame delay");
+      xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(app_dwell_secs * 1000));
     }
     WebPAnimDecoderDelete(decoder);
   }
