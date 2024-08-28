@@ -36,6 +36,9 @@ If using tidbyt_manager in docker replace the ip address to the docker host's ip
 Then run the following command :
 ```pio run --environment tidbyt --target upload```
 
+If you're flashing to a Tidbyt Gen2, just change to the above to use
+the `--environment tidbyt-gen2` flag.
+
 ## Monitoring Logs
 To check the output of your running firmware, run the following:
 ```
