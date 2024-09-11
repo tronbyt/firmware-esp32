@@ -45,8 +45,15 @@ pio device monitor
 ## Back to Normal
 To get your Tidbyt back to normal, you can run the following to flash the
 production firmware onto your Tidbyt:
+
 ```
-pio run --target reset
+pio run --target reset --environment tidbyt
+```
+
+And if you're working with a Tidbyt Gen 2:
+
+```
+pio run --target reset --environment tidbyt-gen2
 ```
 
 [1]: https://github.com/tidbyt/pixlet

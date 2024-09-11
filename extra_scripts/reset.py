@@ -3,9 +3,13 @@ Import("env")
 import os.path
 import requests
 
-PRODUCTION_VERSION = "v10/35833"
+PRODUCTION_VERSION = {
+    "tidbyt": "v10/35833",
+    "tidbyt-gen2": "v11/35369"
+}[env["PIOENV"]]
 
 def fetch_firmware():
+
     binaries = [
         "firmware.bin",
         "partitions.bin",
@@ -22,7 +26,7 @@ def fetch_firmware():
         r = requests.get(f"https://storage.googleapis.com/tidbyt-public-firmware/{PRODUCTION_VERSION}/{binary}")
         if r.status_code != 200:
             raise Exception(f"Failed to fetch {binary}: {r.status_code}")
-    
+
         with open(f".production/{PRODUCTION_VERSION}/{binary}", "wb") as f:
             f.write(r.content)
 
