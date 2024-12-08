@@ -38,6 +38,21 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&wifi_shutdown);
 
+  char url[256] = TIDBYT_REMOTE_URL;
+  char new_url[256];
+
+  // Replace "next" with "brightness"
+  char* replace = strstr(url, "next");
+  if (replace) {
+    snprintf(new_url, sizeof(new_url), "%.*sbrightness%s", (int)(replace - url),
+             url, replace + strlen("next"));
+    ESP_LOGI("URL", "Updated URL: %s", new_url);
+  } else {
+    ESP_LOGW("URL", "Keyword 'next' not found in URL.");
+  }
+
+  
+
   for (;;) {
     uint8_t* webp;
     size_t len;

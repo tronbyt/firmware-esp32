@@ -35,7 +35,7 @@ int display_initialize() {
   _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
   // Set brightness and clear the screen.
-  _matrix->setBrightness8(DISPLAY_DEFAULT_BRIGHTNESS);
+  _matrix->setBrightness8(TIDBYT_DEFAULT_BRIGHTNESS);
   if (!_matrix->begin()) {
     return 1;
   }
