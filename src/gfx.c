@@ -129,6 +129,7 @@ static void gfx_loop(void *arg) {
     // Draw it
     if (draw_webp(webp, len)) {
       ESP_LOGE(TAG, "Could not draw webp");
+      vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     }
   }
 }

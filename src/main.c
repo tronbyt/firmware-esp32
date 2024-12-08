@@ -58,6 +58,7 @@ void app_main(void) {
     size_t len;
     if (remote_get(TIDBYT_REMOTE_URL, &webp, &len)) {
       ESP_LOGE(TAG, "Failed to get webp");
+      vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
       ESP_LOGI(TAG, "Updated webp (%d bytes)", len);
       gfx_update(webp, len);
