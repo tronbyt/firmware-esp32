@@ -2,12 +2,12 @@
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
-#define R1 21
-#define G1 2
-#define BL1 22
-#define R2 23
-#define G2 4
-#define BL2 27
+#define R1 2
+#define G1 22
+#define BL1 21
+#define R2 4
+#define G2 27
+#define BL2 23
 
 #define CH_A 26
 #define CH_B 5
