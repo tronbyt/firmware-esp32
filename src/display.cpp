@@ -34,10 +34,10 @@ int display_initialize() {
                          HUB75_I2S_CFG::HZ_10M);
   _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
-  // Set brightness and clear the screen.
-  _matrix->setBrightness8(TIDBYT_DEFAULT_BRIGHTNESS);
   if (!_matrix->begin()) {
     return 1;
+    // Set brightness and clear the screen.
+    _matrix->setBrightness8(TIDBYT_DEFAULT_BRIGHTNESS);
   }
   _matrix->fillScreenRGB888(0, 0, 0);
 
