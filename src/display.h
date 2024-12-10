@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 int display_initialize();
-
+void display_set_brightness(int b);
 void display_shutdown();
 
 void display_draw(const uint8_t *pix, int width, int height, int channels,

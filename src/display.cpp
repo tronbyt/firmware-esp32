@@ -44,6 +44,8 @@ int display_initialize() {
   return 0;
 }
 
+void display_set_brightness(int b) { _matrix->setBrightness8(b); }
+
 void display_shutdown() {
   display_clear();
   _matrix->stopDMAoutput();

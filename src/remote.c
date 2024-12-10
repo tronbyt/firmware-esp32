@@ -102,6 +102,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 }
 
 int remote_get(const char* url, uint8_t** buf, size_t* len) {
+  ESP_LOGI("URL", "Updated: %s", url);
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),

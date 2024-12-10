@@ -14,6 +14,23 @@
 
 static const char* TAG = "main";
 
+char brightness_url[256];
+
+void update_brightness() {
+  // remote_get the brightness_url
+  static size_t len;
+  static char* b;
+  if (remote_get(brightness_url, &b, &len)) {
+    ESP_LOGE(TAG, "Failed to get brightness");
+  } else {
+    int bi = atoi(b);
+    ESP_LOGI(TAG, "Got Brightness (%d)", bi);
+    if (bi > -1 && bi < 100) {
+      display_set_brightness(bi);
+    }
+  }
+}
+
 void app_main(void) {
   ESP_LOGI(TAG, "Hello world!");
 
@@ -39,19 +56,18 @@ void app_main(void) {
   esp_register_shutdown_handler(&wifi_shutdown);
 
   char url[256] = TIDBYT_REMOTE_URL;
-  char new_url[256];
 
   // Replace "next" with "brightness"
   char* replace = strstr(url, "next");
   if (replace) {
-    snprintf(new_url, sizeof(new_url), "%.*sbrightness%s", (int)(replace - url),
-             url, replace + strlen("next"));
-    ESP_LOGI("URL", "Updated URL: %s", new_url);
+    snprintf(brightness_url, sizeof(brightness_url), "%.*sbrightness%s",
+             (int)(replace - url), url, replace + strlen("next"));
+    ESP_LOGI("URL", "Updated: %s", brightness_url);
   } else {
     ESP_LOGW("URL", "Keyword 'next' not found in URL.");
   }
 
-  
+  update_brightness();
 
   for (;;) {
     uint8_t* webp;
