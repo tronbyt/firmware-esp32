@@ -16,20 +16,19 @@ static const char* TAG = "main";
 int32_t isAnimating = 0;  // Initialize with a valid value
 char brightness_url[256];
 
-void update_brightness() {
-  // remote_get the brightness_url
-  static size_t len;
-  static char* b;
-  if (remote_get(brightness_url, (uint8_t**)&b , &len)) {
-    ESP_LOGE(TAG, "Failed to get brightness");
-  } else {
-    int bi = atoi(b);
-    ESP_LOGI(TAG, "Got Brightness (%d)", bi);
-    if (bi > -1 && bi < 100) {
-      display_set_brightness(bi);
-    }
-  }
-}
+// void update_brightness() {
+//   // remote_get the brightness_url
+//   static size_t len;
+//   size_t b = DISPLAY_DEFAULT_BRIGHTNESS;
+//   if (remote_get(brightness_url, (uint8_t**)&b , &len, &b)) {
+//     ESP_LOGE(TAG, "Failed to get brightness");
+//   } else {
+//     ESP_LOGI(TAG, "Got Brightness (%d)", b);
+//     if ( b < 100 ) {
+//       display_set_brightness(b);
+//     }
+//   }
+// }
 
 void app_main(void) {
   ESP_LOGI(TAG, "Hello world!");
@@ -67,17 +66,22 @@ void app_main(void) {
     ESP_LOGW("URL", "Keyword 'next' not found in URL.");
   }
 
-  update_brightness();
+  // update_brightness();
 
   for (;;) {
     static int count = 0;
     uint8_t* webp;
     size_t len;
+    size_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
-    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len)) {
+    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
+      if (brightness < 255) { 
+        ESP_LOGI(TAG, "Set brightness to %i", brightness);
+        display_set_brightness(brightness);
+      }
       // wait until animating is finished to load up and then do the full delay
       while (isAnimating == 1) {
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -93,9 +97,9 @@ void app_main(void) {
     vTaskDelay(pdMS_TO_TICKS(10000));
     #endif
 
-    if (count % 6 == 0) {
-      update_brightness();
-    }
+    // if (count % 6 == 0) {
+    //   update_brightness();
+    // }
 
     count++;
   }

@@ -15,6 +15,8 @@ struct remote_state {
   size_t max;
 };
 
+uint8_t brightness_value;
+
 #define HTTP_BUFFER_SIZE_MAX 512 * 1024
 #define HTTP_BUFFER_SIZE_DEFAULT 32 * 1024
 
@@ -40,6 +42,11 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
     case HTTP_EVENT_ON_HEADER:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", event->header_key,
                event->header_value);
+      // Check for the specific header key
+      if (strcmp(event->header_key, "Skidbyt-Brightness") == 0) {
+        brightness_value = (uint8_t)atoi(event->header_value);
+        // ESP_LOGI(TAG, "Skidbyt-Brightness value: %i", brightness_value);
+      }
       break;
 
     case HTTP_EVENT_ON_DATA:
@@ -101,7 +108,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* b_int) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),
@@ -140,6 +147,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len) {
   // Write back the results.
   *buf = state.buf;
   *len = state.len;
+  if (brightness_value < 255) *b_int = brightness_value;
 
   esp_http_client_cleanup(http);
 
