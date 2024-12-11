@@ -1,14 +1,13 @@
 # Hardware SDK
-[![Docs](https://img.shields.io/badge/docs-tidbyt.dev-blue?style=flat-square)](https://tidbyt.dev)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/tidbyt/hdk/main.yaml?style=flat-square)](https://github.com/tidbyt/hdk/actions/workflows/main.yaml)
-[![Discourse](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscuss.tidbyt.com&style=flat-square)](https://discuss.tidbyt.com/)
 [![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)](https://discord.gg/r45MXG4kZc)
 
 This repository contains a community supported firmware for the Tidbyt hardware 🤓. 
 
-![social banner](./docs/assets/social.png)
+## Alert
+As of December 2024 this firmeware is only functional for Tidbyt Gen1.
 
 ## Warning
+
 ⚠️ Warning! Flashing your Tidbyt with this firmware or derivatives could fatally 
 damage your device. As such, flashing your Tidbyt with this firmware or
 derivatives voids your warranty and comes without support.
@@ -17,21 +16,24 @@ derivatives voids your warranty and comes without support.
 This project uses PlatformIO to build, flash, and monitor firmware on the Tidbyt.
 To get started, you will need to download [PlatformIO Core][2] on your computer.
 
-Additionally, this firmware is designed to work with [Pixlet][1]. Using
-`pixlet serve`, you can serve a WebP on your local network. Take note of your
-computers IP address and replace it in the `TIDBYT_REMOTE_URL` example above.
-While we had pixlet in mind, you can point this firmware at any URL that hosts
-a WebP image that is optimized for the Tidbyt display.
+Additionally, this firmware is designed to work with [Tidbyt Manager](https://github.com/tavdog/tidbyt-manager).
+You can point this firmware at any URL that hosts a WebP image that is optimized for the Tidbyt display.
 
 ## Getting Started
 To flash the custom firmware on your device, run the following after replacing
-the variables with your desired information:
+the variables in secrets.json.example with your desired own information and renaming it to `secrets.json`
+If using tidbyt_manager in docker replace the ip address to the docker host's ip address.
 ```
-TIDBYT_WIFI_SSID='Your WiFi' \
-TIDBYT_WIFI_PASSWORD='super-secret' \
-TIDBYT_REMOTE_URL='http://192.168.10.10:8080/api/v1/preview.webp' \
-pio run --environment tidbyt --target upload
+{
+    "TIDBYT_WIFI_SSID": "myssiD",
+    "TIDBYT_WIFI_PASSWORD": "<PASSWORD>",
+    "TIDBYT_REMOTE_URL=": "http://192.168.1.10:8000/admin/skidbyt_1/next",
+    "TIDBYT_REFRESH_INTERVAL_SECONDS": 10,
+    "TIDBYT_DEFAULT_BRIGHTNESS" : 30
+}
 ```
+Then run the following command :
+```pio run --environment tidbyt --target upload```
 
 ## Monitoring Logs
 To check the output of your running firmware, run the following:
