@@ -18,11 +18,13 @@ def main() -> None:
             tidbyt_default_brightness = json_config.get("TIDBYT_DEFAULT_BRIGHTNESS",10)
 
     else: # use environment variables
-        tidbyt_wifi_ssid = os.environ.get("TIDBYT_WIFI_SSID")
-        tidbyt_wifi_password = os.environ.get("TIDBYT_WIFI_PASSWORD")
-        tidbyt_remote_url = os.environ.get("TIDBYT_REMOTE_URL")
-        tidbyt_refresh_interval_seconds = int(os.environ.get("TIDBYT_REFRESH_INTERVAL_SECONDS"))
-        tidbyt_default_brightness = int(os.environ.get("TIDBYT_DEFAULT_BRIGHTNESS"))
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nERROR : edit secrets.json.example and save as secrets.json\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        exit(1)
+        # tidbyt_wifi_ssid = os.environ.get("TIDBYT_WIFI_SSID")
+        # tidbyt_wifi_password = os.environ.get("TIDBYT_WIFI_PASSWORD")
+        # tidbyt_remote_url = os.environ.get("TIDBYT_REMOTE_URL")
+        # tidbyt_refresh_interval_seconds = int(os.environ.get("TIDBYT_REFRESH_INTERVAL_SECONDS"))
+        # tidbyt_default_brightness = int(os.environ.get("TIDBYT_DEFAULT_BRIGHTNESS"))
 
     env.Append(
         CCFLAGS=[
