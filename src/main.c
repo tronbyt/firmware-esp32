@@ -72,13 +72,13 @@ void app_main(void) {
     static int count = 0;
     uint8_t* webp;
     size_t len;
-    size_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    int8_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
     if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
-      if (brightness < 255) { 
+      if (brightness > -1 && brightness < 255) { 
         ESP_LOGI(TAG, "Set brightness to %i", brightness);
         display_set_brightness(brightness);
       }
