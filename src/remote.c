@@ -43,9 +43,9 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", event->header_key,
                event->header_value);
       // Check for the specific header key
-      if (strcmp(event->header_key, "Skidbyt-Brightness") == 0) {
+      if (strcmp(event->header_key, "Tronbyt-Brightness") == 0) {
         brightness_value = (uint8_t)atoi(event->header_value);
-        // SP_LOGI(TAG, "Skidbyt-Brightness value: %i", brightness_value);
+        // SP_LOGI(TAG, "Tronbyt-Brightness value: %i", brightness_value);
       }
       break;
 
