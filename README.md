@@ -1,4 +1,4 @@
-# Hardware SDK
+# Tronbyt Firmware
 [![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)](https://discord.gg/r45MXG4kZc)
 
 This repository contains a community supported firmware for the Tidbyt hardware 🤓. 
@@ -16,10 +16,12 @@ derivatives voids your warranty and comes without support.
 This project uses PlatformIO to build, flash, and monitor firmware on the Tidbyt.
 To get started, you will need to download [PlatformIO Core][2] on your computer.
 
-Additionally, this firmware is designed to work with [Tidbyt Manager](https://github.com/tavdog/tidbyt-manager).
-You can point this firmware at any URL that hosts a WebP image that is optimized for the Tidbyt display.
+Additionally, this firmware is designed to work with https://github.com/tavdog/tronbyt-server or
+you can point this firmware at any URL that hosts a WebP image that is optimized for the Tidbyt display.
 
 ## Getting Started
+INSTALL THE tronbyt-server first if you plan to use it. It will give you the remote_url you need before flashing.
+
 To flash the custom firmware on your device, run the following after replacing
 the variables in secrets.json.example with your desired own information and renaming it to `secrets.json`
 If using tidbyt_manager in docker replace the ip address to the docker host's ip address.
@@ -27,7 +29,7 @@ If using tidbyt_manager in docker replace the ip address to the docker host's ip
 {
     "TIDBYT_WIFI_SSID": "myssiD",
     "TIDBYT_WIFI_PASSWORD": "<PASSWORD>",
-    "TIDBYT_REMOTE_URL=": "http://192.168.1.10:8000/admin/tronbyt_1/next",
+    "TIDBYT_REMOTE_URL=": "http://homeServer.local:8000/admin/tronbyt_1/next",
     "TIDBYT_REFRESH_INTERVAL_SECONDS": 10,
     "TIDBYT_DEFAULT_BRIGHTNESS" : 30
 }
