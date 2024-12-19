@@ -72,30 +72,28 @@ void app_main(void) {
     static int count = 0;
     uint8_t* webp;
     size_t len;
-    int8_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    static int brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    static int app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 
-    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness)) {
+    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness, &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
-      if (brightness > -1 && brightness < 255) { 
+      if (brightness > -1 && brightness < 256) { 
         ESP_LOGI(TAG, "Set brightness to %i", brightness);
         display_set_brightness(brightness);
       }
-      // wait until animating is finished to load up and then do the full delay
+      // If the previous app is still animating then wait until it's done before updating to the next app
       while (isAnimating == 1) {
         vTaskDelay(pdMS_TO_TICKS(10));
       }
-      ESP_LOGI(TAG, "Updated webp (%d bytes)", len);
+      ESP_LOGI(TAG, "Updating webp (%d bytes)", len);
       gfx_update(webp, len);
       free(webp);
+      vTaskDelay(pdMS_TO_TICKS(app_dwell_secs * 1000));
     }
-    
-    #ifdef TIDBYT_REFRESH_INTERVAL_SECONDS
-    vTaskDelay(pdMS_TO_TICKS(TIDBYT_REFRESH_INTERVAL_SECONDS * 1000));
-    #else
-    vTaskDelay(pdMS_TO_TICKS(10000));
-    #endif
+
+
 
     // if (count % 6 == 0) {
     //   update_brightness();
