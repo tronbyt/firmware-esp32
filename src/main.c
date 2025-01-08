@@ -13,22 +13,9 @@
 #include "wifi.h"
 
 static const char* TAG = "main";
-int32_t isAnimating = 0;  // Initialize with a valid value
+int32_t isAnimating = 5;  // Initialize with a valid value enough time for boot animation
+int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 char brightness_url[256];
-
-// void update_brightness() {
-//   // remote_get the brightness_url
-//   static size_t len;
-//   size_t b = DISPLAY_DEFAULT_BRIGHTNESS;
-//   if (remote_get(brightness_url, (uint8_t**)&b , &len, &b)) {
-//     ESP_LOGE(TAG, "Failed to get brightness");
-//   } else {
-//     ESP_LOGI(TAG, "Got Brightness (%d)", b);
-//     if ( b < 100 ) {
-//       display_set_brightness(b);
-//     }
-//   }
-// }
 
 void app_main(void) {
   ESP_LOGI(TAG, "Hello world!");
@@ -68,15 +55,12 @@ void app_main(void) {
 
   // update_brightness();
   int64_t start_time = esp_timer_get_time();
-
   for (;;) {
-    // ESP_LOGW(TAG,"Main Loop Start");
-    static int count = 0;
-    static int animationCount = 0;
+    ESP_LOGW(TAG,"Main Loop Start");
+
     uint8_t* webp;
     size_t len;
     static int brightness = DISPLAY_DEFAULT_BRIGHTNESS;
-    static int app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 
     if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness, &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
@@ -84,28 +68,32 @@ void app_main(void) {
 
     } else {
       // Successful remote_get
-      ESP_LOGI(TAG, "Queued webp (%d bytes)", len);
+      ESP_LOGI(TAG, "Queuing webp (%d bytes)", len);
       gfx_update(webp, len);
       free(webp);
-
-      // If the previous app is still animating or still within app_dwell then wait until it's done before updating to the next app
-      // if (isAnimating == 1 or ) ESP_LOGW(TAG,"delay for animation");
-      unsigned int app_dwell_ms = app_dwell_secs * 1000;
-      while (esp_timer_get_time() - start_time < app_dwell_ms || isAnimating == 1) {
-        vTaskDelay(pdMS_TO_TICKS(1));
-      }
-      isAnimating = -1; // signal gfx_loop to get out and load new webp
-      // ESP_LOGW(TAG,"done delay for animation");
       if (brightness > -1 && brightness < 256) {
         // ESP_LOGI(TAG, "Set brightness to %i", brightness);
         display_set_brightness(brightness);
         // ESP_LOGI(TAG, "Delaying (%d secs)", app_dwell_secs);
         // vTaskDelay(pdMS_TO_TICKS(app_dwell_secs * 1000));
       }
-      while (isAnimating != 1) {
+      // If the previous app is still animating or still within app_dwell then wait until it's done before updating to the next app
+      if (isAnimating > 0 ) ESP_LOGW(TAG,"delay for animation");
+      int64_t app_dwell_us = app_dwell_secs * 1000000;
+      // ESP_LOGI(TAG, "Start time : %lld , app_dwell_us : %lld", start_time,app_dwell_us);
+      while ( isAnimating > 0 ) {
         vTaskDelay(pdMS_TO_TICKS(1));
+        // ESP_LOGI(TAG, "time : %lld", esp_timer_get_time());
       }
+      isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
+      ESP_LOGW(TAG,"set isAnim=app_dwell_secs ; done delay for animation");
+
+      // while (isAnimating != 1) {
+      //   vTaskDelay(pdMS_TO_TICKS(1));
+      // }
+
       start_time = esp_timer_get_time();
+      
     }
 
   }

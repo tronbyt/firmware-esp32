@@ -150,64 +150,78 @@ static void gfx_loop(void *args) {
       ESP_LOGE(TAG, "Could not draw webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     }
+    // vTaskDelay(pdMS_TO_TICKS(500)); // delay for anti barf
+
   }
 }
 
 static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   // Set up WebP decoder
-  // if (*isAnimating == -1) {
-  //   ESP_LOGW(TAG,"exiting draw_webp early");
-  //   *isAnimating = 0;
-  //   return 0;
-  // } else {
-  //   ESP_LOGI(TAG,"In draw_webp");
-  // } 
-  WebPData webpData;
-  WebPDataInit(&webpData);
-  webpData.bytes = buf;
-  webpData.size = len;
-
-  WebPAnimDecoderOptions decoderOptions;
-  WebPAnimDecoderOptionsInit(&decoderOptions);
-  decoderOptions.color_mode = MODE_RGBA;
-
-  WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
-  if (decoder == NULL) {
-    ESP_LOGE(TAG, "Could not create WebP decoder");
-    return 1;
+  int app_dwell_secs = *isAnimating;
+  if (*isAnimating == -1) {
+    ESP_LOGW(TAG,"exiting draw_webp early");
+    *isAnimating = 0;
+    return 0;
+  } else {
+    ESP_LOGI(TAG,"In draw_webp");
   }
 
-  WebPAnimInfo animation;
-  if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
-    ESP_LOGE(TAG, "Could not get WebP animation");
-    return 1;
-  }
+  int64_t start_us = esp_timer_get_time();
+  int64_t dwell_us = app_dwell_secs * 1000000;
+  // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
+  while (esp_timer_get_time() - start_us < dwell_us) {
+    WebPData webpData;
+    WebPDataInit(&webpData);
+    webpData.bytes = buf;
+    webpData.size = len;
 
-  int lastTimestamp = 0;
-  int delay = 0;
-  // Draw each frame, and sleep for the delay
-  // ESP_LOGI(TAG,"begin animating");
-  for (int j = 0; j < animation.frame_count; j++) {
-    *isAnimating = 1;
-    uint8_t *pix;
-    int timestamp;
-    WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
-    vTaskDelay(pdMS_TO_TICKS(delay));
-    display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0, 1,
-                 2);
-    delay = timestamp - lastTimestamp;
-    lastTimestamp = timestamp;
+    WebPAnimDecoderOptions decoderOptions;
+    WebPAnimDecoderOptionsInit(&decoderOptions);
+    decoderOptions.color_mode = MODE_RGBA;
+
+    WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
+    if (decoder == NULL) {
+      ESP_LOGE(TAG, "Could not create WebP decoder");
+      return 1;
+    }
+
+    WebPAnimInfo animation;
+    if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
+      ESP_LOGE(TAG, "Could not get WebP animation");
+      return 1;
+    }
+
+    int lastTimestamp = 0;
+    int delay = 0;
+    // Draw each frame, and sleep for the delay
+    // ESP_LOGI(TAG,"begin animating");
+
+    for (int j = 0; j < animation.frame_count; j++) {
+
+      uint8_t *pix;
+      int timestamp;
+      WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
+      vTaskDelay(pdMS_TO_TICKS(delay));
+      display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0, 1,
+                  2);
+      delay = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+    }
+    // WebPAnimDecoderReset(decoder); // reset to the beginning for animations.
+    // ESP_LOGW(TAG,"delaying for %d ms", delay);
+    if (delay > 0) {
+      vTaskDelay(pdMS_TO_TICKS(delay));  // Yield CPU for the delay time
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(10));  // Add a small fallback delay to yield CPU
+    }
+
+    // In case of a single frame, sleep for app_dwell_secs
+    if (animation.frame_count == 1) {
+      ESP_LOGI(TAG,"single frame delay");
+      vTaskDelay(pdMS_TO_TICKS(app_dwell_secs * 1000));
+    }
+    WebPAnimDecoderDelete(decoder);
   }
-  // ESP_LOGI(TAG,"stopped animating");
   *isAnimating = 0;
-  ESP_LOGW(TAG,"delaying for %d ms", delay);
-  vTaskDelay(pdMS_TO_TICKS(delay));
-
-  // In case of a single frame, sleep for 1s
-  if (animation.frame_count == 1) {
-    vTaskDelay(pdMS_TO_TICKS(1000));
-  }
-
-  WebPAnimDecoderDelete(decoder);
   return 0;
 }
