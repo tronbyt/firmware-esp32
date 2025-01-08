@@ -87,7 +87,7 @@ int gfx_update(const void *webp, size_t len) {
     _state->buf = malloc(len);
     if (!_state->buf) {
       ESP_LOGE("main", "Failed to allocate memory for _state->buf");
-      return;  // Exit early to avoid using NULL buffer
+      return 1;  // Exit early to avoid using NULL buffer
     }
 
     _state->len = len;  // Update length after successful allocation
@@ -116,7 +116,7 @@ static void gfx_loop(void *args) {
   void *webp = NULL;
   size_t len = 0;
   int counter = -1;
-  int32_t *p = (int32_t *)args;  // Cast to pointer type
+  int32_t *isAnimating = (int32_t *)args;  // Cast to pointer type
   ESP_LOGI(TAG, "Graphics loop running on core %d", xPortGetCoreID());
 
   for (;;) {
@@ -128,6 +128,7 @@ static void gfx_loop(void *args) {
 
     // If there's new data, copy it to local buffer
     if (counter != _state->counter) {
+      ESP_LOGI(TAG,"Loaded new webp");
       if (_state->len > len) {
         free(webp);
         webp = malloc(_state->len);
@@ -144,7 +145,8 @@ static void gfx_loop(void *args) {
     }
 
     // Draw it
-    if (draw_webp(webp, len, p)) {
+    ESP_LOGI(TAG,"calling draw_webp");
+    if (draw_webp(webp, len, isAnimating)) {
       ESP_LOGE(TAG, "Could not draw webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     }
@@ -153,6 +155,13 @@ static void gfx_loop(void *args) {
 
 static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   // Set up WebP decoder
+  // if (*isAnimating == -1) {
+  //   ESP_LOGW(TAG,"exiting draw_webp early");
+  //   *isAnimating = 0;
+  //   return 0;
+  // } else {
+  //   ESP_LOGI(TAG,"In draw_webp");
+  // } 
   WebPData webpData;
   WebPDataInit(&webpData);
   webpData.bytes = buf;
@@ -176,8 +185,8 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
 
   int lastTimestamp = 0;
   int delay = 0;
-
   // Draw each frame, and sleep for the delay
+  // ESP_LOGI(TAG,"begin animating");
   for (int j = 0; j < animation.frame_count; j++) {
     *isAnimating = 1;
     uint8_t *pix;
@@ -189,7 +198,9 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     delay = timestamp - lastTimestamp;
     lastTimestamp = timestamp;
   }
+  // ESP_LOGI(TAG,"stopped animating");
   *isAnimating = 0;
+  ESP_LOGW(TAG,"delaying for %d ms", delay);
   vTaskDelay(pdMS_TO_TICKS(delay));
 
   // In case of a single frame, sleep for 1s

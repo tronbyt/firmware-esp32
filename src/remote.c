@@ -47,11 +47,11 @@ int dwell_secs_value = -1;
       // Check for the specific header key
       if (strcmp(event->header_key, "Tronbyt-Brightness") == 0) {
         brightness_value = (int)atoi(event->header_value);
-        ESP_LOGI(TAG, "Tronbyt-Brightness value: %i", brightness_value);
+        // ESP_LOGI(TAG, "Tronbyt-Brightness value: %i", brightness_value);
       }
       else if (strcmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
         dwell_secs_value = (int)atoi(event->header_value);
-        ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
+        // ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
       }
       break;
 
@@ -157,6 +157,6 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int* dwe
   if (dwell_secs_value > -1 && dwell_secs_value < 300) *dwell_secs = dwell_secs_value; // 5 minute max ?
 
   esp_http_client_cleanup(http);
-
+  ESP_LOGI(TAG,"fetched new webp");
   return 0;
 }
