@@ -79,8 +79,6 @@ void app_main(void) {
       }
       ESP_LOGW(TAG,"set isAnim=app_dwell_secs ; done delay for animation");
       isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
-
-      start_time = esp_timer_get_time();
       
     }
 
