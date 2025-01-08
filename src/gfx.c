@@ -158,13 +158,6 @@ static void gfx_loop(void *args) {
 static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   // Set up WebP decoder
   int app_dwell_secs = *isAnimating;
-  if (*isAnimating == -1) {
-    ESP_LOGW(TAG,"exiting draw_webp early");
-    *isAnimating = 0;
-    return 0;
-  } else {
-    ESP_LOGI(TAG,"In draw_webp");
-  }
 
   int64_t start_us = esp_timer_get_time();
   int64_t dwell_us = app_dwell_secs * 1000000;
@@ -194,8 +187,6 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     int lastTimestamp = 0;
     int delay = 0;
     // Draw each frame, and sleep for the delay
-    // ESP_LOGI(TAG,"begin animating");
-
     for (int j = 0; j < animation.frame_count; j++) {
 
       uint8_t *pix;
@@ -207,8 +198,6 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
-    // WebPAnimDecoderReset(decoder); // reset to the beginning for animations.
-    // ESP_LOGW(TAG,"delaying for %d ms", delay);
     if (delay > 0) {
       vTaskDelay(pdMS_TO_TICKS(delay));  // Yield CPU for the delay time
     } else {

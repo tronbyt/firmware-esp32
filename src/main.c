@@ -43,7 +43,7 @@ void app_main(void) {
 
   char url[256] = TIDBYT_REMOTE_URL;
 
-  // Replace "next" with "brightness"
+  // Build brightness URL by replacing "next" with "brightness"
   char* replace = strstr(url, "next");
   if (replace) {
     snprintf(brightness_url, sizeof(brightness_url), "%.*sbrightness%s",
@@ -53,8 +53,6 @@ void app_main(void) {
     ESP_LOGW("URL", "Keyword 'next' not found in URL.");
   }
 
-  // update_brightness();
-  int64_t start_time = esp_timer_get_time();
   for (;;) {
     ESP_LOGW(TAG,"Main Loop Start");
 
@@ -72,25 +70,15 @@ void app_main(void) {
       gfx_update(webp, len);
       free(webp);
       if (brightness > -1 && brightness < 256) {
-        // ESP_LOGI(TAG, "Set brightness to %i", brightness);
         display_set_brightness(brightness);
-        // ESP_LOGI(TAG, "Delaying (%d secs)", app_dwell_secs);
-        // vTaskDelay(pdMS_TO_TICKS(app_dwell_secs * 1000));
       }
-      // If the previous app is still animating or still within app_dwell then wait until it's done before updating to the next app
+      // Wait for app_dwell_secs to expire (isAnimating will be 0)
       if (isAnimating > 0 ) ESP_LOGW(TAG,"delay for animation");
-      int64_t app_dwell_us = app_dwell_secs * 1000000;
-      // ESP_LOGI(TAG, "Start time : %lld , app_dwell_us : %lld", start_time,app_dwell_us);
       while ( isAnimating > 0 ) {
         vTaskDelay(pdMS_TO_TICKS(1));
-        // ESP_LOGI(TAG, "time : %lld", esp_timer_get_time());
       }
-      isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
       ESP_LOGW(TAG,"set isAnim=app_dwell_secs ; done delay for animation");
-
-      // while (isAnimating != 1) {
-      //   vTaskDelay(pdMS_TO_TICKS(1));
-      // }
+      isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
 
       start_time = esp_timer_get_time();
       
