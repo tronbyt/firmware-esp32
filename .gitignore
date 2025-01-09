@@ -3,3 +3,4 @@ sdkconfig.old
 .vscode
 .production
 secrets.json
+.DS_Store
