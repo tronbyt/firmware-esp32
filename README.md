@@ -3,24 +3,23 @@
 
 This repository contains a community supported firmware for the Tidbyt hardware 🤓. 
 
-## Alert
-As of December 2024 this firmeware is only functional for Tidbyt Gen1.
-
 ## Warning
 
 ⚠️ Warning! Flashing your Tidbyt with this firmware or derivatives could fatally 
 damage your device. As such, flashing your Tidbyt with this firmware or
 derivatives voids your warranty and comes without support.
 
-## Setup
+## Getting Started
+Follow the setup instructions for [tronbyt-server][3] unless you want to build yourself with platformio.
+
+
+## Building yourself with PlatformIO
+Only follow these instructions if you want to build the firmware yourself.  Otherwise let the [tronbyt-server][3] generate the firmware file for you.
 This project uses PlatformIO to build, flash, and monitor firmware on the Tidbyt.
 To get started, you will need to download [PlatformIO Core][2] on your computer.
 
 Additionally, this firmware is designed to work with https://github.com/tavdog/tronbyt-server or
 you can point this firmware at any URL that hosts a WebP image that is optimized for the Tidbyt display.
-
-## Getting Started
-INSTALL THE tronbyt-server first if you plan to use it. It will give you the remote_url you need before flashing.
 
 To flash the custom firmware on your device, run the following after replacing
 the variables in secrets.json.example with your desired own information and renaming it to `secrets.json`
@@ -52,3 +51,4 @@ pio run --target reset
 
 [1]: https://github.com/tidbyt/pixlet
 [2]: https://docs.platformio.org/en/latest/core/installation/index.html
+[3]: https://github.com/tavdog/tronbyt-server
