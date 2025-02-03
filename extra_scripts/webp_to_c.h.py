@@ -1,6 +1,16 @@
+import argparse
+
+# Set up argument parser
+parser = argparse.ArgumentParser(description='Convert a WebP file to a C header file.')
+parser.add_argument('input_file', type=str, help='The input WebP file')
+parser.add_argument('output_file', type=str, help='The output C header file')
+
+# Parse arguments
+args = parser.parse_args()
+
 # Read the binary WebP file
-input_file = "/Users/tavis/code/tronbyt-firmware-http/lib/assets/xscreensaver.webp"
-output_file = "output.h"
+input_file = args.input_file
+output_file = args.output_file
 
 with open(input_file, "rb") as f:
     binary_data = f.read()
