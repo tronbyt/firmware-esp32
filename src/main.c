@@ -18,7 +18,7 @@ int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 char brightness_url[256];
 
 void app_main(void) {
-  ESP_LOGI(TAG, "Hello world!");
+  ESP_LOGI(TAG, "App Main Start");
 
   // Setup the device flash storage.
   if (flash_initialize()) {
@@ -53,8 +53,8 @@ void app_main(void) {
     ESP_LOGW("URL", "Keyword 'next' not found in URL.");
   }
 
+  ESP_LOGW(TAG,"Main Loop Start");
   for (;;) {
-    ESP_LOGW(TAG,"Main Loop Start");
 
     uint8_t* webp;
     size_t len;
