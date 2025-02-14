@@ -28,9 +28,9 @@ def main() -> None:
 
     env.Append(
         CCFLAGS=[
-            f"-DTIDBYT_WIFI_SSID='\"{tidbyt_wifi_ssid}\"'",
-            f"-DTIDBYT_WIFI_PASSWORD='\"{tidbyt_wifi_password}\"'",
-            f"-DTIDBYT_REMOTE_URL='\"{tidbyt_remote_url}\"'",
+            f"-DTIDBYT_WIFI_SSID={env.StringifyMacro(tidbyt_wifi_ssid)}",
+            f"-DTIDBYT_WIFI_PASSWORD={env.StringifyMacro(tidbyt_wifi_password)}",
+            f"-DTIDBYT_REMOTE_URL={env.StringifyMacro(tidbyt_remote_url)}",
             f"-DTIDBYT_REFRESH_INTERVAL_SECONDS={tidbyt_refresh_interval_seconds}",
             f"-DTIDBYT_DEFAULT_BRIGHTNESS={tidbyt_default_brightness}",
         ],
