@@ -3,7 +3,7 @@ Import("env")
 import os.path
 import requests
 
-PRODUCTION_VERSION = "v10/26961"
+PRODUCTION_VERSION = "v10/35833"
 
 def fetch_firmware():
     binaries = [
