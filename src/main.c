@@ -58,7 +58,7 @@ void app_main(void) {
 
     uint8_t* webp;
     size_t len;
-    static int brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    static int32_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
     if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness, &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");

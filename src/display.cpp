@@ -4,7 +4,7 @@
 #ifdef TIDBYT_GEN2
 #define R1 5
 #define G1 23
-#define BL1 4
+#define BL1  4
 #define R2 2
 #define G2 22
 #define BL2 32

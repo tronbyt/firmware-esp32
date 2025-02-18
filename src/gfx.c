@@ -7,6 +7,7 @@
 #include <webp/demux.h>
 
 #include "display.h"
+#include "esp_timer.h"
 
 static const char *TAG = "gfx";
 
@@ -25,7 +26,7 @@ struct gfx_state {
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(uint8_t *webp, size_t len,int *p);
+static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating);
 
 int gfx_initialize(const void *webp, size_t len) {
   // Only initialize once
