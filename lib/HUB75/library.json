@@ -1,0 +1,11 @@
+{
+    "name": "ESP32-HUB75-MatrixPanel-DMA",
+    "build": {
+        "includeDir": "ESP32-HUB75-MatrixPanel-DMA/src",
+        "srcDir": "ESP32-HUB75-MatrixPanel-DMA",
+        "srcFilter": [
+            "+<src/**/*.c>",
+            "+<src/**/*.cpp>"
+        ]
+    }
+}
