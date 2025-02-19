@@ -15,7 +15,6 @@
 static const char* TAG = "main";
 int32_t isAnimating = 5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
-char brightness_url[256];
 
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
@@ -40,18 +39,6 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
-
-  char url[256] = TIDBYT_REMOTE_URL;
-
-  // Build brightness URL by replacing "next" with "brightness"
-  char* replace = strstr(url, "next");
-  if (replace) {
-    snprintf(brightness_url, sizeof(brightness_url), "%.*sbrightness%s",
-             (int)(replace - url), url, replace + strlen("next"));
-    ESP_LOGI("URL", "Updated: %s", brightness_url);
-  } else {
-    ESP_LOGW("URL", "Keyword 'next' not found in URL.");
-  }
 
   uint8_t mac[6];
   if (!wifi_get_mac(mac)) {
