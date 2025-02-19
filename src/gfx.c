@@ -129,7 +129,7 @@ static void gfx_loop(void *args) {
 
     // If there's new data, copy it to local buffer
     if (counter != _state->counter) {
-      ESP_LOGI(TAG,"Loaded new webp");
+      ESP_LOGI(TAG, "Loaded new webp");
       if (_state->len > len) {
         free(webp);
         webp = malloc(_state->len);
@@ -146,7 +146,7 @@ static void gfx_loop(void *args) {
     }
 
     // Draw it
-    ESP_LOGI(TAG,"calling draw_webp");
+    ESP_LOGI(TAG, "calling draw_webp");
     if (draw_webp(webp, len, isAnimating)) {
       ESP_LOGE(TAG, "Could not draw webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
