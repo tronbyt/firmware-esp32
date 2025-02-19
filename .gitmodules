@@ -1,6 +1,3 @@
-[submodule "lib/HUB75/ESP32-HUB75-MatrixPanel-I2S-DMA"]
-	path = lib/HUB75/ESP32-HUB75-MatrixPanel-I2S-DMA
-	url = https://github.com/tidbyt/ESP32-HUB75-MatrixPanel-I2S-DMA.git
 [submodule "lib/webp/libwebp"]
 	path = lib/webp/libwebp
 	url = https://github.com/webmproject/libwebp.git
