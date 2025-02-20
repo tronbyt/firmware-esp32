@@ -15,7 +15,6 @@
 static const char* TAG = "main";
 int32_t isAnimating = 5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
-char brightness_url[256];
 
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
@@ -41,47 +40,37 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&wifi_shutdown);
 
-  char url[256] = TIDBYT_REMOTE_URL;
-
-  // Build brightness URL by replacing "next" with "brightness"
-  char* replace = strstr(url, "next");
-  if (replace) {
-    snprintf(brightness_url, sizeof(brightness_url), "%.*sbrightness%s",
-             (int)(replace - url), url, replace + strlen("next"));
-    ESP_LOGI("URL", "Updated: %s", brightness_url);
-  } else {
-    ESP_LOGW("URL", "Keyword 'next' not found in URL.");
+  uint8_t mac[6];
+  if (!wifi_get_mac(mac)) {
+    ESP_LOGI(TAG, "WiFi MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1],
+             mac[2], mac[3], mac[4], mac[5]);
   }
 
-  ESP_LOGW(TAG,"Main Loop Start");
+  ESP_LOGW(TAG, "Main Loop Start");
   for (;;) {
-
     uint8_t* webp;
     size_t len;
-    static int brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    static int32_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
     if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness, &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-
     } else {
       // Successful remote_get
+      if (brightness > -1 && brightness < 256) {
+        ESP_LOGI(TAG, "setting brightness to %d", (int)brightness);
+        display_set_brightness(brightness);
+      }
       ESP_LOGI(TAG, "Queuing webp (%d bytes)", len);
       gfx_update(webp, len);
       free(webp);
-      if (brightness > -1 && brightness < 256) {
-        display_set_brightness(brightness);
-      }
       // Wait for app_dwell_secs to expire (isAnimating will be 0)
-      if (isAnimating > 0 ) ESP_LOGW(TAG,"delay for animation");
-      while ( isAnimating > 0 ) {
+      if (isAnimating > 0 ) ESP_LOGW(TAG, "delay for animation");
+      while (isAnimating > 0) {
         vTaskDelay(pdMS_TO_TICKS(1));
       }
-      ESP_LOGW(TAG,"set isAnim=app_dwell_secs ; done delay for animation");
+      ESP_LOGI(TAG, "set isAnim=app_dwell_secs ; done delay for animation");
       isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
-      
     }
-
   }
-
 }

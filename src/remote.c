@@ -1,10 +1,11 @@
+#include <stdbool.h>
+#include <stdlib.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_tls.h>
-#include <stdlib.h>
 
 static const char* TAG = "remote";
 
@@ -15,8 +16,8 @@ struct remote_state {
   size_t max;
 };
 
-int brightness_value = -1;
-int dwell_secs_value = -1;
+int32_t brightness_value = -1;
+int32_t dwell_secs_value = -1;
 
 #define HTTP_BUFFER_SIZE_MAX 512 * 1024
 #define HTTP_BUFFER_SIZE_DEFAULT 32 * 1024
@@ -24,8 +25,7 @@ int dwell_secs_value = -1;
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-    static esp_err_t
-    _httpCallback(esp_http_client_event_t* event) {
+static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   esp_err_t err = ESP_OK;
 
   switch (event->event_id) {
@@ -109,12 +109,17 @@ int dwell_secs_value = -1;
                  mbedtlsErr);
       }
       break;
+
+    case HTTP_EVENT_REDIRECT:
+      ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
+      esp_http_client_set_redirection(event->client);
+      break;
   }
 
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int* dwell_secs) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t* dwell_secs) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),

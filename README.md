@@ -36,6 +36,9 @@ If using tidbyt_manager in docker replace the ip address to the docker host's ip
 Then run the following command :
 ```pio run --environment tidbyt --target upload```
 
+If you're flashing to a Tidbyt Gen2, just change to the above to use
+the `--environment tidbyt-gen2` flag.
+
 ## Monitoring Logs
 To check the output of your running firmware, run the following:
 ```
@@ -45,8 +48,15 @@ pio device monitor
 ## Back to Normal
 To get your Tidbyt back to normal, you can run the following to flash the
 production firmware onto your Tidbyt:
+
 ```
-pio run --target reset
+pio run --target reset --environment tidbyt
+```
+
+And if you're working with a Tidbyt Gen 2:
+
+```
+pio run --target reset --environment tidbyt-gen2
 ```
 
 [1]: https://github.com/tidbyt/pixlet

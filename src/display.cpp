@@ -4,7 +4,7 @@
 #ifdef TIDBYT_GEN2
 #define R1 5
 #define G1 23
-#define BL1 4
+#define BL1  4
 #define R2 2
 #define G2 22
 #define BL2 32
@@ -47,6 +47,7 @@
 #endif
 
 static MatrixPanel_I2S_DMA *_matrix;
+static int _brightness = -1;
 
 int display_initialize() {
   // Initialize the panel.
@@ -82,18 +83,22 @@ int display_initialize() {
 
   if (!_matrix->begin()) {
     return 1;
-    // Set brightness and clear the screen.
-    _matrix->setBrightness8(TIDBYT_DEFAULT_BRIGHTNESS);
   }
-  _matrix->fillScreenRGB888(0, 0, 0);
+  display_set_brightness(TIDBYT_DEFAULT_BRIGHTNESS);
 
   return 0;
 }
 
-void display_set_brightness(int b) { _matrix->setBrightness8(b); }
+void display_set_brightness(int b) {
+  if (b != _brightness) {
+    _brightness = b;
+    _matrix->setBrightness8(b);
+    _matrix->clearScreen();
+  }
+}
 
 void display_shutdown() {
-  display_clear();
+  _matrix->clearScreen();
   _matrix->stopDMAoutput();
 }
 
@@ -112,4 +117,4 @@ void display_draw(const uint8_t *pix, int width, int height,
   _matrix->flipDMABuffer();
 }
 
-void display_clear() { _matrix->fillScreenRGB888(0, 0, 0); }
+void display_clear() { _matrix->clearScreen(); }
