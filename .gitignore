@@ -4,3 +4,4 @@ sdkconfig.old
 .production
 secrets.json
 .DS_Store
+build
