@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <stdatomic.h>
 #include <webp/demux.h>
 
 #include "display.h"
@@ -13,7 +14,7 @@
 #include "wifi.h"
 
 static const char* TAG = "main";
-int32_t isAnimating = 5;  // Initialize with a valid value enough time for boot animation
+// atomic_int isAnimating = 5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 
 void app_main(void) {
@@ -65,12 +66,12 @@ void app_main(void) {
       gfx_update(webp, len);
       free(webp);
       // Wait for app_dwell_secs to expire (isAnimating will be 0)
-      if (isAnimating > 0 ) ESP_LOGW(TAG, "delay for animation");
-      while (isAnimating > 0) {
+      if (atomic_load(&isAnimating) > 0) ESP_LOGW(TAG, "delay for animation");
+      while (atomic_load(&isAnimating) > 0) {
         vTaskDelay(pdMS_TO_TICKS(1));
       }
       ESP_LOGI(TAG, "set isAnim=app_dwell_secs ; done delay for animation");
-      isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
+      atomic_store(&isAnimating, app_dwell_secs); // use isAnimating as the container for app_dwell_secs
     }
   }
 }

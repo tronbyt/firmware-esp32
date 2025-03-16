@@ -26,7 +26,7 @@ struct gfx_state {
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating);
+static int draw_webp(uint8_t *buf, size_t len, atomic_int *isAnimating);
 
 int gfx_initialize(const void *webp, size_t len) {
   // Only initialize once
@@ -76,31 +76,36 @@ int gfx_update(const void *webp, size_t len) {
     return 1;
   }
 
-  // Update state
-  if (len > _state->len) {
-    // Free the old buffer only if it exists
-    if (_state->buf) {
-      free(_state->buf);
-      _state->buf = NULL;  // Set to NULL to avoid dangling pointers
+  // Ensure mutex is released in case of error
+  bool success = false;
+  do {
+    // Update state
+    if (len > _state->len) {
+      // Free the old buffer only if it exists
+      if (_state->buf) {
+        free(_state->buf);
+        _state->buf = NULL;  // Set to NULL to avoid dangling pointers
+      }
+
+      // Allocate new memory
+      _state->buf = malloc(len);
+      if (!_state->buf) {
+        ESP_LOGE("main", "Failed to allocate memory for _state->buf");
+        break;  // Exit early to avoid using NULL buffer
+      }
+
+      _state->len = len;  // Update length after successful allocation
     }
 
-    // Allocate new memory
-    _state->buf = malloc(len);
-    if (!_state->buf) {
-      ESP_LOGE("main", "Failed to allocate memory for _state->buf");
-      return 1;  // Exit early to avoid using NULL buffer
+    // Copy data to buffer
+    if (_state->buf && webp) {
+      memcpy(_state->buf, webp, len);
+      _state->counter++;
+      success = true;
+    } else {
+      ESP_LOGE("main", "Buffer or input data is NULL");
     }
-
-    _state->len = len;  // Update length after successful allocation
-  }
-
-  // Copy data to buffer
-  if (_state->buf && webp) {
-    memcpy(_state->buf, webp, len);
-    _state->counter++;
-  } else {
-    ESP_LOGE("main", "Buffer or input data is NULL");
-  }
+  } while (0);
 
   // Give mutex
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
@@ -108,7 +113,7 @@ int gfx_update(const void *webp, size_t len) {
     return 1;
   }
 
-  return 0;
+  return success ? 0 : 1;
 }
 
 void gfx_shutdown() { display_shutdown(); }
@@ -117,7 +122,7 @@ static void gfx_loop(void *args) {
   void *webp = NULL;
   size_t len = 0;
   int counter = -1;
-  int32_t *isAnimating = (int32_t *)args;  // Cast to pointer type
+  atomic_int *isAnimating = (atomic_int *)args;  // Cast to pointer type
   ESP_LOGI(TAG, "Graphics loop running on core %d", xPortGetCoreID());
 
   for (;;) {
@@ -150,14 +155,12 @@ static void gfx_loop(void *args) {
     if (draw_webp(webp, len, isAnimating)) {
       ESP_LOGE(TAG, "Could not draw webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-      isAnimating = 0;
+      atomic_store(isAnimating, 0);
     }
-    // vTaskDelay(pdMS_TO_TICKS(500)); // delay for anti barf
-
   }
 }
 
-static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
+static int draw_webp(uint8_t *buf, size_t len, atomic_int *isAnimating) {
   // Set up WebP decoder
   int app_dwell_secs = *isAnimating;
 
