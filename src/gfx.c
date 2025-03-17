@@ -150,7 +150,7 @@ static void gfx_loop(void *args) {
     if (draw_webp(webp, len, isAnimating)) {
       ESP_LOGE(TAG, "Could not draw webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-      isAnimating = 0;
+      *isAnimating = 0;
     }
     // vTaskDelay(pdMS_TO_TICKS(500)); // delay for anti barf
 

@@ -14,10 +14,9 @@ struct remote_state {
   size_t len;
   size_t size;
   size_t max;
+  int32_t brightness;
+  int32_t dwell_secs;
 };
-
-int32_t brightness_value = -1;
-int32_t dwell_secs_value = -1;
 
 #define HTTP_BUFFER_SIZE_MAX 512 * 1024
 #define HTTP_BUFFER_SIZE_DEFAULT 32 * 1024
@@ -27,6 +26,7 @@ int32_t dwell_secs_value = -1;
 
 static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   esp_err_t err = ESP_OK;
+  struct remote_state* state = (struct remote_state*)event->user_data;
 
   switch (event->event_id) {
     case HTTP_EVENT_ERROR:
@@ -46,11 +46,11 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
                event->header_value);
       // Check for the specific header key
       if (strcmp(event->header_key, "Tronbyt-Brightness") == 0) {
-        brightness_value = (int)atoi(event->header_value);
+        state->brightness = (int)atoi(event->header_value);
         // ESP_LOGI(TAG, "Tronbyt-Brightness value: %i", brightness_value);
       }
       else if (strcmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
-        dwell_secs_value = (int)atoi(event->header_value);
+        state->dwell_secs = (int)atoi(event->header_value);
         // ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
       }
       break;
@@ -62,8 +62,6 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         ESP_LOGW(TAG, "Discarding HTTP response due to missing state");
         break;
       }
-
-      struct remote_state* state = (struct remote_state*)event->user_data;
 
       // If needed, resize the buffer to fit the new data
       if (event->data_len + state->len > state->size) {
@@ -126,6 +124,8 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
       .len = 0,
       .size = HTTP_BUFFER_SIZE_DEFAULT,
       .max = HTTP_BUFFER_SIZE_MAX,
+      .brightness = -1,
+      .dwell_secs = -1,
   };
 
   if (state.buf == NULL) {
@@ -168,8 +168,8 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
   // Write back the results.
   *buf = state.buf;
   *len = state.len;
-  if (brightness_value > -1 && brightness_value < 255) *b_int = brightness_value;
-  if (dwell_secs_value > -1 && dwell_secs_value < 300) *dwell_secs = dwell_secs_value; // 5 minute max ?
+  if (state.brightness > -1 && state.brightness < 255) *b_int = state.brightness;
+  if (state.dwell_secs > -1 && state.dwell_secs < 300) *dwell_secs = state.dwell_secs; // 5 minute max ?
 
   esp_http_client_cleanup(http);
   ESP_LOGI(TAG,"fetched new webp");
