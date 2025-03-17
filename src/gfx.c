@@ -56,10 +56,10 @@ int gfx_initialize(const void *webp, size_t len) {
   BaseType_t ret = xTaskCreatePinnedToCore(gfx_loop,             // pvTaskCode
                                            "gfx_loop",           // pcName
                                            GFX_TASK_STACK_SIZE,  // usStackDepth
-                                           (void*)&isAnimating,                 // pvParameters
+                                           (void*)&isAnimating,  // pvParameters
                                            GFX_TASK_PRIO,        // uxPriority
-                                           &_state->task,  // pxCreatedTask
-                                           GFX_TASK_CORE   // xCoreID
+                                           &_state->task,        // pxCreatedTask
+                                           GFX_TASK_CORE         // xCoreID
   );
   if (ret != pdPASS) {
     ESP_LOGE(TAG, "Could not create gfx task");
@@ -164,45 +164,50 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   int64_t start_us = esp_timer_get_time();
   int64_t dwell_us = app_dwell_secs * 1000000;
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
+
+  WebPData webpData;
+  WebPDataInit(&webpData);
+  webpData.bytes = buf;
+  webpData.size = len;
+
+  WebPAnimDecoderOptions decoderOptions;
+  WebPAnimDecoderOptionsInit(&decoderOptions);
+  decoderOptions.color_mode = MODE_RGBA;
+
+  WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
+  if (decoder == NULL) {
+    ESP_LOGE(TAG, "Could not create WebP decoder");
+    return 1;
+  }
+
+  WebPAnimInfo animation;
+  if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
+    ESP_LOGE(TAG, "Could not get WebP animation");
+    return 1;
+  }
+
   while (esp_timer_get_time() - start_us < dwell_us) {
-    WebPData webpData;
-    WebPDataInit(&webpData);
-    webpData.bytes = buf;
-    webpData.size = len;
-
-    WebPAnimDecoderOptions decoderOptions;
-    WebPAnimDecoderOptionsInit(&decoderOptions);
-    decoderOptions.color_mode = MODE_RGBA;
-
-    WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
-    if (decoder == NULL) {
-      ESP_LOGE(TAG, "Could not create WebP decoder");
-      return 1;
-    }
-
-    WebPAnimInfo animation;
-    if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
-      ESP_LOGE(TAG, "Could not get WebP animation");
-      return 1;
-    }
-
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
-    // Draw each frame, and sleep for the delay
-    for (int j = 0; j < animation.frame_count; j++) {
 
+    // Draw each frame, and sleep for the delay
+    while (WebPAnimDecoderHasMoreFrames(decoder)) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
-      if (delay > 0)
+      if (delay > 0) {
         xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+      }
       drawStartTick = xTaskGetTickCount();
-      display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0, 1,
-                  2);
+      display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0, 1, 2);
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
+
+    // reset decoder to start from the beginning
+    WebPAnimDecoderReset(decoder);
+
     if (delay > 0) {
       xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
     } else {
@@ -213,9 +218,10 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     if (animation.frame_count == 1) {
       ESP_LOGI(TAG, "single frame delay");
       xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(app_dwell_secs * 1000));
+      break;
     }
-    WebPAnimDecoderDelete(decoder);
   }
+  WebPAnimDecoderDelete(decoder);
   *isAnimating = 0;
   return 0;
 }
