@@ -1,11 +1,16 @@
 {
     "name": "libwebp",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/webmproject/libwebp.git",
+        "branch": "main"
+    },
     "build": {
         "srcFilter": [
             "+<src/**/*.c>"
         ],
-        "includeDir": "libwebp/src",
-        "srcDir": "libwebp",
+        "includeDir": "./src",
+        "srcDir": ".",
         "flags": [
             "-I include"
         ]

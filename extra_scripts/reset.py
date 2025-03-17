@@ -1,7 +1,7 @@
-Import("env")
-
 import os.path
 import requests
+
+Import("env")
 
 PRODUCTION_VERSION = {
     "tidbyt": "v10/35833",
