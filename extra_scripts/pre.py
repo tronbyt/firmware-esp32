@@ -47,10 +47,6 @@ def main() -> None:
             f"-DTIDBYT_REFRESH_INTERVAL_SECONDS={tidbyt_refresh_interval_seconds}",
             f"-DTIDBYT_DEFAULT_BRIGHTNESS={tidbyt_default_brightness}",
         ],
-        CPPDEFINES=[
-            "-DNO_GFX",
-            "-DNO_FAST_FUNCTIONS",
-        ],
     )
 
 
