@@ -23,8 +23,6 @@ To get started, you will need to download [PlatformIO Core][2] on your computer.
 Additionally, this firmware is designed to work with https://github.com/tronbyt/server or
 you can point this firmware at any URL that hosts a WebP image that is optimized for the Tidbyt display.
 
-Begin with checking out the git submodules: `git submodule update --init`.
-
 To flash the custom firmware on your device, run the following after replacing
 the variables in secrets.json.example with your desired own information and renaming it to `secrets.json`
 If using tidbyt_manager in docker replace the ip address to the docker host's ip address.

@@ -1,30 +1,43 @@
 #!/usr/bin/env python3
 
-import os,json
+import os
+import json
 
 Import("env")
 
+
 def main() -> None:
+    # copy libwebp's library.json to the lib directory
+    env.Execute(Copy("$PROJECT_LIBDEPS_DIR/$PIOENV/libwebp/library.json", "$PROJECT_DIR/lib/webp/library.json"))
+
     # if secrets.h file exists
     if os.path.exists("secrets.json"):
         # read secrets.h file
         with open("secrets.json", "r") as f:
             json_config = json.load(f)
 
-            tidbyt_wifi_ssid = json_config.get("TIDBYT_WIFI_SSID","")
-            tidbyt_wifi_password= json_config.get("TIDBYT_WIFI_PASSWORD","")
+            tidbyt_wifi_ssid = json_config.get("TIDBYT_WIFI_SSID", "")
+            tidbyt_wifi_password = json_config.get("TIDBYT_WIFI_PASSWORD", "")
             tidbyt_remote_url = json_config.get("TIDBYT_REMOTE_URL", "")
-            tidbyt_refresh_interval_seconds = json_config.get("TIDBYT_REFRESH_INTERVAL_SECONDS",10)
-            tidbyt_default_brightness = json_config.get("TIDBYT_DEFAULT_BRIGHTNESS",10)
+            tidbyt_refresh_interval_seconds = json_config.get(
+                "TIDBYT_REFRESH_INTERVAL_SECONDS", 10
+            )
+            tidbyt_default_brightness = json_config.get("TIDBYT_DEFAULT_BRIGHTNESS", 10)
 
-    else: # use environment variables
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWARNING : edit secrets.json.example and save as secrets.json\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    else:  # use environment variables
+        print(
+            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWARNING : edit secrets.json.example and save as secrets.json\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        )
         print("Using Xplaceholder values for direct firmware.bin modification.")
         tidbyt_wifi_ssid = "XplaceholderWIFISSID________________________________"
         tidbyt_wifi_password = "XplaceholderWIFIPASSWORD____________________________"
         tidbyt_remote_url = "XplaceholderREMOTEURL_________________________________________________________________________________________"
-        tidbyt_refresh_interval_seconds = 10 #int(os.environ.get("TIDBYT_REFRESH_INTERVAL_SECONDS"))
-        tidbyt_default_brightness = 30 # int(os.environ.get("TIDBYT_DEFAULT_BRIGHTNESS"))
+        tidbyt_refresh_interval_seconds = (
+            10  # int(os.environ.get("TIDBYT_REFRESH_INTERVAL_SECONDS"))
+        )
+        tidbyt_default_brightness = (
+            30  # int(os.environ.get("TIDBYT_DEFAULT_BRIGHTNESS"))
+        )
 
     env.Append(
         CCFLAGS=[
@@ -39,5 +52,6 @@ def main() -> None:
             "-DNO_FAST_FUNCTIONS",
         ],
     )
+
 
 main()
