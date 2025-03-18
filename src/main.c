@@ -12,8 +12,12 @@
 #include "sdkconfig.h"
 #include "wifi.h"
 
+#define BLUE "\033[1;34m"
+#define RESET "\033[0m"  // Reset to default color
+
 static const char* TAG = "main";
-int32_t isAnimating = 5;  // Initialize with a valid value enough time for boot animation
+int32_t isAnimating =
+    5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 
 void app_main(void) {
@@ -52,25 +56,27 @@ void app_main(void) {
     size_t len;
     static int32_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
-    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness, &app_dwell_secs)) {
+    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness,
+                   &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
       // Successful remote_get
       if (brightness > -1 && brightness < 256) {
-        ESP_LOGI(TAG, "setting brightness to %d", (int)brightness);
+        ESP_LOGI(TAG, BLUE "setting brightness to %d" RESET, (int)brightness);
         display_set_brightness(brightness);
       }
-      ESP_LOGI(TAG, "Queuing webp (%d bytes)", len);
+      ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
       gfx_update(webp, len);
       free(webp);
       // Wait for app_dwell_secs to expire (isAnimating will be 0)
-      if (isAnimating > 0 ) ESP_LOGW(TAG, "delay for animation");
+      if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
       while (isAnimating > 0) {
         vTaskDelay(pdMS_TO_TICKS(1));
       }
-      ESP_LOGI(TAG, "set isAnim=app_dwell_secs ; done delay for animation");
-      isAnimating = app_dwell_secs; // use isAnimating as the container for app_dwell_secs
+      ESP_LOGI(TAG, BLUE "Showing new webp" RESET);
+      isAnimating = app_dwell_secs;  // use isAnimating as the container for
+                                     // app_dwell_secs
     }
   }
 }

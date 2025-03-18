@@ -161,23 +161,31 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   // Set up WebP decoder
   int app_dwell_secs = *isAnimating;
 
-  int64_t start_us = esp_timer_get_time();
-  int64_t dwell_us = app_dwell_secs * 1000000;
-  // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
+    int64_t start_us = esp_timer_get_time();
 
-  WebPData webpData;
-  WebPDataInit(&webpData);
-  webpData.bytes = buf;
-  webpData.size = len;
+    int64_t dwell_us;
+    if (app_dwell_secs == 0 ) {
+      ESP_LOGW(TAG,"isAnimating is already 0. Looping one more time while we wait.");
+      dwell_us = 1 * 1000000; // default to 1 if it's zero so we loop again or show the image for 1 more second.
+    } else {
+      // ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
+      dwell_us = app_dwell_secs * 1000000;
+    }
+    // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
 
-  WebPAnimDecoderOptions decoderOptions;
-  WebPAnimDecoderOptionsInit(&decoderOptions);
-  decoderOptions.color_mode = MODE_RGBA;
+    WebPData webpData;
+    WebPDataInit(&webpData);
+    webpData.bytes = buf;
+    webpData.size = len;
 
-  WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
-  if (decoder == NULL) {
-    ESP_LOGE(TAG, "Could not create WebP decoder");
-    return 1;
+    WebPAnimDecoderOptions decoderOptions;
+    WebPAnimDecoderOptionsInit(&decoderOptions);
+    decoderOptions.color_mode = MODE_RGBA;
+
+    WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
+    if (decoder == NULL) {
+      ESP_LOGE(TAG, "Could not create WebP decoder");
+      return 1;
   }
 
   WebPAnimInfo animation;
@@ -222,6 +230,9 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     }
   }
   WebPAnimDecoderDelete(decoder);
-  *isAnimating = 0;
-  return 0;
+  if (app_dwell_secs != 0) {
+    ESP_LOGI(TAG, "Setting isAnimating to 0");
+    *isAnimating = 0;  // only set this to zero if it wasn't already set to zero. setting it again might overwrite what the main loop did while we were re-looping
+  }
+    return 0;
 }
