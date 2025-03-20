@@ -34,18 +34,35 @@ int gfx_initialize(const void *webp, size_t len) {
     ESP_LOGE(TAG, "Already initialized");
     return 1;
   }
+  // ESP_LOGI(TAG, String(esp_get_free_heap_size()));
+  int heap = esp_get_free_heap_size();
+  int heapl = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
 
+  ESP_LOGE(TAG, "largest heap %d", heapl);
+  // ESP_LOGI(TAG, "calling calloc");
   // Initialize state
+  ESP_LOGI(TAG, "Allocating buffer of size: %d", len);
+  int sizeo = sizeof(struct gfx_state);
+  ESP_LOGI(TAG, "Allocating size of  of size: %d", sizeof(struct gfx_state));
+
   _state = calloc(1, sizeof(struct gfx_state));
   _state->len = len;
+  ESP_LOGI(TAG,"calloc buff");
   _state->buf = calloc(1, len);
+  ESP_LOGI(TAG, "done calloc, copying");
+  if (_state->buf == NULL) {
+    ESP_LOGE("gfx", "Memory allocation failed!");
+    return 1;
+  }
   memcpy(_state->buf, webp, len);
-
+  ESP_LOGI(TAG, "done, copying");
+  
   _state->mutex = xSemaphoreCreateMutex();
   if (_state->mutex == NULL) {
     ESP_LOGE(TAG, "Could not create gfx mutex");
     return 1;
   }
+  ESP_LOGI(TAG,"done with gfx init");
 
   // Initialize the display
   if (display_initialize()) {
@@ -159,41 +176,45 @@ static void gfx_loop(void *args) {
 
 static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   // Set up WebP decoder
+  ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = *isAnimating;
 
-  int64_t start_us = esp_timer_get_time();
-
+  
   int64_t dwell_us;
+  int64_t dwell_ms;
+  
   if (app_dwell_secs == 0 ) {
     ESP_LOGW(TAG,"isAnimating is already 0. Looping one more time while we wait.");
     dwell_us = 1 * 1000000; // default to 1s if it's zero so we loop again or show the image for 1 more second.
+    dwell_ms = 1 * 1000;
   } else {
     // ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
     dwell_us = app_dwell_secs * 1000000;
+    dwell_ms = app_dwell_secs * 1000;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
-
+  
   WebPData webpData;
   WebPDataInit(&webpData);
   webpData.bytes = buf;
   webpData.size = len;
-
+  
   WebPAnimDecoderOptions decoderOptions;
   WebPAnimDecoderOptionsInit(&decoderOptions);
   decoderOptions.color_mode = MODE_RGBA;
-
+  
   WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
   if (decoder == NULL) {
     ESP_LOGE(TAG, "Could not create WebP decoder");
     return 1;
   }
-
+  
   WebPAnimInfo animation;
   if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
     ESP_LOGE(TAG, "Could not get WebP animation");
     return 1;
   }
-
+  int64_t start_us = esp_timer_get_time();
   while (esp_timer_get_time() - start_us < dwell_us) {
     int lastTimestamp = 0;
     int delay = 0;
@@ -206,26 +227,30 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
       if (delay > 0) {
         xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+      } else {
+        vTaskDelay(10); // small delay for yield.
       }
       drawStartTick = xTaskGetTickCount();
       display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0, 1, 2);
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
-
+  
     // reset decoder to start from the beginning
     WebPAnimDecoderReset(decoder);
-
+    
     if (delay > 0) {
       xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
     } else {
-      vTaskDelay(pdMS_TO_TICKS(10));  // Add a small fallback delay to yield CPU
+      vTaskDelay(pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
     }
-
+    
     // In case of a single frame, sleep for app_dwell_secs
     if (animation.frame_count == 1) {
-      ESP_LOGI(TAG, "single frame delay");
-      xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(app_dwell_secs * 1000));
+      ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
+      // xTaskDelayUntil(&start_us, dwell_us);
+      vTaskDelay(pdMS_TO_TICKS(dwell_ms));  // full dwell delay 
+      // *isAnimating = 0;
       break;
     }
   }
