@@ -32,7 +32,7 @@ void app_main(void) {
   esp_register_shutdown_handler(&flash_shutdown);
 
   // Setup the display.
-  if (gfx_initialize(ASSET_NOAPPS_WEBP, ASSET_NOAPPS_WEBP_LEN)) {
+  if (gfx_initialize(ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN)) {
     ESP_LOGE(TAG, "failed to initialize gfx");
     return;
   }

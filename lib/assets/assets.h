@@ -3,5 +3,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-extern const uint8_t ASSET_NOAPPS_WEBP[];
-extern size_t ASSET_NOAPPS_WEBP_LEN;
+extern const uint8_t ASSET_BOOT_WEBP[];
+extern const size_t ASSET_BOOT_WEBP_LEN;
+
+#ifdef BOOT_WEBP_PARROT
+#include "lib/assets/parrot_c"
+#else
+#include "lib/assets/tronbyt_c"
+#endif
