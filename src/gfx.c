@@ -180,18 +180,14 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   int app_dwell_secs = *isAnimating;
 
   int64_t dwell_us;
-  int64_t dwell_ms;
 
   if (app_dwell_secs == 0) {
     ESP_LOGW(TAG,
              "isAnimating is already 0. Looping one more time while we wait.");
     dwell_us = 1 * 1000000;  // default to 1s if it's zero so we loop again or
-                             // show the image for 1 more second.
-    dwell_ms = 1 * 1000;
   } else {
     // ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
     dwell_us = app_dwell_secs * 1000000;
-    dwell_ms = app_dwell_secs * 1000;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
 
@@ -252,7 +248,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     if (animation.frame_count == 1) {
       ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
       // xTaskDelayUntil(&start_us, dwell_us);
-      vTaskDelay(pdMS_TO_TICKS(dwell_ms));  // full dwell delay
+      vTaskDelay(pdMS_TO_TICKS(dwell_us/1000));  // full dwell delay
       // *isAnimating = 0;
       break;
     }
