@@ -105,6 +105,7 @@ int gfx_update(const void *webp, size_t len) {
     _state->buf = malloc(len);
     if (!_state->buf) {
       ESP_LOGE(TAG, "Failed to allocate memory for _state->buf");
+      // esp_restart();
       return 1;  // Exit early to avoid using NULL buffer
     }
 

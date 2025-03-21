@@ -4,6 +4,8 @@
 #include <freertos/task.h>
 #include <freertos/timers.h>
 #include <webp/demux.h>
+#include <esp_system.h>
+#include <esp_heap_caps.h>
 
 #include "display.h"
 #include "flash.h"
@@ -11,8 +13,6 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "wifi.h"
-// #include <esp_system.h>
-// #include <esp_heap_caps.h>
 
 #define BLUE "\033[1;34m"
 #define RESET "\033[0m"  // Reset to default color
@@ -22,39 +22,39 @@ int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 
-// void memory_monitor_task(void pvParameters) {
-//   while (1) {
-//     // Log memory stats
-//     ESP_LOGI(TAG, "Free heap: %d, largest block: %d", esp_get_free_heap_size(),
-//              heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+void memory_monitor_task(void* pvParameters) {
+  while (1) {
+    // Store the values first
+    size_t free_heap = esp_get_free_heap_size();
+    size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-//     // If largest block is too small, try to defragment
-//     if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 10000) {
-//       ESP_LOGW(TAG, "Memory fragmented - largest block too small, forcing GC");
-//       // Force a light garbage collection by allocating and freeing memory
-//       void temp = malloc(1024);
-//       if (temp) free(temp);
-//     }
+    // Then log them
+    ESP_LOGI(TAG, "Free heap: %d, largest block: %d", free_heap, largest_block);
 
-//     vTaskDelay(pdMS_TO_TICKS(5000));
-//   }
-// }
+    // If largest block is too small, try to defragment
+    if (largest_block < 10000) {
+      ESP_LOGW(TAG, "Memory fragmented - largest block too small, forcing GC");
+      // Force a light garbage collection by allocating and freeing memory
+      void* temp = malloc(1024);
+      if (temp) free(temp);
+    }
 
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+}
 
 void app_main(void) {
-  // ESP_LOGI(TAG, "App Main Start");
-  // esp_register_shutdown_handler(&flash_shutdown);
-
-  // Create memory monitoring task
-  // xTaskCreate(memory_monitor_task, "mem_monitor", 2048, NULL, 1, NULL);
+  ESP_LOGI(TAG, "App Main Start");
 
   // Setup the device flash storage.
   if (flash_initialize()) {
     ESP_LOGE(TAG, "failed to initialize flash");
     return;
   }
-  ESP_LOGI(TAG,"finished flash init");
   esp_register_shutdown_handler(&flash_shutdown);
+
+  // Create memory monitoring task
+  xTaskCreate(memory_monitor_task, "mem_monitor", 2048, NULL, 1, NULL);
 
   // Setup the display.
   if (gfx_initialize(ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN)) {
@@ -93,18 +93,19 @@ void app_main(void) {
         display_set_brightness(brightness);
       }
       ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-      gfx_update(webp, len);
+      if (gfx_update(webp, len) == 1) {
+        continue;
+      } 
       free(webp);
       // Wait for app_dwell_secs to expire (isAnimating will be 0)
-      ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
       if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
+      // More efficient polling with longer delay
       while (isAnimating > 0) {
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms instead of 1ms
       }
-      ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET, (int)app_dwell_secs);
+      ESP_LOGI(TAG, BLUE "Showing new webp" RESET);
       isAnimating = app_dwell_secs;  // use isAnimating as the container for
                                      // app_dwell_secs
-      vTaskDelay(pdMS_TO_TICKS(1000)); 
     }
   }
 }

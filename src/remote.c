@@ -18,8 +18,8 @@ struct remote_state {
   int32_t dwell_secs;
 };
 
-#define HTTP_BUFFER_SIZE_MAX 256 * 1024
-#define HTTP_BUFFER_SIZE_DEFAULT 16 * 1024
+#define HTTP_BUFFER_SIZE_MAX 256 * 1024     // Reduced from 512K to 256K
+#define HTTP_BUFFER_SIZE_DEFAULT 16 * 1024  // Reduced from 32K to 16K
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
@@ -47,11 +47,8 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
       // Check for the specific header key
       if (strcmp(event->header_key, "Tronbyt-Brightness") == 0) {
         state->brightness = (int)atoi(event->header_value);
-        // ESP_LOGI(TAG, "Tronbyt-Brightness value: %i", brightness_value);
-      }
-      else if (strcmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
+      } else if (strcmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
         state->dwell_secs = (int)atoi(event->header_value);
-        // ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
       }
       break;
 
@@ -65,6 +62,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
       // If needed, resize the buffer to fit the new data
       if (event->data_len + state->len > state->size) {
+        // Determine new size
         size_t new_size =
             MAX(MIN(state->size * 2, state->max), state->len + event->data_len);
         if (new_size > state->max) {
@@ -73,13 +71,13 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
           err = ESP_ERR_NO_MEM;
           break;
         }
-        // Then do the realloc.
+
+        // And reallocate
         void* new_buf = realloc(state->buf, new_size);
         if (new_buf == NULL) {
           ESP_LOGE(
               TAG,
               "Resizing response buffer failed - memory fragmentation likely");
-          // remove free(state->buf);
           err = ESP_ERR_NO_MEM;
           break;
         }
@@ -117,7 +115,8 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t* dwell_secs) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int,
+               int32_t* dwell_secs) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),
@@ -157,7 +156,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
 
   int status_code = esp_http_client_get_status_code(http);
   if (status_code != 200) {
-    ESP_LOGE(TAG, "Server returned HTTP status 500");
+    ESP_LOGE(TAG, "Server returned HTTP status %d", status_code);
     if (state.buf != NULL) {
       free(state.buf);
     }
@@ -168,10 +167,12 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
   // Write back the results.
   *buf = state.buf;
   *len = state.len;
-  if (state.brightness > -1 && state.brightness < 255) *b_int = state.brightness;
-  if (state.dwell_secs > -1 && state.dwell_secs < 300) *dwell_secs = state.dwell_secs; // 5 minute max ?
+  if (state.brightness > -1 && state.brightness < 255)
+    *b_int = state.brightness;
+  if (state.dwell_secs > -1 && state.dwell_secs < 300)
+    *dwell_secs = state.dwell_secs;  // 5 minute max ?
 
   esp_http_client_cleanup(http);
-  ESP_LOGI(TAG,"fetched new webp");
+  ESP_LOGI(TAG, "fetched new webp");
   return 0;
 }
