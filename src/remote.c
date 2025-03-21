@@ -18,8 +18,8 @@ struct remote_state {
   int32_t dwell_secs;
 };
 
-#define HTTP_BUFFER_SIZE_MAX 512 * 1024
-#define HTTP_BUFFER_SIZE_DEFAULT 32 * 1024
+#define HTTP_BUFFER_SIZE_MAX 256 * 1024
+#define HTTP_BUFFER_SIZE_DEFAULT 16 * 1024
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
@@ -65,26 +65,26 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
       // If needed, resize the buffer to fit the new data
       if (event->data_len + state->len > state->size) {
-        // Determine new size
-        state->size =
+        size_t new_size =
             MAX(MIN(state->size * 2, state->max), state->len + event->data_len);
-        if (state->size > state->max) {
+        if (new_size > state->max) {
           ESP_LOGE(TAG, "Response size exceeds allowed max (%d bytes)",
                    state->max);
-          free(state->buf);
           err = ESP_ERR_NO_MEM;
           break;
         }
-
-        // And reallocate
-        void* new = realloc(state->buf, state->size);
-        if (new == NULL) {
-          ESP_LOGE(TAG, "Resizing response buffer failed");
-          free(state->buf);
+        // Then do the realloc.
+        void* new_buf = realloc(state->buf, new_size);
+        if (new_buf == NULL) {
+          ESP_LOGE(
+              TAG,
+              "Resizing response buffer failed - memory fragmentation likely");
+          // remove free(state->buf);
           err = ESP_ERR_NO_MEM;
           break;
         }
-        state->buf = new;
+        state->buf = new_buf;
+        state->size = new_size;
       }
 
       // Copy over the new data
