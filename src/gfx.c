@@ -23,42 +23,40 @@ struct gfx_state {
   int counter;
 };
 
-static struct gfx_state *_state = NULL;
+static struct gfx_state _state;
+static bool _initialized = false;
 
 static void gfx_loop(void *arg);
 static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating);
 
 int gfx_initialize(const void *webp, size_t len) {
   // Only initialize once
-  if (_state) {
+  if (_initialized) {
     ESP_LOGE(TAG, "Already initialized");
     return 1;
   }
+  _initialized = true;
   // ESP_LOGI(TAG, String(esp_get_free_heap_size()));
-  int heap = esp_get_free_heap_size();
   int heapl = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
 
   ESP_LOGE(TAG, "largest heap %d", heapl);
   // ESP_LOGI(TAG, "calling calloc");
   // Initialize state
   ESP_LOGI(TAG, "Allocating buffer of size: %d", len);
-  int sizeo = sizeof(struct gfx_state);
-  ESP_LOGI(TAG, "Allocating size of  of size: %d", sizeof(struct gfx_state));
 
-  _state = calloc(1, sizeof(struct gfx_state));
-  _state->len = len;
+  _state.len = len;
   ESP_LOGI(TAG, "calloc buff");
-  _state->buf = calloc(1, len);
+  _state.buf = calloc(1, len);
   ESP_LOGI(TAG, "done calloc, copying");
-  if (_state->buf == NULL) {
+  if (_state.buf == NULL) {
     ESP_LOGE("gfx", "Memory allocation failed!");
     return 1;
   }
-  memcpy(_state->buf, webp, len);
+  memcpy(_state.buf, webp, len);
   ESP_LOGI(TAG, "done, copying");
 
-  _state->mutex = xSemaphoreCreateMutex();
-  if (_state->mutex == NULL) {
+  _state.mutex = xSemaphoreCreateMutex();
+  if (_state.mutex == NULL) {
     ESP_LOGE(TAG, "Could not create gfx mutex");
     return 1;
   }
@@ -76,7 +74,7 @@ int gfx_initialize(const void *webp, size_t len) {
                               GFX_TASK_STACK_SIZE,   // usStackDepth
                               (void *)&isAnimating,  // pvParameters
                               GFX_TASK_PRIO,         // uxPriority
-                              &_state->task,         // pxCreatedTask
+                              &_state.task,          // pxCreatedTask
                               GFX_TASK_CORE          // xCoreID
       );
   if (ret != pdPASS) {
@@ -89,39 +87,39 @@ int gfx_initialize(const void *webp, size_t len) {
 
 int gfx_update(const void *webp, size_t len) {
   // Take mutex
-  if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
+  if (pdTRUE != xSemaphoreTake(_state.mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
     return 1;
   }
 
   // Update state
-  if (len > _state->len) {
+  if (len > _state.len) {
     // Free the old buffer only if it exists
-    if (_state->buf) {
-      free(_state->buf);
-      _state->buf = NULL;  // Set to NULL to avoid dangling pointers
+    if (_state.buf) {
+      free(_state.buf);
+      _state.buf = NULL;  // Set to NULL to avoid dangling pointers
     }
 
     // Allocate new memory
-    _state->buf = malloc(len);
-    if (!_state->buf) {
-      ESP_LOGE("main", "Failed to allocate memory for _state->buf");
+    _state.buf = malloc(len);
+    if (!_state.buf) {
+      ESP_LOGE("main", "Failed to allocate memory for _state.buf");
       return 1;  // Exit early to avoid using NULL buffer
     }
 
-    _state->len = len;  // Update length after successful allocation
+    _state.len = len;  // Update length after successful allocation
   }
 
   // Copy data to buffer
-  if (_state->buf && webp) {
-    memcpy(_state->buf, webp, len);
-    _state->counter++;
+  if (_state.buf && webp) {
+    memcpy(_state.buf, webp, len);
+    _state.counter++;
   } else {
     ESP_LOGE("main", "Buffer or input data is NULL");
   }
 
   // Give mutex
-  if (pdTRUE != xSemaphoreGive(_state->mutex)) {
+  if (pdTRUE != xSemaphoreGive(_state.mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
     return 1;
   }
@@ -140,25 +138,25 @@ static void gfx_loop(void *args) {
 
   for (;;) {
     // Take mutex
-    if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
+    if (pdTRUE != xSemaphoreTake(_state.mutex, portMAX_DELAY)) {
       ESP_LOGE(TAG, "Could not take gfx mutex");
       break;
     }
 
     // If there's new data, copy it to local buffer
-    if (counter != _state->counter) {
+    if (counter != _state.counter) {
       ESP_LOGI(TAG, "Loaded new webp");
-      if (_state->len > len) {
+      if (_state.len > len) {
         free(webp);
-        webp = malloc(_state->len);
+        webp = malloc(_state.len);
       }
-      len = _state->len;
-      counter = _state->counter;
-      memcpy(webp, _state->buf, _state->len);
+      len = _state.len;
+      counter = _state.counter;
+      memcpy(webp, _state.buf, _state.len);
     }
 
     // Give mutex
-    if (pdTRUE != xSemaphoreGive(_state->mutex)) {
+    if (pdTRUE != xSemaphoreGive(_state.mutex)) {
       ESP_LOGE(TAG, "Could not give gfx mutex");
       continue;
     }
