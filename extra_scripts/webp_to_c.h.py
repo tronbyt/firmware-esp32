@@ -11,6 +11,7 @@ args = parser.parse_args()
 # Read the binary WebP file
 input_file = args.input_file
 output_file = args.output_file
+print(f"ingput file is {input_file}")
 
 with open(input_file, "rb") as f:
     binary_data = f.read()
