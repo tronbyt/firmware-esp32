@@ -1,4 +1,5 @@
 .pio
+sdkconfig
 sdkconfig.old
 .vscode
 .production

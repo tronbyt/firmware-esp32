@@ -10,6 +10,11 @@ def main() -> None:
     # copy libwebp's library.json to the lib directory
     env.Execute(Copy("$PROJECT_LIBDEPS_DIR/$PIOENV/libwebp/library.json", "$PROJECT_DIR/lib/webp/library.json"))
 
+    sdkconfig_path = os.path.join(env["PROJECT_DIR"], "sdkconfig")
+    if os.path.exists(sdkconfig_path):
+        print(f"Deleting existing {sdkconfig_path} to force regeneration...")
+        os.remove(sdkconfig_path)
+
     # if secrets.h file exists
     if os.path.exists("secrets.json"):
         # read secrets.h file
