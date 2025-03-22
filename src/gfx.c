@@ -34,8 +34,7 @@ int gfx_initialize(const void *webp, size_t len) {
     ESP_LOGE(TAG, "Already initialized");
     return 1;
   }
-  // ESP_LOGI(TAG, String(esp_get_free_heap_size()));
-  int heap = esp_get_free_heap_size();
+
   int heapl = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
 
   ESP_LOGI(TAG, "largest heap %d", heapl);
