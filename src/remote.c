@@ -18,9 +18,6 @@ struct remote_state {
   int32_t dwell_secs;
 };
 
-#define HTTP_BUFFER_SIZE_MAX 512 * 1024
-#define HTTP_BUFFER_SIZE_DEFAULT 32 * 1024
-
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -44,6 +41,21 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
     case HTTP_EVENT_ON_HEADER:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", event->header_key,
                event->header_value);
+      
+      // Check for the Content-Length header
+      if (strcmp(event->header_key, "Content-Length") == 0) {
+        size_t content_length = (size_t)atoi(event->header_value);
+        if (content_length > state->max) {
+          ESP_LOGE(TAG,
+                   "Content-Length (%d bytes) exceeds allowed max (%d bytes)",
+                   content_length, state->max);
+          err = ESP_ERR_NO_MEM;
+          esp_http_client_close(event->client);  // Abort the HTTP request
+        } else {
+          ESP_LOGI(TAG, "Content-Length Header : %d", content_length);
+        }
+      }
+
       // Check for the specific header key
       if (strcmp(event->header_key, "Tronbyt-Brightness") == 0) {
         state->brightness = (int)atoi(event->header_value);
@@ -56,12 +68,16 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
       break;
 
     case HTTP_EVENT_ON_DATA:
-      ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", event->data_len);
 
       if (event->user_data == NULL) {
         ESP_LOGW(TAG, "Discarding HTTP response due to missing state");
         break;
       }
+
+      // if (event->data_len > max_data_size) {
+      //   ESP_LOGW(TAG, "Discarding HTTP response due to missing state");
+      //   break;
+      // }
 
       // If needed, resize the buffer to fit the new data
       if (event->data_len + state->len > state->size) {

@@ -38,12 +38,10 @@ int gfx_initialize(const void *webp, size_t len) {
   int heap = esp_get_free_heap_size();
   int heapl = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
 
-  ESP_LOGE(TAG, "largest heap %d", heapl);
+  ESP_LOGI(TAG, "largest heap %d", heapl);
   // ESP_LOGI(TAG, "calling calloc");
   // Initialize state
   ESP_LOGI(TAG, "Allocating buffer of size: %d", len);
-  int sizeo = sizeof(struct gfx_state);
-  ESP_LOGI(TAG, "Allocating size of  of size: %d", sizeof(struct gfx_state));
 
   _state = calloc(1, sizeof(struct gfx_state));
   _state->len = len;
