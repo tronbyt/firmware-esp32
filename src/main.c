@@ -28,10 +28,11 @@ void app_main(void) {
     ESP_LOGE(TAG, "failed to initialize flash");
     return;
   }
+  ESP_LOGI(TAG,"finished flash init");
   esp_register_shutdown_handler(&flash_shutdown);
 
   // Setup the display.
-  if (gfx_initialize(ASSET_NOAPPS_WEBP, ASSET_NOAPPS_WEBP_LEN)) {
+  if (gfx_initialize(ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN)) {
     ESP_LOGE(TAG, "failed to initialize gfx");
     return;
   }
@@ -70,13 +71,15 @@ void app_main(void) {
       gfx_update(webp, len);
       free(webp);
       // Wait for app_dwell_secs to expire (isAnimating will be 0)
+      ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
       if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
       while (isAnimating > 0) {
         vTaskDelay(pdMS_TO_TICKS(1));
       }
-      ESP_LOGI(TAG, BLUE "Showing new webp" RESET);
+      ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET, (int)app_dwell_secs);
       isAnimating = app_dwell_secs;  // use isAnimating as the container for
                                      // app_dwell_secs
+      vTaskDelay(pdMS_TO_TICKS(1000)); 
     }
   }
 }

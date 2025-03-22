@@ -2,22 +2,37 @@
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #ifdef TIDBYT_GEN2
-#define R1 5
-#define G1 23
-#define BL1  4
-#define R2 2
-#define G2 22
-#define BL2 32
+  #define R1 5
+  #define G1 23
+  #define BL1  4
+  #define R2 2
+  #define G2 22
+  #define BL2 32
 
-#define CH_A 25
-#define CH_B 21
-#define CH_C 26
-#define CH_D 19
-#define CH_E -1  // assign to pin 14 if using more than two panels
+  #define CH_A 25
+  #define CH_B 21
+  #define CH_C 26
+  #define CH_D 19
+  #define CH_E -1  // assign to pin 14 if using more than two panels
 
-#define LAT 18
-#define OE 27
-#define CLK 15
+  #define LAT 18
+  #define OE 27
+  #define CLK 15
+#elif defined(PIXOTICKER)
+  #define R1 2
+  #define G1 4
+  #define BL1 15
+  #define R2 16
+  #define G2 17
+  #define BL2 27
+  #define CH_A 5
+  #define CH_B 18
+  #define CH_C 19
+  #define CH_D 21
+  #define CH_E 12
+  #define CLK 22
+  #define LAT 26
+  #define OE 25
 #else
   #ifdef SWAP_COLORS
     #define R1 21
