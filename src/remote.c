@@ -8,6 +8,7 @@
 #include <esp_tls.h>
 
 static const char* TAG = "remote";
+bool is_local_address(const char* url);
 
 struct remote_state {
   void* buf;
@@ -155,8 +156,14 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
       .event_handler = _httpCallback,
       .user_data = &state,
       .timeout_ms = 10e3,
-      .crt_bundle_attach = esp_crt_bundle_attach,
+
   };
+
+  if (is_local_address(url)) {
+    ESP_LOGI(TAG, "local address, skipping cert validation");
+  } else {
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+  }
 
   esp_http_client_handle_t http = esp_http_client_init(&config);
 
@@ -190,4 +197,58 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
   esp_http_client_cleanup(http);
   ESP_LOGI(TAG,"fetched new webp");
   return 0;
+}
+
+
+bool is_local_address(const char* url) {
+  // Skip protocol prefix if present
+  const char* http_prefix = "http://";
+  const char* https_prefix = "https://";
+
+  if (strncmp(url, http_prefix, strlen(http_prefix)) == 0) {
+    url += strlen(http_prefix);
+  } else if (strncmp(url, https_prefix, strlen(https_prefix)) == 0) {
+    url += strlen(https_prefix);
+  }
+
+  // Make a copy of the host part (without the port)
+  char host[256];
+  strncpy(host, url, sizeof(host) - 1);
+  host[sizeof(host) - 1] = '\0';
+
+  // Remove port number if present
+  char* port = strchr(host, ':');
+  if (port != NULL) {
+    *port = '\0';  // Terminate string at the colon
+  }
+
+  // Check for .local TLD
+  size_t len = strlen(host);
+  if (len >= 6 && strcmp(host + len - 6, ".local") == 0) {
+    return true;
+  }
+
+  // Check if starts with common local IP prefixes
+  if (strncmp(host, "10.", 3) == 0) {
+    return true;
+  }
+
+  if (strncmp(host, "192.168.", 8) == 0) {
+    return true;
+  }
+
+  if (strncmp(host, "172.", 4) == 0) {
+    // Check for 172.16.0.0 to 172.31.255.255 range
+    char* end;
+    long second_octet = strtol(host + 4, &end, 10);
+    if (*end == '.' && second_octet >= 16 && second_octet <= 31) {
+      return true;
+    }
+  }
+
+  if (strncmp(host, "127.", 4) == 0) {
+    return true;
+  }
+
+  return false;
 }
