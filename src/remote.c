@@ -201,12 +201,12 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
 
 
 bool is_local_address(const char* url) {
-
-  if (strstr(url, ".local:") == 0) return true;
-  if (strstr(url, ".local/") == 0) return true;
-  if (strstr(url, "//10.") == 0) return true;
-  if (strstr(url, "//192.") == 0) return true;
-  if (strstr(url, "//172.") == 0) return true;
+  ESP_LOGI(TAG, "URL: %s", url);
+  if (strstr(url, ".local:") != NULL) return true;
+  if (strstr(url, ".local/") != NULL) return true;
+  if (strstr(url, "//10.") != NULL) return true;
+  if (strstr(url, "//192.") != NULL) return true;
+  if (strstr(url, "//172.") != NULL) return true;
   return false;
   // // Skip protocol prefix if present
   // const char* http_prefix = "http://";
