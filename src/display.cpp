@@ -91,7 +91,7 @@ int display_initialize() {
   HUB75_I2S_CFG::i2s_pins pins = {R1,   G1,   BL1,  R2,   G2,  BL2, CH_A,
                                   CH_B, CH_C, CH_D, CH_E, LAT, OE,  CLK};
 
-  #ifdef INVERT_CLOCK_PHASE
+  #ifdef NO_INVERT_CLOCK_PHASE
   bool invert_clock_phase = false;
   #else
   bool invert_clock_phase = true;
