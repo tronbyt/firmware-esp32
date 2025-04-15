@@ -50,7 +50,29 @@
   #define CLK 22
   #define LAT 26
   #define OE 25
-#else
+  #elif defined(MATRIXPORTALS3)
+//                     R1, G1, B1, R2, G2, B2
+// uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
+// uint8_t addrPins[] = {45, 36, 48, 35, 21};
+// uint8_t clockPin = 2;
+// uint8_t latchPin = 47;
+// uint8_t oePin = 14;
+  #define R1 42
+  #define G1 41
+  #define BL1 40
+  #define R2 38
+  #define G2 39
+  #define BL2 37
+  #define CH_A 45
+  #define CH_B 36
+  #define CH_C 48
+  #define CH_D 35
+  #define CH_E 21
+  #define CLK 2
+  #define LAT 47
+  #define OE 14
+
+#else // GEN1 from here down.
   #ifdef SWAP_COLORS
     #define R1 21
     #define G1 2
@@ -86,7 +108,7 @@ int display_initialize() {
   HUB75_I2S_CFG::i2s_pins pins = {R1,   G1,   BL1,  R2,   G2,  BL2, CH_A,
                                   CH_B, CH_C, CH_D, CH_E, LAT, OE,  CLK};
 
-  #ifdef TIDBYT_GEN2
+  #ifdef NO_INVERT_CLOCK_PHASE
   bool invert_clock_phase = false;
   #else
   bool invert_clock_phase = true;
