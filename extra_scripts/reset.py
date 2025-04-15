@@ -6,7 +6,9 @@ Import("env")
 PRODUCTION_VERSION = {
     "tidbyt": "v10/35833",
     "pixoticker": "v10/35833",
-    "tidbyt-gen2": "v11/35369"
+    "tronbyt-S3": "v10/35833",
+    "tidbyt-gen2": "v11/35369",
+    "matrixportal-s3": "v11/35369" # just to shut up the errors.
 }[env["PIOENV"]]
 
 def fetch_firmware():

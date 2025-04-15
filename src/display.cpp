@@ -18,6 +18,23 @@
   #define LAT 18
   #define OE 27
   #define CLK 15
+#elif defined(TRONBYT_S3)
+  #define R1 4
+  #define G1 6
+  #define BL1 5
+  #define R2 7
+  #define G2 16
+  #define BL2 15
+
+  #define CH_A 17
+  #define CH_B 18
+  #define CH_C 8
+  #define CH_D 3
+  #define CH_E -1  // assign to pin 14 if using more than two panels
+
+  #define LAT 9
+  #define OE 10
+  #define CLK 11
 #elif defined(PIXOTICKER)
   #define R1 2
   #define G1 4
@@ -88,7 +105,11 @@ int display_initialize() {
                          1,                       // chain length
                          pins,                    // pin mapping
                          HUB75_I2S_CFG::FM6126A,  // driver chip
+                         #ifdef TRONBYT_S3
+                         false,                   // double-buffering
+                         #else
                          true,                    // double-buffering
+                         #endif
                          HUB75_I2S_CFG::HZ_10M,   // clock speed
                          1,                       // latch blanking
                          invert_clock_phase       // invert clock phase
