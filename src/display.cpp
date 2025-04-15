@@ -105,11 +105,7 @@ int display_initialize() {
                          1,                       // chain length
                          pins,                    // pin mapping
                          HUB75_I2S_CFG::FM6126A,  // driver chip
-                         #ifdef TRONBYT_S3
-                         false,                   // double-buffering
-                         #else
                          true,                    // double-buffering
-                         #endif
                          HUB75_I2S_CFG::HZ_10M,   // clock speed
                          1,                       // latch blanking
                          invert_clock_phase       // invert clock phase
