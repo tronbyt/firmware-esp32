@@ -6,3 +6,4 @@ sdkconfig.old
 secrets.json
 .DS_Store
 build
+.DS_Store
