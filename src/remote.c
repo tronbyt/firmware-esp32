@@ -14,7 +14,7 @@ struct remote_state {
   size_t len;
   size_t size;
   size_t max;
-  int32_t brightness;
+  uint8_t brightness;
   int32_t dwell_secs;
 };
 
@@ -58,8 +58,8 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
       // Check for the specific header key
       if (strcmp(event->header_key, "Tronbyt-Brightness") == 0) {
-        state->brightness = (int)atoi(event->header_value);
-        // ESP_LOGI(TAG, "Tronbyt-Brightness value: %i", brightness_value);
+        state->brightness = (uint8_t)atoi(event->header_value); // API spec: 0-100
+        ESP_LOGD(TAG, "Tronbyt-Brightness value: %d%%", state->brightness);
       }
       else if (strcmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
         state->dwell_secs = (int)atoi(event->header_value);
@@ -133,7 +133,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t* dwell_secs) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),
@@ -184,7 +184,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, int* b_int, int32_t*
   // Write back the results.
   *buf = state.buf;
   *len = state.len;
-  if (state.brightness > -1 && state.brightness < 255) *b_int = state.brightness;
+  *brightness_pct = state.brightness; // Assumes API provides 0–100 as spec'd
   if (state.dwell_secs > -1 && state.dwell_secs < 300) *dwell_secs = state.dwell_secs; // 5 minute max ?
 
   esp_http_client_cleanup(http);

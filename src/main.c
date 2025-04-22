@@ -55,18 +55,15 @@ void app_main(void) {
   for (;;) {
     uint8_t* webp;
     size_t len;
-    static int32_t brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness,
+    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness_pct,
                    &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
       // Successful remote_get
-      if (brightness > -1 && brightness < 256) {
-        ESP_LOGI(TAG, BLUE "setting brightness to %d" RESET, (int)brightness);
-        display_set_brightness(brightness);
-      }
+      display_set_brightness(brightness_pct);
       ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
       gfx_update(webp, len);
       free(webp);
