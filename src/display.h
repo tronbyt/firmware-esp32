@@ -11,7 +11,8 @@ extern int32_t isAnimating;  // Declare the variable
 extern "C" {
 #endif
 int display_initialize();
-void display_set_brightness(int b);
+void display_set_brightness(uint8_t brightness_pct);
+uint8_t display_get_brightness();
 void display_shutdown();
 
 void display_draw(const uint8_t *pix, int width, int height, int channels,

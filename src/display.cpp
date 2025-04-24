@@ -101,7 +101,8 @@
 #endif
 
 static MatrixPanel_I2S_DMA *_matrix;
-static int _brightness = -1;
+static uint8_t _brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+static const char *TAG = "display";
 
 int display_initialize() {
   // Initialize the panel.
@@ -143,13 +144,22 @@ int display_initialize() {
   return 0;
 }
 
-void display_set_brightness(int b) {
-  if (b != _brightness) {
-    _brightness = b;
-    _matrix->setBrightness8(b);
+static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
+  if (pct > 100) pct = 100;
+  return (uint8_t)(((uint32_t)pct * 255 + 50) / 100);
+}
+
+void display_set_brightness(uint8_t brightness_pct) {
+  if (brightness_pct != _brightness) {
+    uint8_t brightness_8bit = brightness_percent_to_8bit(brightness_pct);
+    ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct, brightness_8bit);
+    _matrix->setBrightness8(brightness_8bit);
     _matrix->clearScreen();
+    _brightness = brightness_pct;
   }
 }
+
+uint8_t display_get_brightness() { return _brightness; }
 
 void display_shutdown() {
   _matrix->clearScreen();
