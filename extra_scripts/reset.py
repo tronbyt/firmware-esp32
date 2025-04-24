@@ -4,7 +4,8 @@ import requests
 Import("env")
 
 PRODUCTION_VERSION = {
-    "tidbyt": "v10/35833",
+    "tidbyt-gen1": "v10/35833",
+    "tidbyt-gen1_swap": "v10/35833",
     "pixoticker": "v10/35833",
     "tronbyt-S3": "v10/35833",
     "tidbyt-gen2": "v11/35369",
