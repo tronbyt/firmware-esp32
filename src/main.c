@@ -97,10 +97,10 @@ void app_main(void) {
     ESP_LOGI(TAG, "Connected to WiFi. Waiting 5 seconds for network services to initialize...");
     vTaskDelay(pdMS_TO_TICKS(5000));
 
-    // Let the WiFiManager handle turning off the AP mode
-    // The WiFiManager is configured with shouldKeepAP = false, so it will
-    // automatically turn off the AP mode after connecting to WiFi
+    // WiFi connection established, continue with application
     ESP_LOGI(TAG, "WiFi connection established. Continuing with application.");
+  } else {
+    ESP_LOGW(TAG, "WiFi not connected. Some features may not work properly.");
   }
 
   uint8_t mac[6];
