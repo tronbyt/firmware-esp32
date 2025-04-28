@@ -21,7 +21,7 @@
 #include "gfx.h"
 #include "remote.h"
 #include "sdkconfig.h"
-#include "WifiManagerEsp32.hpp"
+#include "WifiManagerEsp32.hpp" // Using local copy of WifiManagerEsp32
 #include "nvs_flash.h"
 
 #define BLUE "\033[1;34m"
@@ -29,7 +29,7 @@
 
 // Define constants that were previously defined elsewhere
 #define TIDBYT_REFRESH_INTERVAL_SECONDS 60
-#define TIDBYT_REMOTE_URL "http://192.168.1.236:8000/8207bf0d/next"
+#define TIDBYT_REMOTE_URL "http://m1pro.local:8000/8207bf0d/next"
 #define DISPLAY_DEFAULT_BRIGHTNESS 100
 
 static const char* TAG = "main";

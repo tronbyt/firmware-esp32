@@ -1,0 +1,20 @@
+{
+  "name": "WifiManagerEsp32",
+  "version": "1.0.0",
+  "description": "WiFi Manager for ESP32 with custom modifications",
+  "keywords": "wifi, esp32, manager",
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/AdamPWr/wifimanageresp32"
+  },
+  "authors": [
+    {
+      "name": "Adam Piwowarski",
+      "email": "adam.piwowarski.it@gmail.com",
+      "url": "https://gitlab.com/AdamPWr"
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "espidf",
+  "platforms": "espressif32"
+}
