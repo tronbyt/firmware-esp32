@@ -11,6 +11,7 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "wifi.h"
+#include "wifi_manager.h"
 
 
 #define BLUE "\033[1;34m"
@@ -20,6 +21,12 @@ static const char* TAG = "main";
 int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
+bool is_connected = false;
+
+void cb_connection_ok(void* pvParameter) {
+  ESP_LOGI(TAG, "WiFi have a connection!");
+  is_connected = true;
+}
 
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
@@ -39,17 +46,21 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&display_shutdown);
 
-  // Setup WiFi.
-  if (wifi_initialize(TIDBYT_WIFI_SSID, TIDBYT_WIFI_PASSWORD)) {
-    ESP_LOGE(TAG, "failed to initialize WiFi");
-    return;
-  }
   esp_register_shutdown_handler(&wifi_shutdown);
+  wifi_manager_init();
+  wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
+  wifi_manager_start();
 
   uint8_t mac[6];
   if (!wifi_get_mac(mac)) {
     ESP_LOGI(TAG, "WiFi MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1],
              mac[2], mac[3], mac[4], mac[5]);
+  }
+
+  // Wait for WiFi connection
+  ESP_LOGI(TAG, "Waiting for WiFi connection...");
+  while (!is_connected) {
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 
   ESP_LOGW(TAG, "Main Loop Start");
