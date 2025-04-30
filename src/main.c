@@ -4,6 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <string.h>
 #include <webp/demux.h>
 
 #include "config.h"
@@ -14,6 +15,9 @@
 #include "sdkconfig.h"
 #include "wifi.h"
 #include "wifi_manager.h"
+
+// External declaration for wifi_settings from wifi_manager.c
+extern wifi_settings_t wifi_settings;
 
 
 #define BLUE "\033[1;34m"
@@ -51,6 +55,10 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
   esp_register_shutdown_handler(&wifi_shutdown);
 
+  // Set custom AP SSID and password before initializing WiFi Manager
+  strcpy((char*)wifi_settings.ap_ssid, "Tronbyt-Config");
+  strcpy((char*)wifi_settings.ap_pwd, ""); // Empty password for open AP
+
   // Initialize and start WiFi Manager
   wifi_manager_init();
   // Give the WiFi manager time to initialize
@@ -59,6 +67,8 @@ void app_main(void) {
   // Give the WiFi manager time to start
   vTaskDelay(pdMS_TO_TICKS(500));
   wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
+
+  ESP_LOGI(TAG, "WiFi Manager initialized with AP SSID: %s (no password)", (char*)wifi_settings.ap_ssid);
 
   // First try to connect with hardcoded WiFi credentials
   ESP_LOGI(TAG, "Attempting to connect with hardcoded WiFi credentials...");
