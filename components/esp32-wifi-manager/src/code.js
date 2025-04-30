@@ -172,7 +172,7 @@ docReady(async function () {
       headers: {
         "Content-Type": "application/json",
       },
-      body: { timestamp: Date.now() },
+      body: JSON.stringify({ timestamp: Date.now() }),
     });
 
     startCheckStatusInterval();
@@ -222,7 +222,7 @@ async function performConnect(conntype) {
       "X-Custom-ssid": selectedSSID,
       "X-Custom-pwd": pwd,
     },
-    body: { timestamp: Date.now() },
+    body: JSON.stringify({ timestamp: Date.now() }),
   });
 
   //now we can re-set the intervals regardless of result
@@ -312,13 +312,13 @@ async function checkStatus(url = "status.json") {
             gel("gw").textContent = "0.0.0.0";
 
             //don't show any connection
-            gel("wifi-status").display = "none";
+            gel("wifi-status").style.display = "none";
 
             //unlock the wait screen
             gel("ok-connect").disabled = false;
 
             //update wait screen
-            gel("loading").display = "none";
+            gel("loading").style.display = "none";
             gel("connect-fail").style.display = "block";
             gel("connect-success").style.display = "none";
             break;
@@ -350,3 +350,7 @@ async function checkStatus(url = "status.json") {
     console.info("Was not able to fetch /status.json");
   }
 }
+
+console.log("JavaScript file loaded successfully");
+
+//

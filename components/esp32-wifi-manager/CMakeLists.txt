@@ -4,9 +4,9 @@ if(IDF_VERSION_MAJOR GREATER_EQUAL 4)
         INCLUDE_DIRS src)
     
     # Add binary data
+    target_add_binary_data(${COMPONENT_TARGET} "src/code.js" TEXT)
     target_add_binary_data(${COMPONENT_TARGET} "src/index.html" TEXT)
     target_add_binary_data(${COMPONENT_TARGET} "src/style.css" TEXT)
-    target_add_binary_data(${COMPONENT_TARGET} "src/code.js" TEXT)
 else()
     set(COMPONENT_SRCDIRS src)
     set(COMPONENT_ADD_INCLUDEDIRS src)

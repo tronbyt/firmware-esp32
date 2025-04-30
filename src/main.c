@@ -48,8 +48,10 @@ void app_main(void) {
 
   esp_register_shutdown_handler(&wifi_shutdown);
   wifi_manager_init();
-  wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
   wifi_manager_start();
+  wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
+
+  
 
   uint8_t mac[6];
   if (!wifi_get_mac(mac)) {
@@ -57,11 +59,15 @@ void app_main(void) {
              mac[2], mac[3], mac[4], mac[5]);
   }
 
-  // Wait for WiFi connection
+  // Wait for WiFi connection and IP address
   ESP_LOGI(TAG, "Waiting for WiFi connection...");
   while (!is_connected) {
     vTaskDelay(pdMS_TO_TICKS(100));
   }
+  
+  // Get and display the IP address
+  char *ip_addr = wifi_manager_get_sta_ip_string();
+  ESP_LOGI(TAG, "Connected with IP address: %s", ip_addr);
 
   ESP_LOGW(TAG, "Main Loop Start");
   for (;;) {

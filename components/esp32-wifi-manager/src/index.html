@@ -34,28 +34,32 @@
 					<header>
 						<h1>Enter Details</h1>
 					</header>
-					<h2>Manual Connection</span></h2>
-					<section>
-						<input id="manual_ssid" type="text" placeholder="SSID" value="">
-						<input id="manual_pwd" type="password" placeholder="Password" value="">
-					</section>
-					<div class="buttons">
+					<h2>Manual Connection</h2>
+					<form onsubmit="event.preventDefault(); document.getElementById('manual_join').click();">
+						<section>
+							<input id="manual_ssid" type="text" placeholder="SSID" value="">
+							<input id="manual_pwd" type="password" placeholder="Password" value="">
+						</section>
+						<div class="buttons">
 							<input id="manual_join" type="button" value="Join" data-connect="manual" />
 							<input id="manual_cancel" type="button" value="Cancel"/>
-					</div>
+						</div>
+					</form>
 				</div>
 				<div id="connect">
 					<header>
 						<h1>Enter Password</h1>
 					</header>
 					<h2>Password for <span id="ssid-pwd"></span></h2>
-					<section>
-						<input id="pwd" type="password" placeholder="Password" value="">
-					</section>
-					<div class="buttons">
+					<form onsubmit="event.preventDefault(); document.getElementById('join').click();">
+						<section>
+							<input id="pwd" type="password" placeholder="Password" value="">
+						</section>
+						<div class="buttons">
 							<input id="join" type="button" value="Join" />
 							<input id="cancel" type="button" value="Cancel"/>
-					</div>
+						</div>
+					</form>
 				</div>
 				<div id="connect-wait">
 					<header>
