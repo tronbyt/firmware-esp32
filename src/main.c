@@ -18,7 +18,7 @@
 static const char* TAG = "main";
 int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
-int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
+int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
@@ -39,7 +39,7 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
 
   // Setup WiFi.
-  if (wifi_initialize(TIDBYT_WIFI_SSID, TIDBYT_WIFI_PASSWORD)) {
+  if (wifi_initialize(WIFI_SSID, WIFI_PASSWORD)) {
     ESP_LOGE(TAG, "failed to initialize WiFi");
     return;
   }
@@ -57,7 +57,7 @@ void app_main(void) {
     size_t len;
     static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness_pct,
+    if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
                    &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));

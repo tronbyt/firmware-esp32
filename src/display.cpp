@@ -139,7 +139,7 @@ int display_initialize() {
   if (!_matrix->begin()) {
     return 1;
   }
-  display_set_brightness(TIDBYT_DEFAULT_BRIGHTNESS);
+  display_set_brightness(DEFAULT_BRIGHTNESS);
 
   return 0;
 }

@@ -25,22 +25,22 @@ you can point this firmware at any URL that hosts a WebP image that is optimized
 
 To flash the custom firmware on your device, run the following after replacing
 the variables in secrets.json.example with your desired own information and renaming it to `secrets.json`
-If using tidbyt_manager in docker replace the ip address to the docker host's ip address.
+If using tronbyt_manager in docker replace the ip address to the docker host's ip address.
 
 ```
 {
-    "TIDBYT_WIFI_SSID": "myssiD",
-    "TIDBYT_WIFI_PASSWORD": "<PASSWORD>",
-    "TIDBYT_REMOTE_URL=": "http://homeServer.local:8000/admin/tronbyt_1/next",
-    "TIDBYT_REFRESH_INTERVAL_SECONDS": 10,
-    "TIDBYT_DEFAULT_BRIGHTNESS" : 30
+    "WIFI_SSID": "myssiD",
+    "WIFI_PASSWORD": "<PASSWORD>",
+    "REMOTE_URL=": "http://homeServer.local:8000/admin/tronbyt_1/next",
+    "REFRESH_INTERVAL_SECONDS": 10,
+    "DEFAULT_BRIGHTNESS" : 30
 }
 ```
 
 Then run the following command:
 
 ```
-pio run --environment tidbyt --target upload
+pio run --environment tidbyt-gen1 --target upload
 ```
 
 If you're flashing to a Tidbyt Gen2, just change to the above to use
@@ -60,7 +60,7 @@ To get your Tidbyt back to normal, you can run the following to flash the
 production firmware onto your Tidbyt:
 
 ```
-pio run --target reset --environment tidbyt
+pio run --target reset --environment tidbyt-gen1
 ```
 
 And if you're working with a Tidbyt Gen 2:
