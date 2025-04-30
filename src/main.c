@@ -1,10 +1,12 @@
 #include <assets.h>
 #include <esp_log.h>
+#include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
 #include <webp/demux.h>
 
+#include "config.h"
 #include "display.h"
 #include "flash.h"
 #include "gfx.h"
@@ -22,6 +24,8 @@ int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
 bool is_connected = false;
+bool using_wifi_manager = false;
+int connection_timeout = 0; // Will be set during connection attempt
 
 void cb_connection_ok(void* pvParameter) {
   ESP_LOGI(TAG, "WiFi have a connection!");
@@ -45,13 +49,50 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&display_shutdown);
-
   esp_register_shutdown_handler(&wifi_shutdown);
+
+  // Initialize and start WiFi Manager
   wifi_manager_init();
+  // Give the WiFi manager time to initialize
+  vTaskDelay(pdMS_TO_TICKS(500));
   wifi_manager_start();
+  // Give the WiFi manager time to start
+  vTaskDelay(pdMS_TO_TICKS(500));
   wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
 
-  
+  // First try to connect with hardcoded WiFi credentials
+  ESP_LOGI(TAG, "Attempting to connect with hardcoded WiFi credentials...");
+
+  // Use WiFi Manager to connect with the hardcoded credentials
+  wifi_manager_connect_async(true, TIDBYT_WIFI_SSID, TIDBYT_WIFI_PASSWORD);
+
+  // Wait for WiFi connection
+  ESP_LOGI(TAG, "Waiting for WiFi connection...");
+  connection_timeout = 150; // 15 seconds (150 * 100ms)
+  while (!is_connected && connection_timeout > 0) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+    connection_timeout--;
+  }
+
+  // Give the WiFi manager time to update the status
+  vTaskDelay(pdMS_TO_TICKS(500));
+
+  if (is_connected) {
+    // Successfully connected with hardcoded credentials
+    ESP_LOGI(TAG, "Successfully connected with hardcoded credentials");
+    using_wifi_manager = true; // Still using WiFi Manager, but with hardcoded credentials
+  } else {
+    // Failed to connect with hardcoded credentials, WiFi Manager will start AP mode automatically
+    ESP_LOGI(TAG, "Failed to connect with hardcoded credentials, WiFi Manager will start AP mode");
+    using_wifi_manager = true;
+
+    // Continue waiting for WiFi connection
+    ESP_LOGI(TAG, "Waiting for WiFi connection via AP mode...");
+    while (!is_connected) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+  }
+
 
   uint8_t mac[6];
   if (!wifi_get_mac(mac)) {
@@ -59,15 +100,16 @@ void app_main(void) {
              mac[2], mac[3], mac[4], mac[5]);
   }
 
-  // Wait for WiFi connection and IP address
-  ESP_LOGI(TAG, "Waiting for WiFi connection...");
-  while (!is_connected) {
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
-  
   // Get and display the IP address
-  char *ip_addr = wifi_manager_get_sta_ip_string();
-  ESP_LOGI(TAG, "Connected with IP address: %s", ip_addr);
+  if (using_wifi_manager && wifi_manager_is_sta_connected()) {
+    // If using WiFi Manager, get the IP address from it
+    char *ip_addr = wifi_manager_get_sta_ip_string();
+    ESP_LOGI(TAG, "Connected with IP address: %s", ip_addr);
+  } else if (is_connected) {
+    // If using hardcoded credentials, we don't have a way to get the IP address string
+    // but we know we're connected
+    ESP_LOGI(TAG, "Connected with hardcoded credentials");
+  }
 
   ESP_LOGW(TAG, "Main Loop Start");
   for (;;) {
@@ -75,11 +117,47 @@ void app_main(void) {
     size_t len;
     static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-    if (remote_get(TIDBYT_REMOTE_URL, &webp, &len, &brightness_pct,
+    // Get the image URL
+    char *image_url = NULL;
+    const char *url_to_use = NULL;
+
+    // Check if we're connected to WiFi
+    if (is_connected) {
+      // If we connected with hardcoded credentials within the timeout period
+      if (connection_timeout > 0) {
+        // Use the hardcoded image URL
+        url_to_use = TIDBYT_REMOTE_URL;
+        ESP_LOGI(TAG, "Connected with hardcoded credentials, using hardcoded image URL");
+      } else {
+        // We connected via WiFi Manager's AP mode
+        image_url = wifi_manager_get_image_url();
+        if (image_url != NULL) {
+          // Use the image URL saved during WiFi setup
+          url_to_use = image_url;
+          ESP_LOGI(TAG, "Connected via WiFi Manager, using saved image URL");
+        } else {
+          // No saved image URL, use the default
+          url_to_use = TIDBYT_REMOTE_URL;
+          ESP_LOGI(TAG, "Connected via WiFi Manager, no saved image URL, using default");
+        }
+      }
+    } else {
+      // Not connected, use the hardcoded image URL
+      url_to_use = TIDBYT_REMOTE_URL;
+      ESP_LOGI(TAG, "Not connected to WiFi, using default image URL");
+    }
+
+    ESP_LOGI(TAG, "Using image URL: %s", url_to_use);
+
+    if (remote_get(url_to_use, &webp, &len, &brightness_pct,
                    &app_dwell_secs)) {
       ESP_LOGE(TAG, "Failed to get webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     } else {
+      // Free the image URL if it was allocated
+      if (image_url != NULL) {
+        free(image_url);
+      }
       // Successful remote_get
       display_set_brightness(brightness_pct);
       ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
@@ -94,7 +172,7 @@ void app_main(void) {
       ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET, (int)app_dwell_secs);
       isAnimating = app_dwell_secs;  // use isAnimating as the container for
                                      // app_dwell_secs
-      vTaskDelay(pdMS_TO_TICKS(1000)); 
+      vTaskDelay(pdMS_TO_TICKS(1000));
     }
   }
 }

@@ -49,26 +49,8 @@ static void _wifiHandler(void* arg, esp_event_base_t event_base,
 int wifi_initialize(const char* ssid, const char* password) {
   s_wifi_event_group = xEventGroupCreate();
 
-  esp_err_t err = esp_netif_init();
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Netif init failed: %s", esp_err_to_name(err));
-    return 1;
-  }
-
-  err = esp_event_loop_create_default();
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Event loop init failed: %s", esp_err_to_name(err));
-    return 1;
-  }
-  esp_netif_create_default_wifi_sta();
-
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  err = esp_wifi_init(&cfg);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Init failed: %s", esp_err_to_name(err));
-    return 1;
-  }
-
+  // Register event handlers
+  esp_err_t err;
   esp_event_handler_instance_t instance_any_id;
   err = esp_event_handler_instance_register(
       WIFI_EVENT, ESP_EVENT_ANY_ID, &_wifiHandler, NULL, &instance_any_id);
@@ -86,23 +68,37 @@ int wifi_initialize(const char* ssid, const char* password) {
     return 1;
   }
 
+  // Configure WiFi with the provided credentials
   wifi_config_t wifi_config = {0};
   strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
   strncpy((char*)wifi_config.sta.password, password,
           sizeof(wifi_config.sta.password));
+
+  // Set WiFi mode to station
   err = esp_wifi_set_mode(WIFI_MODE_STA);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Set mode failed: %s", esp_err_to_name(err));
     return 1;
   }
+
+  // Configure the WiFi station with the provided credentials
   err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Set config failed: %s", esp_err_to_name(err));
     return 1;
   }
+
+  // Start WiFi
   err = esp_wifi_start();
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Start failed: %s", esp_err_to_name(err));
+    return 1;
+  }
+
+  // Connect to the WiFi network
+  err = esp_wifi_connect();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Connect failed: %s", esp_err_to_name(err));
     return 1;
   }
 

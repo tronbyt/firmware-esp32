@@ -835,6 +835,13 @@ void wifi_manager_generate_ip_info_json(update_reason_code_t update_reason_code)
 			cJSON_AddStringToObject(root, "ap_ssid", (char *)wifi_settings.ap_ssid);
 			cJSON_AddStringToObject(root, "ap_ip", ap_ip);
 
+			/* Add image URL if available */
+			char *image_url = wifi_manager_get_image_url();
+			if (image_url != NULL) {
+				cJSON_AddStringToObject(root, "image_url", image_url);
+				free(image_url); // Free the memory allocated by wifi_manager_get_image_url
+			}
+
 			char *json_string = cJSON_PrintUnformatted(root);
 			snprintf((ip_info_json), JSON_IP_INFO_SIZE, "%s", json_string);
 			free(json_string);
@@ -850,6 +857,13 @@ void wifi_manager_generate_ip_info_json(update_reason_code_t update_reason_code)
 			cJSON_AddStringToObject(root, "netmask", "0");
 			cJSON_AddStringToObject(root, "gw", "0");
 			cJSON_AddNumberToObject(root, "urc", (int)update_reason_code);
+
+			/* Add image URL if available */
+			char *image_url = wifi_manager_get_image_url();
+			if (image_url != NULL) {
+				cJSON_AddStringToObject(root, "image_url", image_url);
+				free(image_url); // Free the memory allocated by wifi_manager_get_image_url
+			}
 
 			char *json_string = cJSON_PrintUnformatted(root);
 			snprintf((ip_info_json), JSON_IP_INFO_SIZE, "%s", json_string);
@@ -2314,6 +2328,145 @@ esp_err_t wifi_manager_delete_saved_ap(const char *ssid)
  *                  ESP_ERR_INVALID_ARG if input parameters are invalid,
  *                  Other ESP_ERR_* codes for different errors.
  */
+/**
+ * @brief Saves the image URL to NVS.
+ *
+ * This function saves the provided image URL to NVS for later retrieval.
+ *
+ * @param image_url The image URL to save.
+ * @return esp_err_t ESP_OK on success, or an error code on failure.
+ */
+esp_err_t wifi_manager_save_image_url(const char *image_url)
+{
+	if (image_url == NULL)
+	{
+		ESP_LOGE(TAG, "image_url is NULL.");
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	nvs_handle handle;
+	esp_err_t err;
+
+	// Lock NVS for thread-safe access
+	if (!nvs_sync_lock(portMAX_DELAY))
+	{
+		ESP_LOGE(TAG, "Failed to lock NVS for saving image URL.");
+		return ESP_FAIL;
+	}
+
+	// Open NVS namespace
+	err = nvs_open(wifi_manager_nvs_namespace, NVS_READWRITE, &handle);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to open NVS namespace (%s)", esp_err_to_name(err));
+		nvs_sync_unlock();
+		return err;
+	}
+
+	// Save the image URL to NVS
+	err = nvs_set_str(handle, "image_url", image_url);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Error saving image URL to NVS (%s)", esp_err_to_name(err));
+		nvs_close(handle);
+		nvs_sync_unlock();
+		return err;
+	}
+
+	// Commit changes to NVS
+	err = nvs_commit(handle);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Error committing changes to NVS (%s)", esp_err_to_name(err));
+		nvs_close(handle);
+		nvs_sync_unlock();
+		return err;
+	}
+
+	// Close NVS namespace and unlock
+	nvs_close(handle);
+	nvs_sync_unlock();
+
+	ESP_LOGI(TAG, "Image URL '%s' successfully saved.", image_url);
+	return ESP_OK;
+}
+
+/**
+ * @brief Gets the saved image URL from NVS.
+ *
+ * This function retrieves the saved image URL from NVS.
+ *
+ * @return The saved image URL, or NULL if not found or on error.
+ */
+char *wifi_manager_get_image_url()
+{
+	nvs_handle handle;
+	esp_err_t err;
+	char *image_url = NULL;
+	size_t required_size = 0;
+
+	// Lock NVS for thread-safe access
+	if (!nvs_sync_lock(portMAX_DELAY))
+	{
+		ESP_LOGE(TAG, "Failed to lock NVS for getting image URL.");
+		return NULL;
+	}
+
+	// Open NVS namespace
+	err = nvs_open(wifi_manager_nvs_namespace, NVS_READONLY, &handle);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to open NVS namespace (%s)", esp_err_to_name(err));
+		nvs_sync_unlock();
+		return NULL;
+	}
+
+	// Get the size of the image URL
+	err = nvs_get_str(handle, "image_url", NULL, &required_size);
+	if (err != ESP_OK)
+	{
+		if (err == ESP_ERR_NVS_NOT_FOUND)
+		{
+			ESP_LOGI(TAG, "No image URL found in NVS.");
+		}
+		else
+		{
+			ESP_LOGE(TAG, "Error getting image URL size from NVS (%s)", esp_err_to_name(err));
+		}
+		nvs_close(handle);
+		nvs_sync_unlock();
+		return NULL;
+	}
+
+	// Allocate memory for the image URL
+	image_url = malloc(required_size);
+	if (image_url == NULL)
+	{
+		ESP_LOGE(TAG, "Failed to allocate memory for image URL.");
+		nvs_close(handle);
+		nvs_sync_unlock();
+		return NULL;
+	}
+
+	// Get the image URL
+	err = nvs_get_str(handle, "image_url", image_url, &required_size);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Error getting image URL from NVS (%s)", esp_err_to_name(err));
+		free(image_url);
+		nvs_close(handle);
+		nvs_sync_unlock();
+		return NULL;
+	}
+
+	// Close NVS namespace and unlock
+	nvs_close(handle);
+	nvs_sync_unlock();
+
+	ESP_LOGI(TAG, "Retrieved image URL: %s", image_url);
+	return image_url;
+}
+
 esp_err_t wifi_manager_update_ap_password(const char *ssid, const char *new_password)
 {
 	if (ssid == NULL || new_password == NULL)

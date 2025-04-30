@@ -38,7 +38,8 @@
 					<form onsubmit="event.preventDefault(); document.getElementById('manual_join').click();">
 						<section>
 							<input id="manual_ssid" type="text" placeholder="SSID" value="">
-							<input id="manual_pwd" type="password" placeholder="Password" value="">
+							<input id="manual_pwd" type="text" placeholder="Password" value="">
+							<input id="manual_image_url" type="text" placeholder="Image URL" value="">
 						</section>
 						<div class="buttons">
 							<input id="manual_join" type="button" value="Join" data-connect="manual" />
@@ -53,7 +54,8 @@
 					<h2>Password for <span id="ssid-pwd"></span></h2>
 					<form onsubmit="event.preventDefault(); document.getElementById('join').click();">
 						<section>
-							<input id="pwd" type="password" placeholder="Password" value="">
+							<input id="pwd" type="text" placeholder="Password" value="">
+							<input id="image_url" type="text" placeholder="Image URL" value="">
 						</section>
 						<div class="buttons">
 							<input id="join" type="button" value="Join" />
@@ -103,7 +105,7 @@
 						<div class="buttons">
 							<input id="ok-details" type="button" value="OK" class="ctr" />
 						</div>
-					</div>					
+					</div>
 					<div id="diag-disconnect" class="diag-box">
 						<div class="diag-box-win">
 							<p>Are you sure you would like to disconnect from this wifi?</p>

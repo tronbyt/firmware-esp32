@@ -47,6 +47,10 @@ function startRefreshAPInterval() {
 }
 
 docReady(async function () {
+  // Make sure the image URL fields are visible
+  gel("manual_image_url").style.display = "block";
+  gel("image_url").style.display = "block";
+
   gel("wifi-status").addEventListener(
     "click",
     () => {
@@ -66,6 +70,9 @@ docReady(async function () {
       connect_manual_div.style.display = "block";
       connect_div.style.display = "none";
 
+      // Make sure the image URL field is visible
+      gel("manual_image_url").style.display = "block";
+
       gel("connect-success").display = "none";
       gel("connect-fail").display = "none";
     },
@@ -79,6 +86,9 @@ docReady(async function () {
       gel("ssid-pwd").textContent = selectedSSID;
       connect_div.style.display = "block";
       wifi_div.style.display = "none";
+
+      // Make sure the image URL field is visible
+      gel("image_url").style.display = "block";
       // init_cancel();
     },
     false
@@ -99,7 +109,7 @@ docReady(async function () {
 
   gel("manual_join").addEventListener(
     "click",
-    (e) => {
+    () => {
       performConnect("manual");
     },
     false
@@ -125,8 +135,8 @@ docReady(async function () {
 
   gel("acredits").addEventListener(
     "click",
-    () => {
-      event.preventDefault();
+    (e) => {
+      e.preventDefault();
       gel("app").style.display = "none";
       gel("credits").style.display = "block";
     },
@@ -181,6 +191,10 @@ docReady(async function () {
     wifi_div.style.display = "block";
   });
 
+  // Make sure the image URL fields are visible
+  gel("manual_image_url").style.display = "block";
+  gel("image_url").style.display = "block";
+
   //first time the page loads: attempt get the connection status and start the wifi scan
   await refreshAP();
   startCheckStatusInterval();
@@ -197,12 +211,15 @@ async function performConnect(conntype) {
   stopRefreshAPInterval();
 
   var pwd;
+  var imageUrl;
   if (conntype == "manual") {
-    //Grab the manual SSID and PWD
+    //Grab the manual SSID, PWD, and image URL
     selectedSSID = gel("manual_ssid").value;
     pwd = gel("manual_pwd").value;
+    imageUrl = gel("manual_image_url").value;
   } else {
     pwd = gel("pwd").value;
+    imageUrl = gel("image_url").value;
   }
   //reset connection
   gel("loading").style.display = "block";
@@ -221,6 +238,7 @@ async function performConnect(conntype) {
       "Content-Type": "application/json",
       "X-Custom-ssid": selectedSSID,
       "X-Custom-pwd": pwd,
+      "X-Custom-image-url": imageUrl,
     },
     body: JSON.stringify({ timestamp: Date.now() }),
   });

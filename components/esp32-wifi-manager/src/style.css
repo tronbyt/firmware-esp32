@@ -139,6 +139,22 @@ h3 {
     padding: 10px 0px 10px 10px;
     display: block
 }
+#manual_image_url {
+    border: none;
+    width: 100%;
+    margin-left: 35px;
+    padding: 10px 0px 10px 10px;
+    display: block !important;
+    font-size: 1.1em;
+}
+#image_url {
+    border: none;
+    width: 100%;
+    margin-left: 35px;
+    padding: 10px 0px 10px 10px;
+    display: block !important;
+    font-size: 1.1em;
+}
 .buttons {
     padding: 15px;
 }

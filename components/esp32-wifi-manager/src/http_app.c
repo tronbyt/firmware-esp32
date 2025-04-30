@@ -150,12 +150,13 @@ static esp_err_t http_server_post_handler(httpd_req_t *req){
 
 
 		/* buffers for the headers */
-		size_t ssid_len = 0, password_len = 0;
-		char *ssid = NULL, *password = NULL;
+		size_t ssid_len = 0, password_len = 0, image_url_len = 0;
+		char *ssid = NULL, *password = NULL, *image_url = NULL;
 
 		/* len of values provided */
 		ssid_len = httpd_req_get_hdr_value_len(req, "X-Custom-ssid");
 		password_len = httpd_req_get_hdr_value_len(req, "X-Custom-pwd");
+		image_url_len = httpd_req_get_hdr_value_len(req, "X-Custom-image-url");
 
 
 		if(ssid_len && ssid_len <= MAX_SSID_SIZE && password_len && password_len <= MAX_PASSWORD_SIZE){
@@ -167,6 +168,20 @@ static esp_err_t http_server_post_handler(httpd_req_t *req){
 			httpd_req_get_hdr_value_str(req, "X-Custom-pwd", password, password_len+1);
 
 			ESP_LOGI(TAG, "ssid: %s, password: %s", ssid, password);
+
+			/* Process image URL if provided */
+			if(image_url_len && image_url_len <= 256) { /* Limit URL length to 256 chars */
+				image_url = malloc(sizeof(char) * (image_url_len + 1));
+				httpd_req_get_hdr_value_str(req, "X-Custom-image-url", image_url, image_url_len+1);
+				ESP_LOGI(TAG, "image_url: %s", image_url);
+
+				/* Save the image URL to NVS */
+				wifi_manager_save_image_url(image_url);
+
+				/* free memory */
+				free(image_url);
+			}
+
 			ESP_LOGD(TAG, "http_server_post_handler: wifi_manager_connect_async() call");
 			wifi_manager_connect_async(true, ssid, password);
 

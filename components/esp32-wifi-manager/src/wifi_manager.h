@@ -507,6 +507,25 @@ extern "C"
 	 */
 	esp_err_t wifi_manager_update_ap_password(const char *ssid, const char *new_password);
 
+/**
+ * @brief Saves the image URL to NVS.
+ *
+ * This function saves the provided image URL to NVS for later retrieval.
+ *
+ * @param image_url The image URL to save.
+ * @return esp_err_t ESP_OK on success, or an error code on failure.
+ */
+esp_err_t wifi_manager_save_image_url(const char *image_url);
+
+/**
+ * @brief Gets the saved image URL from NVS.
+ *
+ * This function retrieves the saved image URL from NVS.
+ *
+ * @return The saved image URL, or NULL if not found or on error.
+ */
+char *wifi_manager_get_image_url();
+
 #ifdef __cplusplus
 }
 #endif
