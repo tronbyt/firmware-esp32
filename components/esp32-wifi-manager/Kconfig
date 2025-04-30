@@ -1,0 +1,248 @@
+menu "Wifi Manager Configuration"
+
+config WIFI_MANAGER_TASK_PRIORITY
+    int "RTOS Task Priority for the wifi_manager"
+    default 5
+    help
+    Tasks spawn by the manager will have a priority of WIFI_MANAGER_TASK_PRIORITY-1. For this particular reason, minimum recommended task priority is 2.
+
+config WIFI_MANAGER_RETRY_TIMER
+    int "Time (in ms) between each retry attempt"
+    default 5000
+    help
+    Defines the time to wait before an attempt to re-connect to a saved wifi is made after connection is lost or another unsuccesful attempt is made.
+
+config WIFI_DEFAULT_STA_ONLY
+    int "Enable STA only mode"
+    default 0
+    range 0 1
+    help
+    If enabled, the WiFi manager will only connect to an AP. 0=AP+STA, 1=STA only
+
+config WIFI_DEFAULT_STA_POWER_SAVE
+    int "Default STA Power Save"
+    default 0
+    range 0 2
+    help
+        Default STA Power Save. 0=WIFI_PS_NONE, 1=WIFI_PS_MIN_MODEM, 2=WIFI_PS_MAX_MODEM.
+
+config WIFI_MANAGER_AUTOSTART_AP
+    bool "Automatically start the AP if the WiFi manager fails to connect to another AP"
+    default y
+
+config WIFI_MANAGER_MAX_RETRY_START_AP
+    int "Max Retry before starting the AP" if WIFI_MANAGER_AUTOSTART_AP
+    default 3
+    help
+    Defines the maximum number of failed retries allowed before the WiFi manager starts its own access point.
+
+config WIFI_MANAGER_SHUTDOWN_AP_TIMER
+    int "Time (in ms) to wait before shutting down the AP"
+    default 60000
+    help
+    Defines the time (in ms) to wait after a succesful connection before shutting down the access point. Use a 0 or negative number to never shut down the access point.
+
+config WEBAPP_LOCATION
+    string "Defines the URL where the wifi manager is located"
+    default "/"
+    help
+    This parameter helps you relocate the wifimanager to another URL, for instance /wifimanager/ The trailing slash is important and should be included
+
+config DEFAULT_AP_SSID
+    string "Access Point SSID"
+    default "esp32"
+    help
+    SSID (network name) the the esp32 will broadcast.
+
+config DEFAULT_AP_SSID_HIDDEN
+    int "Hide Access Point SSID"
+    default 0
+    range 0 1
+    help
+        If enabled, the Access Point SSID will be hidden. 0=visible, 1=hidden
+
+config WIFI_MANAGER_APPEND_MAC
+    bool "Append MAC address to access point SSID"
+    default n
+    help
+    The last two octets of the device's MAC address will be appended (with a preceding space) to the configured access point SSID. For example, "esp32" -> "esp32 ad7e". This helps make the SSID unique if you might have multiple devices on at once.
+
+config USE_RANDOM_AP_PASSWORD
+    bool "Use a randomly-generated Access Point password"
+    default n
+
+config DEFAULT_AP_PASSWORD
+    string "Access Point Password" if !USE_RANDOM_AP_PASSWORD
+    default "esp32pwd"
+    help
+    Password used for the Access Point. Leave empty and set AUTH MODE to WIFI_AUTH_OPEN for no password.
+
+config DEFAULT_AP_CHANNEL
+    int "Access Point WiFi Channel"
+    default 1
+    help
+    Be careful you might not see the access point if you use a channel not allowed in your country.
+
+config MAX_AP_NUM
+    int "Maximum number of APs to scan"
+    default 15
+    help
+    Defines the maximum number of APs that can be scanned.
+
+config DEFAULT_AP_IP
+    string "Access Point IP Address"
+    default "10.10.0.1"
+    help
+    This is used for the redirection to the captive portal. It is recommended to leave unchanged.
+
+config DEFAULT_AP_GATEWAY
+    string "Access Point IP Gateway"
+    default "10.10.0.1"
+    help
+    This is used for the redirection to the captive portal. It is recommended to leave unchanged.
+
+config DEFAULT_AP_NETMASK
+    string "Access Point Netmask"
+    default "255.255.255.0"
+    help
+    This is used for the redirection to the captive portal. It is recommended to leave unchanged.
+
+config DEFAULT_AP_MAX_CONNECTIONS
+    int "Access Point Max Connections"
+    default 4
+    help
+    Max is 4.
+
+config WIFI_MAX_AP_CONFIGS
+    int "Maximum number of APs that can be saved"
+    default 10
+    help
+        Maximum number of APs that can be saved.
+
+config DEFAULT_AP_BEACON_INTERVAL
+    int "Access Point Beacon Interval (ms)"
+    default 100
+    help
+    100ms is the recommended default.
+
+config HARDCODED_SSID_ENABLE
+        bool "Enable hardcoded SSID"
+        default n
+        help
+        For factory configuration, the device will attempt to connect an an AP with this SSID if there are no user configured APs.
+
+config HARDCODED_SSID
+    string "Hardcoded SSID"
+    default "HardcodedSSID"
+    help
+    For factory configuration, the device will attempt to connect an an AP with this SSID if there are no user configured APs.
+
+config HARDCODED_PASSWORD
+        string "Hardcoded password"
+        default "HardcodedPassword"
+        help
+        For factory configuration, the device will attempt to connect an an AP with this password if there are no user configured APs.
+
+config HTTP_APP_ENABLED
+    bool "Enable HTTP app"
+    default n
+    help
+    If enabled, the HTTP app will be enabled.
+    
+config WIFI_POWER_ADJUSTABLE
+    bool "Adjust WiFi power"
+    default n
+    help
+    If enabled, the WiFi power will be able to be adjusted by the user.
+
+config WIFI_POWER_DEFAULT
+    int "Default WiFi power"
+    default 80
+    range 0 80
+    depends on WIFI_POWER_ADJUSTABLE
+    help
+        Default WiFi power in dBm; 0=40, 1=48, 2=56, 3=64, 4=72, 5=80
+
+config WIFI_DEFAULT_STA_CONNECT_RETRY_CNT
+    int "STA Connect Retry Count"
+    default 0
+    range 0 25
+    help
+        Number of times to retry to connect to an AP.
+
+config WIFI_DEFAULT_STA_CONNECT_MIN_RSSI
+    int "STA Connect Minimum RSSI"
+    default -80
+    range -100 0
+    help
+        Minimum RSSI allowed to connect to an AP.
+
+config WIFI_MANAGER_INITIAL_RETRY_MS
+    int "Initial retry interval for decelerating retry"
+    default 2500
+    help
+        Initial retry interval for decelerating retry.
+
+config WIFI_MANAGER_MAX_RETRY_MS
+    int "Maximum retry interval for decelerating retry"
+    default 15000
+    help
+        Maximum retry interval for decelerating retry.
+
+config WIFI_MANAGER_RETRY_MULTIPLIER
+    int "Retry interval multiplier"
+    default 2
+    help
+        Retry interval multiplier.
+
+config WIFI_DEFAULT_AP_BANDWIDTH
+    int "Default AP Bandwidth"
+    default 1
+    range 1 2
+    help
+        Default AP Bandwidth. 1=20MHz, 2=40MHz
+
+config WIFI_DEFAULT_STA_SCAN_METHOD
+    int "Default STA Scan Method"
+    default 1
+    range 0 1
+    help
+        Default STA Scan Method. 0=WIFI_FAST_SCAN, 1=WIFI_ALL_CHANNEL_SCAN.
+
+config WIFI_DEFAULT_STA_SORT_METHOD
+    int "Default STA Sort Method"
+    default 0
+    range 0 1
+    help
+        Default STA Sort Method. 0=WIFI_CONNECT_AP_BY_SIGNAL, 1=WIFI_CONNECT_AP_BY_SECURITY.
+
+config WIFI_DEFAULT_STA_RM_ENABLED
+    int "Default STA RM Enabled"
+    default 0
+    range 0 1
+    help
+        Default STA RM Enabled. 0=disabled, 1=enabled
+
+config WIFI_DEFAULT_STA_BTM_ENABLED
+    int "Default STA BTM Enabled"
+    default 0
+    range 0 1
+    help
+        Default STA BTM Enabled. 0=disabled, 1=enabled
+
+config WIFI_DEFAULT_STA_MBO_ENABLED
+    int "Default STA MBO Enabled"
+    default 0
+    range 0 1
+    help
+        Default STA MBO Enabled. 0=disabled, 1=enabled
+
+config WIFI_DEFAULT_STA_FT_ENABLED
+    int "Default STA FT Enabled"
+    default 0
+    range 0 1
+    help
+        Default STA FT Enabled. 0=disabled, 1=enabled
+
+endmenu
+    

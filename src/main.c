@@ -12,6 +12,7 @@
 #include "sdkconfig.h"
 #include "wifi.h"
 
+
 #define BLUE "\033[1;34m"
 #define RESET "\033[0m"  // Reset to default color
 
