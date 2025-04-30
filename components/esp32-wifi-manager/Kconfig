@@ -145,7 +145,7 @@ config HARDCODED_PASSWORD
 
 config HTTP_APP_ENABLED
     bool "Enable HTTP app"
-    default n
+    default y
     help
     If enabled, the HTTP app will be enabled.
     
