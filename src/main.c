@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 #include <freertos/timers.h>
 #include <webp/demux.h>
+#include <esp_websocket_client.h>
 
 #include "display.h"
 #include "flash.h"
@@ -19,6 +20,7 @@ static const char* TAG = "main";
 int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
+bool use_websocket = false;
 
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
@@ -51,32 +53,42 @@ void app_main(void) {
              mac[2], mac[3], mac[4], mac[5]);
   }
 
-  ESP_LOGW(TAG, "Main Loop Start");
-  for (;;) {
-    uint8_t* webp;
-    size_t len;
-    static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
+  // Check for ws:// or wss:// in REMOTE_URL
+  if (strstr(REMOTE_URL, "ws://") != NULL) {
+    // setup ws event handlers
+    const esp_websocket_client_config_t ws_cfg = {
+        .uri = REMOTE_URL,
+    };
+  } else {
+    // normal http
+  }
+    ESP_LOGW(TAG, "Main Loop Start");
+    for (;;) {
+      uint8_t* webp;
+      size_t len;
+      static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-    if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
-                   &app_dwell_secs)) {
-      ESP_LOGE(TAG, "Failed to get webp");
-      vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-    } else {
-      // Successful remote_get
-      display_set_brightness(brightness_pct);
-      ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-      gfx_update(webp, len);
-      free(webp);
-      // Wait for app_dwell_secs to expire (isAnimating will be 0)
-      ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-      if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
-      while (isAnimating > 0) {
-        vTaskDelay(pdMS_TO_TICKS(1));
+      if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
+                     &app_dwell_secs)) {
+        ESP_LOGE(TAG, "Failed to get webp");
+        vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+      } else {
+        // Successful remote_get
+        display_set_brightness(brightness_pct);
+        ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
+        gfx_update(webp, len);
+        free(webp);
+        // Wait for app_dwell_secs to expire (isAnimating will be 0)
+        ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
+        if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
+        while (isAnimating > 0) {
+          vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
+                 (int)app_dwell_secs);
+        isAnimating = app_dwell_secs;  // use isAnimating as the container for
+                                       // app_dwell_secs
+        vTaskDelay(pdMS_TO_TICKS(1000));
       }
-      ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET, (int)app_dwell_secs);
-      isAnimating = app_dwell_secs;  // use isAnimating as the container for
-                                     // app_dwell_secs
-      vTaskDelay(pdMS_TO_TICKS(1000)); 
     }
   }
-}

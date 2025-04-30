@@ -1,4 +1,0 @@
-dependencies:
-  espressif/mbedtls_cxx:
-    version: "*"
-    override_path: "../.."

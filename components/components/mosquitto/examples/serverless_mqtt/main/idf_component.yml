@@ -1,5 +1,0 @@
-## IDF Component Manager Manifest File
-dependencies:
-  espressif/mosquitto:
-    override_path: ../../..
-  espressif/sock_utils: "*"

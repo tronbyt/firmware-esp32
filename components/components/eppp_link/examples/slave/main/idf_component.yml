@@ -1,4 +1,0 @@
-dependencies:
-  espressif/eppp_link:
-    version: "*"
-    override_path: "../../.."
