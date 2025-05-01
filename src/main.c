@@ -21,6 +21,61 @@ int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 bool use_websocket = false;
+esp_websocket_client_handle_t ws_handle;
+
+static void websocket_event_handler(void *handler_args, esp_event_base_t base,
+                                    int32_t event_id, void *event_data) {
+  esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
+  switch (event_id) {
+    case WEBSOCKET_EVENT_CONNECTED:
+      ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
+      break;
+    case WEBSOCKET_EVENT_DISCONNECTED:
+      ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+      break;
+    case WEBSOCKET_EVENT_DATA:
+      ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
+      ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
+      ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
+      ESP_LOGW(
+          TAG,
+          "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
+          data->payload_len, data->data_len, data->payload_offset);
+      
+      // Check if data contains "brightness"
+      if (strstr((char *)data->data_ptr, "brightness")) {
+        ESP_LOGI(TAG, "Brightness data detected");
+        
+        // Simple string parsing for {"brightness": XX}
+        char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
+        if (brightness_pos) {
+          // Find the colon after "brightness"
+          char *colon_pos = strchr(brightness_pos, ':');
+          if (colon_pos) {
+            // Skip colon and any whitespace
+            char *value_start = colon_pos + 1;
+            while (*value_start == ' ') value_start++;
+            
+            // Parse the integer value
+            int brightness_value = atoi(value_start);
+            ESP_LOGI(TAG, "Parsed brightness: %d", brightness_value);
+            
+            // Clamp value between min and max
+            if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
+            if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
+            
+            // Set the brightness
+            display_set_brightness((uint8_t)brightness_value);
+          }
+        }
+      }
+
+      break;
+    case WEBSOCKET_EVENT_ERROR:
+      ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      break;
+  }
+}
 
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
@@ -55,11 +110,25 @@ void app_main(void) {
 
   // Check for ws:// or wss:// in REMOTE_URL
   if (strstr(REMOTE_URL, "ws://") != NULL) {
+    use_websocket = true;
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
         .uri = REMOTE_URL,
-    };
-  } else {
+      };
+    ws_handle = esp_websocket_client_init(&ws_cfg);
+    esp_err_t start_error = esp_websocket_client_start(ws_handle);
+    if (start_error != ESP_OK) {
+      ESP_LOGE(TAG, "couldn't connect to websocket url %s with error code %i", REMOTE_URL, start_error);
+      // display error ?
+    } else {
+      // esp_websocket_register_events(ws_handle, RX_EVENT, RX_HANDLER_FUNC,
+      //                               void *event_handler_arg)
+      esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)ws_handle);
+      esp_websocket_client_start(ws_handle);
+    }
+  }
+  else 
+  {
     // normal http
   }
     ESP_LOGW(TAG, "Main Loop Start");
@@ -68,27 +137,33 @@ void app_main(void) {
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-      if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
-                     &app_dwell_secs)) {
-        ESP_LOGE(TAG, "Failed to get webp");
-        vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+      if ( use_websocket ) {
+        // let the events do the work.
+
       } else {
-        // Successful remote_get
-        display_set_brightness(brightness_pct);
-        ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-        gfx_update(webp, len);
-        free(webp);
-        // Wait for app_dwell_secs to expire (isAnimating will be 0)
-        ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
-        while (isAnimating > 0) {
-          vTaskDelay(pdMS_TO_TICKS(1));
+
+        if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
+                      &app_dwell_secs)) {
+          ESP_LOGE(TAG, "Failed to get webp");
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        } else {
+          // Successful remote_get
+          display_set_brightness(brightness_pct);
+          ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
+          gfx_update(webp, len);
+          free(webp);
+          // Wait for app_dwell_secs to expire (isAnimating will be 0)
+          ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
+          if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
+          while (isAnimating > 0) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+          }
+          ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
+                  (int)app_dwell_secs);
+          isAnimating = app_dwell_secs;  // use isAnimating as the container for
+                                        // app_dwell_secs
+          vTaskDelay(pdMS_TO_TICKS(1000));
         }
-        ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
-                 (int)app_dwell_secs);
-        isAnimating = app_dwell_secs;  // use isAnimating as the container for
-                                       // app_dwell_secs
-        vTaskDelay(pdMS_TO_TICKS(1000));
       }
     }
-  }
+}

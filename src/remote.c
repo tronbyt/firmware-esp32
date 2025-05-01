@@ -173,7 +173,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
 
   int status_code = esp_http_client_get_status_code(http);
   if (status_code != 200) {
-    ESP_LOGE(TAG, "Server returned HTTP status 500");
+    ESP_LOGE(TAG, "Server returned HTTP status %d", status_code);
     if (state.buf != NULL) {
       free(state.buf);
     }
