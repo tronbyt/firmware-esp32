@@ -43,30 +43,25 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           data->payload_len, data->data_len, data->payload_offset);
       
       // Check if data contains "brightness"
-      if (strstr((char *)data->data_ptr, "brightness")) {
+      if (strstr((char *)data->data_ptr, "{\"brightness\":")) {
         ESP_LOGI(TAG, "Brightness data detected");
         
-        // Simple string parsing for {"brightness": XX}
+        // Simple string parsing for {"brightness": xxx}
         char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
         if (brightness_pos) {
-          // Find the colon after "brightness"
-          char *colon_pos = strchr(brightness_pos, ':');
-          if (colon_pos) {
-            // Skip colon and any whitespace
-            char *value_start = colon_pos + 1;
-            while (*value_start == ' ') value_start++;
-            
-            // Parse the integer value
-            int brightness_value = atoi(value_start);
-            ESP_LOGI(TAG, "Parsed brightness: %d", brightness_value);
-            
-            // Clamp value between min and max
-            if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
-            if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
-            
-            // Set the brightness
-            display_set_brightness((uint8_t)brightness_value);
-          }
+          // Find position after the space that follows the colon
+          char *value_start = brightness_pos + 13; // brightness": is 13 chars
+          
+          // Parse the integer value directly
+          int brightness_value = atoi(value_start);
+          ESP_LOGI(TAG, "Parsed brightness: %d", brightness_value);
+          
+          // Clamp value between min and max
+          if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
+          if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
+          
+          // Set the brightness
+          display_set_brightness((uint8_t)brightness_value);
         }
       }
 
