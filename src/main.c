@@ -89,6 +89,13 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                    data->payload_offset + data->data_len, data->payload_len);
         }
 
+        // Check if payload size exceeds maximum buffer size
+        if (data->payload_len > HTTP_BUFFER_SIZE_MAX) {
+          ESP_LOGE(TAG, "WebP payload size (%d bytes) exceeds maximum buffer size (%d bytes)",
+                   data->payload_len, HTTP_BUFFER_SIZE_MAX);
+          break;
+        }
+
         // First fragment or complete message - allocate memory
         if (data->payload_offset == 0) {
           // Free previous buffer if it exists
