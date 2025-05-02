@@ -122,6 +122,7 @@ void app_main(void) {
 
   // Check for ws:// or wss:// in REMOTE_URL
   if (strstr(REMOTE_URL, "ws://") != NULL) {
+    ESP_LOGI(TAG,"Using websockets");
     use_websocket = true;
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
