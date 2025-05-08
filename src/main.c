@@ -26,7 +26,7 @@ extern wifi_settings_t wifi_settings;
 static const char* TAG = "main";
 int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
-int32_t app_dwell_secs = TIDBYT_REFRESH_INTERVAL_SECONDS;
+int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 bool is_connected = false;
 bool using_wifi_manager = false;
 int connection_timeout = 0; // Will be set during connection attempt
@@ -74,7 +74,7 @@ void app_main(void) {
   ESP_LOGI(TAG, "Attempting to connect with hardcoded WiFi credentials...");
 
   // Use WiFi Manager to connect with the hardcoded credentials
-  wifi_manager_connect_async(true, TIDBYT_WIFI_SSID, TIDBYT_WIFI_PASSWORD);
+  wifi_manager_connect_async(true, WIFI_SSID, WIFI_PASSWORD);
 
   // Wait for WiFi connection
   ESP_LOGI(TAG, "Waiting for WiFi connection...");
@@ -136,7 +136,7 @@ void app_main(void) {
       // If we connected with hardcoded credentials within the timeout period
       if (connection_timeout > 0) {
         // Use the hardcoded image URL
-        url_to_use = TIDBYT_REMOTE_URL;
+        url_to_use = REMOTE_URL;
         ESP_LOGI(TAG, "Connected with hardcoded credentials, using hardcoded image URL");
       } else {
         // We connected via WiFi Manager's AP mode
@@ -147,13 +147,13 @@ void app_main(void) {
           ESP_LOGI(TAG, "Connected via WiFi Manager, using saved image URL");
         } else {
           // No saved image URL, use the default
-          url_to_use = TIDBYT_REMOTE_URL;
+          url_to_use = REMOTE_URL;
           ESP_LOGI(TAG, "Connected via WiFi Manager, no saved image URL, using default");
         }
       }
     } else {
       // Not connected, use the hardcoded image URL
-      url_to_use = TIDBYT_REMOTE_URL;
+      url_to_use = REMOTE_URL;
       ESP_LOGI(TAG, "Not connected to WiFi, using default image URL");
     }
 
