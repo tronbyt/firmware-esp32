@@ -1,2 +1,2 @@
 # Support
-Looking for help on how to get started beyond the documentation in this repo? Create a discussion post on the [Tidbyt Forum](https://discuss.tidbyt.com/c/developers/) and a member of our team or the broader community will get back to you.
+Looking for help on how to get started beyond the documentation in this repo? Create an issue here on github or join the discord. 

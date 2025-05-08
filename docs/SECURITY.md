@@ -1,2 +1,1 @@
 # Security
-We take security **very seriously** here at Tidbyt. If you discover a security issue with any of the code maintained in this library or elsewhere at Tidbyt, please reach out to security@tidbyt.com via email and we'll get back to you quickly. If the issue is severe, please continue to email us every 24 hours until you get a response.
