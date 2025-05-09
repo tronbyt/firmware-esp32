@@ -18,6 +18,22 @@
   #define LAT 18
   #define OE 27
   #define CLK 15
+#elif defined(TRONBYT_S3_WIDE)
+  #define R1 4
+  #define G1 5
+  #define BL1 6
+  #define R2 7
+  #define G2 15
+  #define BL2 16
+
+  #define CH_A 17
+  #define CH_B 18
+  #define CH_C 8
+  #define CH_D 3
+  #define CH_E 46
+  #define LAT 9
+  #define OE 10
+  #define CLK 11
 #elif defined(TRONBYT_S3)
   #define R1 4
   #define G1 6
@@ -30,8 +46,8 @@
   #define CH_B 18
   #define CH_C 8
   #define CH_D 3
-  #define CH_E -1  // assign to pin 14 if using more than two panels
-
+  #define CH_E -1
+  
   #define LAT 9
   #define OE 10
   #define CLK 11
@@ -115,14 +131,18 @@ int display_initialize() {
   bool invert_clock_phase = true;
   #endif
 
-  // HUB75_I2S_CFG mxconfig(64,                      // width
-  //                        32,                      // height
-  //                        1,                       // chain length
-  //                        pins,                    // pin mapping
-  //                        HUB75_I2S_CFG::FM6126A,  // driver chip
-  //                        true,                    // double-buffering
-  //                        HUB75_I2S_CFG::HZ_10M);
-
+  #ifdef TRONBYT_S3_WIDE
+  HUB75_I2S_CFG mxconfig(128,                     // width
+                         64,                      // height
+                         1,                       // chain length
+                         pins,                    // pin mapping
+                         HUB75_I2S_CFG::FM6126A,  // driver chip
+                         true,                    // double-buffering
+                         HUB75_I2S_CFG::HZ_10M,   // clock speed
+                         1,                       // latch blanking
+                         invert_clock_phase       // invert clock phase
+  );
+  #else
   HUB75_I2S_CFG mxconfig(64,                      // width
                          32,                      // height
                          1,                       // chain length
@@ -133,6 +153,7 @@ int display_initialize() {
                          1,                       // latch blanking
                          invert_clock_phase       // invert clock phase
   );
+  #endif
 
   _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
@@ -167,7 +188,11 @@ void display_shutdown() {
 }
 
 void display_draw(const uint8_t *pix, int width, int height,
-		  int channels, int ixR, int ixG, int ixB) {
+                 int channels, int ixR, int ixG, int ixB) {
+  #ifdef TRONBYT_S3_WIDE
+  // Scale factor for doubling the size
+  const int scale = 2;
+  
   for (unsigned int i = 0; i < height; i++) {
     for (unsigned int j = 0; j < width; j++) {
       const uint8_t *p = &pix[(i * width + j) * channels];
@@ -175,9 +200,25 @@ void display_draw(const uint8_t *pix, int width, int height,
       uint8_t g = p[ixG];
       uint8_t b = p[ixB];
 
+      // Draw each pixel scaled up (2x2 pixels for each original pixel)
+      for (int sy = 0; sy < scale; sy++) {
+        for (int sx = 0; sx < scale; sx++) {
+          _matrix->drawPixelRGB888(j * scale + sx, i * scale + sy, r, g, b);
+        }
+      }
+    }
+  }
+  #else
+  for (unsigned int i = 0; i < height; i++) {
+    for (unsigned int j = 0; j < width; j++) {
+      const uint8_t *p = &pix[(i * width + j) * channels];
+      uint8_t r = p[ixR];
+      uint8_t g = p[ixG];
+      uint8_t b = p[ixB];
       _matrix->drawPixelRGB888(j, i, r, g, b);
     }
   }
+  #endif
   _matrix->flipDMABuffer();
 }
 
