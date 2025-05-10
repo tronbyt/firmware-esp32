@@ -39,6 +39,9 @@
 #define MAX_PASSWORD_LEN 64
 #define MAX_URL_LEN 256
 
+// Maximum number of reconnection attempts before giving up
+#define MAX_RECONNECT_ATTEMPTS 10
+
 // Static variables
 static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t *s_sta_netif = NULL;
@@ -49,6 +52,10 @@ static httpd_handle_t s_server = NULL;
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
 static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
+
+// Reconnection counter
+static int s_reconnect_attempts = 0;
+static bool s_connection_given_up = false;
 
 // Callback functions
 static void (*s_connect_callback)(void) = NULL;
@@ -177,8 +184,69 @@ int wifi_initialize(const char* ssid, const char* password) {
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
 
-    // Load saved configuration
-    load_wifi_config_from_nvs();
+    // Load saved configuration from NVS
+    bool has_saved_config = (load_wifi_config_from_nvs() == ESP_OK);
+
+    // If no saved configuration, try to use the hardcoded credentials
+    if (!has_saved_config) {
+        ESP_LOGI(TAG, "No saved WiFi configuration found, using hardcoded credentials");
+
+        // Check if we have hardcoded credentials (WIFI_SSID is defined at compile time)
+        #ifdef WIFI_SSID
+            ESP_LOGI(TAG, "Using hardcoded WIFI_SSID: %s", WIFI_SSID);
+
+            // Check if SSID contains placeholder text or is empty
+            if (strstr(WIFI_SSID, "Xplaceholder") != NULL || strlen(WIFI_SSID) == 0) {
+                ESP_LOGW(TAG, "WIFI_SSID contains placeholder text or is empty, not using hardcoded credentials");
+            } else {
+                // Save the hardcoded credentials to our internal variables
+                strncpy(s_wifi_ssid, WIFI_SSID, MAX_SSID_LEN);
+                s_wifi_ssid[MAX_SSID_LEN] = '\0';
+
+                #ifdef WIFI_PASSWORD
+                    // Check if password contains placeholder text
+                    if (strstr(WIFI_PASSWORD, "Xplaceholder") != NULL) {
+                        ESP_LOGW(TAG, "WIFI_PASSWORD contains placeholder text, not using it");
+                        s_wifi_password[0] = '\0';
+                    } else {
+                        strncpy(s_wifi_password, WIFI_PASSWORD, MAX_PASSWORD_LEN);
+                        s_wifi_password[MAX_PASSWORD_LEN] = '\0';
+                    }
+                #else
+                    // Empty password if not defined
+                    s_wifi_password[0] = '\0';
+                #endif
+
+                // Also load the hardcoded REMOTE_URL as the image URL if available
+                #ifdef REMOTE_URL
+                    // Check if REMOTE_URL contains placeholder text or is empty
+                    if (strstr(REMOTE_URL, "Xplaceholder") != NULL || strlen(REMOTE_URL) == 0) {
+                        ESP_LOGW(TAG, "REMOTE_URL contains placeholder text or is empty, not using it");
+                        s_image_url[0] = '\0';
+                    } else {
+                        ESP_LOGI(TAG, "Using hardcoded REMOTE_URL: %s", REMOTE_URL);
+                        strncpy(s_image_url, REMOTE_URL, MAX_URL_LEN);
+                        s_image_url[MAX_URL_LEN] = '\0';
+                    }
+                #else
+                    ESP_LOGW(TAG, "No hardcoded REMOTE_URL defined");
+                    s_image_url[0] = '\0';
+                #endif
+
+                // Save to NVS for future use only if we have valid credentials
+                if (strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
+                    save_wifi_config_to_nvs();
+                    has_saved_config = true;
+                    ESP_LOGI(TAG, "Saved hardcoded credentials to NVS");
+                } else {
+                    ESP_LOGW(TAG, "Not saving incomplete WiFi credentials to NVS");
+                    has_saved_config = false;
+                }
+            }
+        #else
+            ESP_LOGW(TAG, "No hardcoded WIFI_SSID defined");
+        #endif
+    }
 
     // Start WiFi
     ESP_LOGI(TAG, "Starting WiFi");
@@ -208,9 +276,15 @@ int wifi_initialize(const char* ssid, const char* password) {
     // Start the web server
     start_webserver();
 
-    // If we have saved credentials, try to connect
-    if (strlen(s_wifi_ssid) > 0) {
+    // Only attempt to connect if we have valid saved credentials
+    if (has_saved_config && strlen(s_wifi_ssid) > 0) {
+        ESP_LOGI(TAG, "Attempting to connect with saved/hardcoded credentials");
         connect_to_ap();
+    } else {
+        ESP_LOGI(TAG, "No valid WiFi credentials available, starting in AP mode only");
+        // Reset any previous connection attempts
+        s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
+        s_connection_given_up = true;
     }
 
     ESP_LOGI(TAG, "WiFi initialized successfully");
@@ -299,17 +373,33 @@ void wifi_register_disconnect_callback(void (*callback)(void)) {
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
         if (event_id == WIFI_EVENT_STA_START) {
-            // STA started, try to connect
+            // STA started, reset reconnection counter and try to connect
+            s_reconnect_attempts = 0;
+            s_connection_given_up = false;
             esp_wifi_connect();
         } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-            ESP_LOGI(TAG, "WiFi disconnected, trying to reconnect...");
-            esp_wifi_connect();
+            // Increment reconnection counter
+            s_reconnect_attempts++;
+
+            // Clear connection bit and set fail bit
             xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
 
             // Call disconnect callback if registered
             if (s_disconnect_callback != NULL) {
                 s_disconnect_callback();
+            }
+
+            // Check if we've reached the maximum number of reconnection attempts
+            if (s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS && !s_connection_given_up) {
+                ESP_LOGW(TAG, "Maximum reconnection attempts (%d) reached, giving up", MAX_RECONNECT_ATTEMPTS);
+                s_connection_given_up = true;
+                // We'll continue in AP mode only at this point
+            } else if (!s_connection_given_up) {
+                // Only try to reconnect if we haven't given up yet
+                ESP_LOGI(TAG, "WiFi disconnected, trying to reconnect... (attempt %d/%d)",
+                         s_reconnect_attempts, MAX_RECONNECT_ATTEMPTS);
+                esp_wifi_connect();
             }
         } else if (event_id == WIFI_EVENT_AP_STACONNECTED) {
             wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
@@ -321,6 +411,12 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
+
+        // Reset reconnection counter on successful connection
+        s_reconnect_attempts = 0;
+        s_connection_given_up = false;
+
+        // Set connection bit and clear fail bit
         xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
@@ -585,6 +681,10 @@ static void connect_to_ap(void) {
         ESP_LOGI(TAG, "No SSID configured, not connecting");
         return;
     }
+
+    // Reset reconnection counter and state
+    s_reconnect_attempts = 0;
+    s_connection_given_up = false;
 
     // Configure STA with the saved credentials
     wifi_config_t sta_config = {0};
