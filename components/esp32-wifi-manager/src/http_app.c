@@ -278,7 +278,7 @@ static esp_err_t http_server_get_handler(httpd_req_t *req){
 			httpd_resp_set_type(req, http_content_type_html);
 			httpd_resp_send(req, "<html><head><meta http-equiv=\"refresh\" content=\"0; url=http://"
 							DEFAULT_AP_IP
-							"/\"></head><body>Please wait for a slow redirect or click <a href=\"http://"DEFAULT_AP_IP"\">here</a></body></html>", -1);
+							"/\"></head><body>Please be patient for a slow redirect </body></html>", -1);
 		} else {
 			/* For regular requests, use a 302 redirect */
 			httpd_resp_set_status(req, http_302_hdr);
