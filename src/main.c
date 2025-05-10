@@ -18,7 +18,6 @@
 
 // Default URL if none is provided through WiFi manager
 #define DEFAULT_URL "http://URL.NOT.SET/"
-#define REFRESH_INTERVAL_SECONDS 90 // Default refresh interval in seconds
 
 static const char* TAG = "main";
 int32_t isAnimating =
