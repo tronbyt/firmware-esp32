@@ -47,7 +47,7 @@
   #define CH_C 8
   #define CH_D 3
   #define CH_E -1
-  
+
   #define LAT 9
   #define OE 10
   #define CLK 11
@@ -167,12 +167,21 @@ int display_initialize() {
 
 static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
   if (pct > 100) pct = 100;
-  return (uint8_t)(((uint32_t)pct * 255 + 50) / 100);
+  return (uint8_t)(((uint32_t)pct * 230 + 50) / 100); // 230 as MAX 8 BIT HARDCODED
 }
 
 void display_set_brightness(uint8_t brightness_pct) {
   if (brightness_pct != _brightness) {
     uint8_t brightness_8bit = brightness_percent_to_8bit(brightness_pct);
+
+#ifdef MAX_BRIGHTNESS_8BIT
+    uint8_t max_brightness_8bit = MAX_BRIGHTNESS_8BIT;
+    if (brightness_8bit > max_brightness_8bit) {
+      brightness_8bit = max_brightness_8bit;
+      ESP_LOGI(TAG, "Clamping brightness to MAX_BRIGHTNESS (%d)", MAX_BRIGHTNESS_8BIT);
+    }
+#endif
+
     ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct, brightness_8bit);
     _matrix->setBrightness8(brightness_8bit);
     _matrix->clearScreen();
@@ -192,7 +201,7 @@ void display_draw(const uint8_t *pix, int width, int height,
   #ifdef TRONBYT_S3_WIDE
   // Scale factor for doubling the size
   const int scale = 2;
-  
+
   for (unsigned int i = 0; i < height; i++) {
     for (unsigned int j = 0; j < width; j++) {
       const uint8_t *p = &pix[(i * width + j) * channels];
