@@ -184,7 +184,7 @@ void app_main(void) {
 
   // Log the AP information
   ESP_LOGI(TAG, "WiFi AP started with SSID: Tronbyt-Config");
-  ESP_LOGI(TAG, "Connect to this network and navigate to http://192.168.4.1 to configure WiFi");
+  ESP_LOGI(TAG, "Connect to this network and navigate to http://10.10.0.1 to configure WiFi");
 
   // Wait for WiFi connection (with a 60-second timeout)
   // This will block until either connected or timeout

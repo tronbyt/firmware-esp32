@@ -15,6 +15,7 @@
 #include "esp_netif.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "lwip/ip4_addr.h"
 #include "esp_http_server.h"
 
 #define TAG "SIMPLE_WIFI_MANAGER"
@@ -123,7 +124,6 @@ static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
 static void connect_to_ap(void);
 static void url_decode(char *str);
-static esp_err_t http_error_handler(httpd_req_t *req, httpd_err_code_t error);
 
 // Initialize the WiFi manager
 esp_err_t simple_wifi_manager_init(void) {
@@ -148,6 +148,26 @@ esp_err_t simple_wifi_manager_init(void) {
     // Create default STA and AP network interfaces
     s_sta_netif = esp_netif_create_default_wifi_sta();
     s_ap_netif = esp_netif_create_default_wifi_ap();
+
+    // Configure AP IP address to 10.10.0.1
+    esp_netif_ip_info_t ip_info;
+    IP4_ADDR(&ip_info.ip, 10, 10, 0, 1);
+    IP4_ADDR(&ip_info.gw, 10, 10, 0, 1);
+    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+
+    // Stop DHCP server before changing IP
+    esp_netif_dhcps_stop(s_ap_netif);
+
+    // Set the new IP address
+    esp_err_t err = esp_netif_set_ip_info(s_ap_netif, &ip_info);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set AP IP info: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "AP IP address set to 10.10.0.1");
+    }
+
+    // Start DHCP server with new configuration
+    esp_netif_dhcps_start(s_ap_netif);
 
     // Initialize WiFi with default config
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -388,7 +408,7 @@ static esp_err_t start_webserver(void) {
     // We can't directly increase the max header size in this ESP-IDF version
     // Instead, we'll handle the 431 error gracefully in the handlers
 
-    ESP_LOGI(TAG, "Starting web server on port: %d", config.server_port);
+    ESP_LOGI(TAG, "Starting web server on 10.10.0.1:%d", config.server_port);
 
     if (httpd_start(&s_server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start web server");
