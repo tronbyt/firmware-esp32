@@ -7,3 +7,6 @@ secrets.json
 .DS_Store
 build
 .DS_Store
+.DS_Store
+dependencies.lock
+sdkconfig.tronbyt-S3.defaults

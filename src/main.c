@@ -1,17 +1,27 @@
 #include <assets.h>
 #include <esp_log.h>
+#include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <string.h>
 #include <webp/demux.h>
 #include <esp_websocket_client.h>
 
+#include "config.h"
 #include "display.h"
 #include "flash.h"
 #include "gfx.h"
 #include "remote.h"
 #include "sdkconfig.h"
 #include "wifi.h"
+#include "wifi_manager.h"
+#include "dns_server.h"
+#include "lwip/ip4_addr.h"
+
+// External declaration for wifi_settings from wifi_manager.c
+extern wifi_settings_t wifi_settings;
+
 
 #define BLUE "\033[1;34m"
 #define RESET "\033[0m"  // Reset to default color
@@ -21,6 +31,7 @@ int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
+char *image_url;
 
 bool use_websocket = false;
 esp_websocket_client_handle_t ws_handle;
@@ -140,6 +151,13 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
       break;
   }
+bool is_connected = false;
+bool using_wifi_manager = false;
+int connection_timeout = 0; // Will be set during connection attempt
+
+void cb_connection_ok(void* pvParameter) {
+  ESP_LOGI(TAG, "WiFi have a connection!");
+  is_connected = true;
 }
 
 void app_main(void) {
@@ -159,13 +177,59 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&display_shutdown);
-
-  // Setup WiFi.
-  if (wifi_initialize(WIFI_SSID, WIFI_PASSWORD)) {
-    ESP_LOGE(TAG, "failed to initialize WiFi");
-    return;
-  }
   esp_register_shutdown_handler(&wifi_shutdown);
+
+  // Set custom AP SSID and password before initializing WiFi Manager
+  strcpy((char*)wifi_settings.ap_ssid, "Tronbyt-Config");
+  strcpy((char*)wifi_settings.ap_pwd, ""); // Empty password for open AP
+
+  // Initialize and start WiFi Manager
+  wifi_manager_init();
+  // Give the WiFi manager time to initialize
+  vTaskDelay(pdMS_TO_TICKS(500));
+  wifi_manager_start();
+  // Give the WiFi manager time to start
+  vTaskDelay(pdMS_TO_TICKS(500));
+  wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
+
+  ESP_LOGI(TAG, "WiFi Manager initialized with AP SSID: %s (no password)", (char*)wifi_settings.ap_ssid);
+
+  // The DNS server is already started in the WiFi manager and http_app code
+  // Just log that we're using the captive portal
+  ESP_LOGI(TAG, "Captive portal enabled at %s", DEFAULT_AP_IP);
+
+  // First try to connect with hardcoded WiFi credentials
+  ESP_LOGI(TAG, "Attempting to connect with hardcoded WiFi credentials...");
+
+  // Use WiFi Manager to connect with the hardcoded credentials
+  // wifi_manager_connect_async(true, WIFI_SSID, WIFI_PASSWORD);
+
+  // Wait for WiFi connection
+  ESP_LOGI(TAG, "Waiting for WiFi connection...");
+  connection_timeout = 150; // 15 seconds (150 * 100ms)
+  while (!is_connected) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+
+  // Give the WiFi manager time to update the status
+  vTaskDelay(pdMS_TO_TICKS(500));
+
+  if (is_connected) {
+    // Successfully connected with hardcoded credentials
+    ESP_LOGI(TAG, "Successfully connected with hardcoded credentials");
+    using_wifi_manager = true; // Still using WiFi Manager, but with hardcoded credentials
+  } else {
+    // Failed to connect with hardcoded credentials, WiFi Manager will start AP mode automatically
+    ESP_LOGI(TAG, "Failed to connect with hardcoded credentials, WiFi Manager will start AP mode");
+    using_wifi_manager = true;
+
+    // Continue waiting for WiFi connection
+    ESP_LOGI(TAG, "Waiting for WiFi connection via AP mode...");
+    while (!is_connected) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+  }
+
 
   uint8_t mac[6];
   if (!wifi_get_mac(mac)) {
@@ -173,18 +237,19 @@ void app_main(void) {
              mac[2], mac[3], mac[4], mac[5]);
   }
 
-  // Check for ws:// or wss:// in REMOTE_URL
-  if (strstr(REMOTE_URL, "ws://") != NULL) {
+  image_url = wifi_manager_get_image_url();
+  // Check for ws:// or wss:// in image_url
+  if (strstr(image_url, "ws://") != NULL) {
     ESP_LOGI(TAG,"Using websockets");
     use_websocket = true;
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
-      .uri = REMOTE_URL,
+      .uri = image_url,
       .buffer_size = 10000};
     ws_handle = esp_websocket_client_init(&ws_cfg);
     esp_err_t start_error = esp_websocket_client_start(ws_handle);
     if (start_error != ESP_OK) {
-      ESP_LOGE(TAG, "couldn't connect to websocket url %s with error code %i", REMOTE_URL, start_error);
+      ESP_LOGE(TAG, "couldn't connect to websocket url %s with error code %i", image_url, start_error);
       // display error ?
     } else {
       // esp_websocket_register_events(ws_handle, RX_EVENT, RX_HANDLER_FUNC,
@@ -207,7 +272,7 @@ void app_main(void) {
 
       } else {
 
-        if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
+        if (remote_get(image_url, &webp, &len, &brightness_pct,
                       &app_dwell_secs)) {
           ESP_LOGE(TAG, "Failed to get webp");
           vTaskDelay(pdMS_TO_TICKS(1 * 5000));
