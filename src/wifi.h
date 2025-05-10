@@ -1,12 +1,15 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <esp_err.h>
+#include <esp_http_server.h>
 
 /**
  * @brief Initialize WiFi
  *
- * @param ssid SSID (not used with simple-wifi-manager, kept for compatibility)
- * @param password Password (not used with simple-wifi-manager, kept for compatibility)
+ * @param ssid SSID (not used, kept for compatibility)
+ * @param password Password (not used, kept for compatibility)
  * @return 0 on success, non-zero on failure
  */
 int wifi_initialize(const char *ssid, const char *password);
@@ -38,3 +41,24 @@ bool wifi_wait_for_connection(uint32_t timeout_ms);
  * @return Pointer to image URL string, or NULL if not set
  */
 const char* wifi_get_image_url();
+
+/**
+ * @brief Check if WiFi is connected to an AP
+ *
+ * @return true if connected, false otherwise
+ */
+bool wifi_is_connected(void);
+
+/**
+ * @brief Register a callback to be called when WiFi connects
+ *
+ * @param callback Function to call when WiFi connects
+ */
+void wifi_register_connect_callback(void (*callback)(void));
+
+/**
+ * @brief Register a callback to be called when WiFi disconnects
+ *
+ * @param callback Function to call when WiFi disconnects
+ */
+void wifi_register_disconnect_callback(void (*callback)(void));
