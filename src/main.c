@@ -151,6 +151,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
       break;
   }
+}
 bool is_connected = false;
 bool using_wifi_manager = false;
 int connection_timeout = 0; // Will be set during connection attempt
