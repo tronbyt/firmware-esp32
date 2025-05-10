@@ -198,7 +198,18 @@ void dns_server(void *pvParameters)
                 {
                     /* only answer requests for A records */
                     include_answer = true;
-                    ESP_LOGI(TAG, "Replying to DNS request for %s from %s", domain, ip_address);
+
+                    /* Log special captive portal detection domains to help with debugging */
+                    if (strstr(domain, "captive.apple.com") ||
+                        strstr(domain, "connectivitycheck.gstatic.com") ||
+                        strstr(domain, "connectivitycheck.android.com") ||
+                        strstr(domain, "msftconnecttest.com") ||
+                        strstr(domain, "msftncsi.com") ||
+                        strstr(domain, "connectivity-check.ubuntu.com")) {
+                        ESP_LOGI(TAG, "Captive portal detection request for %s from %s", domain, ip_address);
+                    } else {
+                        ESP_LOGI(TAG, "Replying to DNS request for %s from %s", domain, ip_address);
+                    }
                 }
             }
             else

@@ -15,6 +15,8 @@
 #include "sdkconfig.h"
 #include "wifi.h"
 #include "wifi_manager.h"
+#include "dns_server.h"
+#include "lwip/ip4_addr.h"
 
 // External declaration for wifi_settings from wifi_manager.c
 extern wifi_settings_t wifi_settings;
@@ -69,6 +71,10 @@ void app_main(void) {
   wifi_manager_set_callback(WM_EVENT_STA_GOT_IP, &cb_connection_ok);
 
   ESP_LOGI(TAG, "WiFi Manager initialized with AP SSID: %s (no password)", (char*)wifi_settings.ap_ssid);
+
+  // The DNS server is already started in the WiFi manager and http_app code
+  // Just log that we're using the captive portal
+  ESP_LOGI(TAG, "Captive portal enabled at %s", DEFAULT_AP_IP);
 
   // First try to connect with hardcoded WiFi credentials
   ESP_LOGI(TAG, "Attempting to connect with hardcoded WiFi credentials...");

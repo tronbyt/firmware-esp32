@@ -1926,28 +1926,30 @@ void wifi_manager(void *pvParameters)
 			{
 				ESP_LOGI(TAG, "MESSAGE: ORDER_START_AP");
 
+				/* Get current event bits */
 				uxBits = xEventGroupGetBits(wifi_manager_event_group);
-				if (!(uxBits & WIFI_MANAGER_AP_STARTED_BIT))
-				{
+
+				/* Check if AP is already started */
+				if (!(uxBits & WIFI_MANAGER_AP_STARTED_BIT)) {
+					/* Start the access point */
 					ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+					ESP_ERROR_CHECK(esp_wifi_start());
 
-#ifdef CONFIG_HTTP_APP_ENABLED
-					/* restart HTTP daemon */
-					http_app_stop();
-					http_app_start(true);
-#endif
-
-					/* start DNS */
+					/* Start DNS server for captive portal */
 					dns_server_start();
 
-					/* callback */
-					if (cb_ptr_arr[msg.code])
-						(*cb_ptr_arr[msg.code])(NULL);
+					/* Set the flag that the access point has been started */
+					xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_AP_STARTED_BIT);
 				}
 
-				break;
+				/* callback */
+				if (cb_ptr_arr[msg.code])
+					(*cb_ptr_arr[msg.code])(NULL);
 
+				break;
+			}
 			case WM_ORDER_STOP_AP:
+			{
 				ESP_LOGI(TAG, "MESSAGE: ORDER_STOP_AP");
 
 				uxBits = xEventGroupGetBits(wifi_manager_event_group);
@@ -2107,13 +2109,13 @@ void wifi_manager(void *pvParameters)
 
 void wifi_manager_start_ap(void)
 {
-	if (wifi_manager_queue)
-	{
+	if (wifi_manager_queue) {
 		ESP_LOGI(TAG, "Starting access point.");
 		wifi_manager_send_message(WM_ORDER_START_AP, NULL);
-	}
-	else
-	{
+
+		// Ensure DNS server is started for captive portal
+		dns_server_start();
+	} else {
 		ESP_LOGW(TAG, "wifi_manager_start_ap() called before queue was initialised");
 	}
 }
