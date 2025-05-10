@@ -74,14 +74,13 @@ void app_main(void) {
   ESP_LOGI(TAG, "Attempting to connect with hardcoded WiFi credentials...");
 
   // Use WiFi Manager to connect with the hardcoded credentials
-  wifi_manager_connect_async(true, WIFI_SSID, WIFI_PASSWORD);
+  // wifi_manager_connect_async(true, WIFI_SSID, WIFI_PASSWORD);
 
   // Wait for WiFi connection
   ESP_LOGI(TAG, "Waiting for WiFi connection...");
   connection_timeout = 150; // 15 seconds (150 * 100ms)
-  while (!is_connected && connection_timeout > 0) {
-    vTaskDelay(pdMS_TO_TICKS(100));
-    connection_timeout--;
+  while (!is_connected) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 
   // Give the WiFi manager time to update the status
@@ -133,28 +132,24 @@ void app_main(void) {
 
     // Check if we're connected to WiFi
     if (is_connected) {
-      // If we connected with hardcoded credentials within the timeout period
-      if (connection_timeout > 0) {
-        // Use the hardcoded image URL
-        url_to_use = REMOTE_URL;
-        ESP_LOGI(TAG, "Connected with hardcoded credentials, using hardcoded image URL");
+      // Get the saved image URL from WiFi Manager
+      image_url = wifi_manager_get_image_url();
+      
+      if (image_url != NULL && strlen(image_url) > 0) {
+        // Use the image URL saved during WiFi setup
+        url_to_use = image_url;
+        ESP_LOGI(TAG, "Using saved image URL: %s", url_to_use);
       } else {
-        // We connected via WiFi Manager's AP mode
-        image_url = wifi_manager_get_image_url();
-        if (image_url != NULL) {
-          // Use the image URL saved during WiFi setup
-          url_to_use = image_url;
-          ESP_LOGI(TAG, "Connected via WiFi Manager, using saved image URL");
-        } else {
-          // No saved image URL, use the default
-          url_to_use = REMOTE_URL;
-          ESP_LOGI(TAG, "Connected via WiFi Manager, no saved image URL, using default");
-        }
+        // No saved image URL or empty URL, use the default
+        url_to_use = REMOTE_URL;
+        ESP_LOGI(TAG, "No saved image URL, using default: %s", url_to_use);
+        free(image_url); // Free if it was allocated but empty
+        image_url = NULL;
       }
     } else {
       // Not connected, use the hardcoded image URL
       url_to_use = REMOTE_URL;
-      ESP_LOGI(TAG, "Not connected to WiFi, using default image URL");
+      ESP_LOGI(TAG, "Not connected to WiFi, using default image URL: %s", url_to_use);
     }
 
     ESP_LOGI(TAG, "Using image URL: %s", url_to_use);
