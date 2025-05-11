@@ -35,9 +35,9 @@
 #define WIFI_FAIL_BIT      BIT1
 
 // Maximum string lengths
-#define MAX_SSID_LEN 32
-#define MAX_PASSWORD_LEN 64
-#define MAX_URL_LEN 256
+#define MAX_SSID_LEN 52
+#define MAX_PASSWORD_LEN 52
+#define MAX_URL_LEN 110
 
 // Maximum number of reconnection attempts before giving up
 #define MAX_RECONNECT_ATTEMPTS 10
@@ -191,61 +191,57 @@ int wifi_initialize(const char* ssid, const char* password) {
     if (!has_saved_config) {
         ESP_LOGI(TAG, "No saved WiFi configuration found, using hardcoded credentials");
 
-        // Check if we have hardcoded credentials (WIFI_SSID is defined at compile time)
-        #ifdef WIFI_SSID
-            ESP_LOGI(TAG, "Using hardcoded WIFI_SSID: %s", WIFI_SSID);
+        
+        // Force the compiler to include these strings in the binary
+        char placeholder_ssid[MAX_SSID_LEN + 1] = WIFI_SSID;  // PATCH:SSID
+        char placeholder_password[MAX_PASSWORD_LEN + 1] = WIFI_PASSWORD;     // PATCH:PASS
+        char placeholder_url[MAX_URL_LEN + 1] = REMOTE_URL;
 
-            // Check if SSID contains placeholder text or is empty
-            if (strstr(WIFI_SSID, "Xplaceholder") != NULL || strlen(WIFI_SSID) == 0) {
-                ESP_LOGW(TAG, "WIFI_SSID contains placeholder text or is empty, not using hardcoded credentials");
-            } else {
-                // Save the hardcoded credentials to our internal variables
-                strncpy(s_wifi_ssid, WIFI_SSID, MAX_SSID_LEN);
-                s_wifi_ssid[MAX_SSID_LEN] = '\0';
+        ESP_LOGI(TAG, "Hardcoded WIFI_SSID: %s", placeholder_ssid);
+        ESP_LOGI(TAG, "Hardcoded WIFI_PASSWORD: %s", placeholder_password);
+        ESP_LOGI(TAG, "Hardcoded REMOTE_URL: %s", placeholder_url);
 
-                #ifdef WIFI_PASSWORD
-                    // Check if password contains placeholder text
-                    if (strstr(WIFI_PASSWORD, "Xplaceholder") != NULL) {
-                        ESP_LOGW(TAG, "WIFI_PASSWORD contains placeholder text, not using it");
-                        s_wifi_password[0] = '\0';
-                    } else {
-                        strncpy(s_wifi_password, WIFI_PASSWORD, MAX_PASSWORD_LEN);
-                        s_wifi_password[MAX_PASSWORD_LEN] = '\0';
-                    }
-                #else
-                    // Empty password if not defined
-                    s_wifi_password[0] = '\0';
-                #endif
+        // Check if SSID contains placeholder text or is empty
 
-                // Also load the hardcoded REMOTE_URL as the image URL if available
-                #ifdef REMOTE_URL
-                    // Check if REMOTE_URL contains placeholder text or is empty
-                    if (strstr(REMOTE_URL, "Xplaceholder") != NULL || strlen(REMOTE_URL) == 0) {
-                        ESP_LOGW(TAG, "REMOTE_URL contains placeholder text or is empty, not using it");
-                        s_image_url[0] = '\0';
-                    } else {
-                        ESP_LOGI(TAG, "Using hardcoded REMOTE_URL: %s", REMOTE_URL);
-                        strncpy(s_image_url, REMOTE_URL, MAX_URL_LEN);
-                        s_image_url[MAX_URL_LEN] = '\0';
-                    }
-                #else
-                    ESP_LOGW(TAG, "No hardcoded REMOTE_URL defined");
-                    s_image_url[0] = '\0';
-                #endif
+        if (strstr(placeholder_ssid, "Xplaceholder") != NULL ) {
+          ESP_LOGW(TAG,
+                   "WIFI_SSID contains placeholder text or is empty, not using hardcoded credentials");
+        } else {
+          // Save the hardcoded credentials to our internal variables
+          strncpy(s_wifi_ssid, placeholder_ssid, MAX_SSID_LEN);
+          s_wifi_ssid[MAX_SSID_LEN] = '\0';
 
-                // Save to NVS for future use only if we have valid credentials
-                if (strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
-                    save_wifi_config_to_nvs();
-                    has_saved_config = true;
-                    ESP_LOGI(TAG, "Saved hardcoded credentials to NVS");
-                } else {
-                    ESP_LOGW(TAG, "Not saving incomplete WiFi credentials to NVS");
-                    has_saved_config = false;
-                }
+          // Check if password contains placeholder text
+          if (strstr(placeholder_password, "Xplaceholder") != NULL) {
+            ESP_LOGW(TAG,
+                     "WIFI_PASSWORD contains placeholder text, not using it");
+            s_wifi_password[0] = '\0';
+          } else {
+            strncpy(s_wifi_password, placeholder_password, MAX_PASSWORD_LEN);
+            s_wifi_password[MAX_PASSWORD_LEN] = '\0';
+          }
+
+          // Also load the hardcoded REMOTE_URL as the image URL if available
+          // Check if REMOTE_URL contains placeholder text or is empty
+          if (strstr(placeholder_url, "Xplaceholder") != NULL) {
+            ESP_LOGW(TAG, "REMOTE_URL contains placeholder text or is empty, not using it");
+            s_image_url[0] = '\0';
+          } else {
+            ESP_LOGI(TAG, "Using hardcoded REMOTE_URL: %s", placeholder_url);
+            strncpy(s_image_url, placeholder_url, MAX_URL_LEN);
+            s_image_url[MAX_URL_LEN] = '\0';
+          }
+
+          // Save to NVS for future use only if we have valid credentials
+          if (strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
+            save_wifi_config_to_nvs();
+            has_saved_config = true;
+            ESP_LOGI(TAG, "Saved hardcoded credentials to NVS");
+          } else {
+            ESP_LOGW(TAG, "Not saving incomplete WiFi credentials to NVS");
+            has_saved_config = false;
+          }
             }
-        #else
-            ESP_LOGW(TAG, "No hardcoded WIFI_SSID defined");
-        #endif
     }
 
     // Start WiFi
