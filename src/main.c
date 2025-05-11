@@ -16,6 +16,9 @@
 #define BLUE "\033[1;34m"
 #define RESET "\033[0m"  // Reset to default color
 
+// Default URL if none is provided through WiFi manager
+#define DEFAULT_URL "http://URL.NOT.SET/"
+
 static const char* TAG = "main";
 int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
@@ -56,30 +59,30 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       // Check if data contains "brightness"
       if (data->op_code == 1 && strstr((char *)data->data_ptr, "{\"brightness\":")) {
         ESP_LOGI(TAG, "Brightness data detected");
-        
+
         // Simple string parsing for {"brightness": xxx}
         char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
         if (brightness_pos) {
           // Find position after the space that follows the colon
           char *value_start = brightness_pos + 13; // brightness": is 13 chars
-          
+
           // Parse the integer value directly
           int brightness_value = atoi(value_start);
           ESP_LOGI(TAG, "Parsed brightness: %d", brightness_value);
-          
+
           // Clamp value between min and max
           if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
           if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
-          
+
           // Set the brightness
           display_set_brightness((uint8_t)brightness_value);
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
         ESP_LOGI(TAG, "Binary data detected (WebP image)");
-        
+
         // Check if this is a complete message or just a fragment
-        bool is_complete = 
+        bool is_complete =
             (data->payload_offset + data->data_len >= data->payload_len);
 
         if (is_complete) {
@@ -103,7 +106,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
             free(webp);
             webp = NULL;
           }
-          
+
           // Allocate memory for the full payload
           webp = malloc(data->payload_len);
           if (webp == NULL) {
@@ -111,24 +114,24 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
             break;
           }
         }
-        
+
         // Ensure we have a valid buffer
         if (webp == NULL) {
           ESP_LOGE(TAG, "WebP buffer is NULL, skipping fragment");
           break;
         }
-        
+
         // Copy this fragment to the appropriate position in the buffer
         memcpy(webp + data->payload_offset, data->data_ptr, data->data_len);
-        
+
         // If complete, process the WebP image
         if (is_complete) {
           // Process the complete binary data as a WebP image
           gfx_update(webp, data->payload_len);
-          
+
           // We don't control timing during websocket operation so just set this to 1
           isAnimating = 1;
-          
+
           // Free the buffer after processing
           free(webp);
           webp = NULL;
@@ -161,11 +164,16 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
 
   // Setup WiFi.
-  if (wifi_initialize(WIFI_SSID, WIFI_PASSWORD)) {
+  ESP_LOGI(TAG, "Initializing WiFi manager...");
+  // Pass empty strings to force AP mode
+  if (wifi_initialize("", "")) {
     ESP_LOGE(TAG, "failed to initialize WiFi");
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
+
+  // Wait a bit for the AP to start
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   uint8_t mac[6];
   if (!wifi_get_mac(mac)) {
@@ -173,18 +181,34 @@ void app_main(void) {
              mac[2], mac[3], mac[4], mac[5]);
   }
 
-  // Check for ws:// or wss:// in REMOTE_URL
-  if (strstr(REMOTE_URL, "ws://") != NULL) {
-    ESP_LOGI(TAG,"Using websockets");
+  // Log the AP information
+  ESP_LOGI(TAG, "WiFi AP started with SSID: Tronbyt-Config");
+  ESP_LOGI(TAG, "Connect to this network and navigate to http://10.10.0.1 to configure WiFi");
+
+  // Wait for WiFi connection (with a 60-second timeout)
+  // This will block until either connected or timeout
+  if (!wifi_wait_for_connection(60000)) {
+    ESP_LOGW(TAG, "No WiFi connection established. Will continue to try connecting in the background.");
+  } else {
+    ESP_LOGI(TAG, "WiFi connected successfully!");
+  }
+
+  // Get the image URL from WiFi manager
+  const char* image_url = wifi_get_image_url();
+  const char* url_to_use = (image_url != NULL && strlen(image_url) > 0) ? image_url : DEFAULT_URL;
+
+  // Check for ws:// or wss:// in the URL
+  if (strstr(url_to_use, "ws://") != NULL) {
+    ESP_LOGI(TAG,"Using websockets with URL: %s", url_to_use);
     use_websocket = true;
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
-      .uri = REMOTE_URL,
+      .uri = url_to_use,
       .buffer_size = 10000};
     ws_handle = esp_websocket_client_init(&ws_cfg);
     esp_err_t start_error = esp_websocket_client_start(ws_handle);
     if (start_error != ESP_OK) {
-      ESP_LOGE(TAG, "couldn't connect to websocket url %s with error code %i", REMOTE_URL, start_error);
+      ESP_LOGE(TAG, "couldn't connect to websocket url %s with error code %i", url_to_use, start_error);
       // display error ?
     } else {
       // esp_websocket_register_events(ws_handle, RX_EVENT, RX_HANDLER_FUNC,
@@ -193,21 +217,28 @@ void app_main(void) {
       esp_websocket_client_start(ws_handle);
     }
   }
-  else 
+  else
   {
     // normal http
-    ESP_LOGW(TAG, "HTTP Loop Start");
+    ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", url_to_use);
     for (;;) {
       uint8_t* webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-      if ( use_websocket ) {
+      if (use_websocket) {
         // let the events do the work.
-
       } else {
+        // Check if the image URL has changed (user might have updated it via WiFi manager)
+        const char* new_image_url = wifi_get_image_url();
+        if (new_image_url != NULL && strlen(new_image_url) > 0) {
+          url_to_use = new_image_url;
+        } else {
+          url_to_use = DEFAULT_URL;
+        }
 
-        if (remote_get(REMOTE_URL, &webp, &len, &brightness_pct,
+        ESP_LOGI(TAG, "Fetching from URL: %s", url_to_use);
+        if (remote_get(url_to_use, &webp, &len, &brightness_pct,
                       &app_dwell_secs)) {
           ESP_LOGE(TAG, "Failed to get webp");
           vTaskDelay(pdMS_TO_TICKS(1 * 5000));
