@@ -8,3 +8,4 @@ secrets.json
 build
 .DS_Store
 dependencies.lock
+_secrets.json
