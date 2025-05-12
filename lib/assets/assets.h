@@ -11,3 +11,9 @@ extern const size_t ASSET_BOOT_WEBP_LEN;
 #else
 #include "lib/assets/tronbyt_c"
 #endif
+
+extern const uint8_t ASSET_CONFIG_WEBP[];
+extern const size_t ASSET_CONFIG_WEBP_LEN;
+
+#include "lib/assets/config_c"
+

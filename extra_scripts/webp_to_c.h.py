@@ -4,6 +4,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Convert a WebP file to a C header file.')
 parser.add_argument('input_file', type=str, help='The input WebP file')
 parser.add_argument('output_file', type=str, help='The output C header file')
+parser.add_argument('header_name', type=str, help='The header variable name')
 
 # Parse arguments
 args = parser.parse_args()
@@ -17,7 +18,7 @@ with open(input_file, "rb") as f:
     binary_data = f.read()
 
 # Create C header file content
-header_name = "ASSET_BOOT_WEBP"
+header_name = args.header_name
 line_length = 16  # Number of bytes per line in the array
 hex_lines = []
 

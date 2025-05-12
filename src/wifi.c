@@ -21,7 +21,7 @@
 #define TAG "WIFI"
 
 // Default AP configuration
-#define DEFAULT_AP_SSID "Tronbyt-Config"
+#define DEFAULT_AP_SSID "TRONBYT-CONFIG"
 #define DEFAULT_AP_PASSWORD ""
 
 // NVS namespace and keys
@@ -131,160 +131,168 @@ static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
 static void connect_to_ap(void);
 static void url_decode(char *str);
+static bool has_saved_config = false;
+    // Initialize WiFi
+    int
+    wifi_initialize(const char *ssid, const char *password) {
+  ESP_LOGI(TAG, "Initializing WiFi");
 
-// Initialize WiFi
-int wifi_initialize(const char* ssid, const char* password) {
-    ESP_LOGI(TAG, "Initializing WiFi");
+  // Initialize NVS
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
+      ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    ESP_LOGI(TAG, "Erasing NVS flash");
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(ret);
 
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGI(TAG, "Erasing NVS flash");
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
+  // Create event group
+  s_wifi_event_group = xEventGroupCreate();
 
-    // Create event group
-    s_wifi_event_group = xEventGroupCreate();
+  // Initialize TCP/IP adapter
+  ESP_ERROR_CHECK(esp_netif_init());
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Initialize TCP/IP adapter
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+  // Create default STA and AP network interfaces
+  s_sta_netif = esp_netif_create_default_wifi_sta();
+  s_ap_netif = esp_netif_create_default_wifi_ap();
 
-    // Create default STA and AP network interfaces
-    s_sta_netif = esp_netif_create_default_wifi_sta();
-    s_ap_netif = esp_netif_create_default_wifi_ap();
+  // Configure AP IP address to 10.10.0.1
+  esp_netif_ip_info_t ip_info;
+  IP4_ADDR(&ip_info.ip, 10, 10, 0, 1);
+  IP4_ADDR(&ip_info.gw, 10, 10, 0, 1);
+  IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
 
-    // Configure AP IP address to 10.10.0.1
-    esp_netif_ip_info_t ip_info;
-    IP4_ADDR(&ip_info.ip, 10, 10, 0, 1);
-    IP4_ADDR(&ip_info.gw, 10, 10, 0, 1);
-    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+  // Stop DHCP server before changing IP
+  esp_netif_dhcps_stop(s_ap_netif);
 
-    // Stop DHCP server before changing IP
-    esp_netif_dhcps_stop(s_ap_netif);
+  // Set the new IP address
+  esp_err_t err = esp_netif_set_ip_info(s_ap_netif, &ip_info);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set AP IP info: %s", esp_err_to_name(err));
+  } else {
+    ESP_LOGI(TAG, "AP IP address set to 10.10.0.1");
+  }
 
-    // Set the new IP address
-    esp_err_t err = esp_netif_set_ip_info(s_ap_netif, &ip_info);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set AP IP info: %s", esp_err_to_name(err));
+  // Start DHCP server with new configuration
+  esp_netif_dhcps_start(s_ap_netif);
+
+  // Initialize WiFi with default config
+  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+  // Register event handlers
+  ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                             &wifi_event_handler, NULL));
+  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                             &wifi_event_handler, NULL));
+
+  // Load saved configuration from NVS
+  has_saved_config = (load_wifi_config_from_nvs() == ESP_OK);
+
+  // If no saved configuration, try to use the hardcoded credentials
+  if (!has_saved_config) {
+    ESP_LOGI(TAG,
+             "No saved WiFi configuration found, using hardcoded credentials");
+
+    // Force the compiler to include these strings in the binary
+    char placeholder_ssid[MAX_SSID_LEN + 1] = WIFI_SSID;  // PATCH:SSID
+    char placeholder_password[MAX_PASSWORD_LEN + 1] =
+        WIFI_PASSWORD;  // PATCH:PASS
+    char placeholder_url[MAX_URL_LEN + 1] = REMOTE_URL;
+
+    ESP_LOGI(TAG, "Hardcoded WIFI_SSID: %s", placeholder_ssid);
+    ESP_LOGI(TAG, "Hardcoded WIFI_PASSWORD: %s", placeholder_password);
+    ESP_LOGI(TAG, "Hardcoded REMOTE_URL: %s", placeholder_url);
+
+    // Check if SSID contains placeholder text or is empty
+
+    if (strstr(placeholder_ssid, "Xplaceholder") != NULL) {
+      ESP_LOGW(TAG,
+               "WIFI_SSID contains placeholder text or is empty, not using "
+               "hardcoded credentials");
     } else {
-        ESP_LOGI(TAG, "AP IP address set to 10.10.0.1");
+      // Save the hardcoded credentials to our internal variables
+      strncpy(s_wifi_ssid, placeholder_ssid, MAX_SSID_LEN);
+      s_wifi_ssid[MAX_SSID_LEN] = '\0';
+
+      // Check if password contains placeholder text
+      if (strstr(placeholder_password, "Xplaceholder") != NULL) {
+        ESP_LOGW(TAG, "WIFI_PASSWORD contains placeholder text, not using it");
+        s_wifi_password[0] = '\0';
+      } else {
+        strncpy(s_wifi_password, placeholder_password, MAX_PASSWORD_LEN);
+        s_wifi_password[MAX_PASSWORD_LEN] = '\0';
+      }
+
+      // Also load the hardcoded REMOTE_URL as the image URL if available
+      // Check if REMOTE_URL contains placeholder text or is empty
+      if (strstr(placeholder_url, "Xplaceholder") != NULL) {
+        ESP_LOGW(
+            TAG,
+            "REMOTE_URL contains placeholder text or is empty, not using it");
+        s_image_url[0] = '\0';
+      } else {
+        ESP_LOGI(TAG, "Using hardcoded REMOTE_URL: %s", placeholder_url);
+        strncpy(s_image_url, placeholder_url, MAX_URL_LEN);
+        s_image_url[MAX_URL_LEN] = '\0';
+      }
+
+      // Save to NVS for future use only if we have valid credentials
+      if (strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
+        save_wifi_config_to_nvs();
+        has_saved_config = true;
+        ESP_LOGI(TAG, "Saved hardcoded credentials to NVS");
+      } else {
+        ESP_LOGW(TAG, "Not saving incomplete WiFi credentials to NVS");
+        has_saved_config = false;
+      }
     }
+  }
 
-    // Start DHCP server with new configuration
-    esp_netif_dhcps_start(s_ap_netif);
+  // Start WiFi
+  ESP_LOGI(TAG, "Starting WiFi");
 
-    // Initialize WiFi with default config
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+  // Set WiFi mode to AP+STA
+  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
-    // Register event handlers
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
+  // Configure AP with explicit settings
+  wifi_config_t ap_config = {0};
+  strcpy((char *)ap_config.ap.ssid, DEFAULT_AP_SSID);
+  // strcpy((char *)ap_config.ap.password, DEFAULT_AP_PASSWORD);
+  ap_config.ap.ssid_len = strlen(DEFAULT_AP_SSID);
+  ap_config.ap.channel = 1;
+  ap_config.ap.max_connection = 4;
+  ap_config.ap.authmode = WIFI_AUTH_OPEN;
+  ap_config.ap.beacon_interval = 100;  // Default beacon interval
 
-    // Load saved configuration from NVS
-    bool has_saved_config = (load_wifi_config_from_nvs() == ESP_OK);
+  ESP_LOGI(TAG, "Setting AP SSID: %s", DEFAULT_AP_SSID);
+  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
 
-    // If no saved configuration, try to use the hardcoded credentials
-    if (!has_saved_config) {
-        ESP_LOGI(TAG, "No saved WiFi configuration found, using hardcoded credentials");
+  // Start WiFi
+  ESP_ERROR_CHECK(esp_wifi_start());
 
-        
-        // Force the compiler to include these strings in the binary
-        char placeholder_ssid[MAX_SSID_LEN + 1] = WIFI_SSID;  // PATCH:SSID
-        char placeholder_password[MAX_PASSWORD_LEN + 1] = WIFI_PASSWORD;     // PATCH:PASS
-        char placeholder_url[MAX_URL_LEN + 1] = REMOTE_URL;
+  // Wait for AP to start
+  vTaskDelay(pdMS_TO_TICKS(500));
 
-        ESP_LOGI(TAG, "Hardcoded WIFI_SSID: %s", placeholder_ssid);
-        ESP_LOGI(TAG, "Hardcoded WIFI_PASSWORD: %s", placeholder_password);
-        ESP_LOGI(TAG, "Hardcoded REMOTE_URL: %s", placeholder_url);
+  // Start the web server
+  start_webserver();
 
-        // Check if SSID contains placeholder text or is empty
+  // Only attempt to connect if we have valid saved credentials
+  if (has_saved_config && strlen(s_wifi_ssid) > 0) {
+    ESP_LOGI(TAG, "Attempting to connect with saved/hardcoded credentials");
+    connect_to_ap();
+  } else {
+    ESP_LOGI(TAG,
+             "No valid WiFi credentials available, starting in AP mode only");
+    // Reset any previous connection attempts
+    s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
+    s_connection_given_up = true;
+  }
 
-        if (strstr(placeholder_ssid, "Xplaceholder") != NULL ) {
-          ESP_LOGW(TAG,
-                   "WIFI_SSID contains placeholder text or is empty, not using hardcoded credentials");
-        } else {
-          // Save the hardcoded credentials to our internal variables
-          strncpy(s_wifi_ssid, placeholder_ssid, MAX_SSID_LEN);
-          s_wifi_ssid[MAX_SSID_LEN] = '\0';
-
-          // Check if password contains placeholder text
-          if (strstr(placeholder_password, "Xplaceholder") != NULL) {
-            ESP_LOGW(TAG,
-                     "WIFI_PASSWORD contains placeholder text, not using it");
-            s_wifi_password[0] = '\0';
-          } else {
-            strncpy(s_wifi_password, placeholder_password, MAX_PASSWORD_LEN);
-            s_wifi_password[MAX_PASSWORD_LEN] = '\0';
-          }
-
-          // Also load the hardcoded REMOTE_URL as the image URL if available
-          // Check if REMOTE_URL contains placeholder text or is empty
-          if (strstr(placeholder_url, "Xplaceholder") != NULL) {
-            ESP_LOGW(TAG, "REMOTE_URL contains placeholder text or is empty, not using it");
-            s_image_url[0] = '\0';
-          } else {
-            ESP_LOGI(TAG, "Using hardcoded REMOTE_URL: %s", placeholder_url);
-            strncpy(s_image_url, placeholder_url, MAX_URL_LEN);
-            s_image_url[MAX_URL_LEN] = '\0';
-          }
-
-          // Save to NVS for future use only if we have valid credentials
-          if (strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
-            save_wifi_config_to_nvs();
-            has_saved_config = true;
-            ESP_LOGI(TAG, "Saved hardcoded credentials to NVS");
-          } else {
-            ESP_LOGW(TAG, "Not saving incomplete WiFi credentials to NVS");
-            has_saved_config = false;
-          }
-            }
-    }
-
-    // Start WiFi
-    ESP_LOGI(TAG, "Starting WiFi");
-
-    // Set WiFi mode to AP+STA
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-
-    // Configure AP with explicit settings
-    wifi_config_t ap_config = {0};
-    strcpy((char *)ap_config.ap.ssid, DEFAULT_AP_SSID);
-    // strcpy((char *)ap_config.ap.password, DEFAULT_AP_PASSWORD);
-    ap_config.ap.ssid_len = strlen(DEFAULT_AP_SSID);
-    ap_config.ap.channel = 1;
-    ap_config.ap.max_connection = 4;
-    ap_config.ap.authmode = WIFI_AUTH_OPEN;
-    ap_config.ap.beacon_interval = 100; // Default beacon interval
-
-    ESP_LOGI(TAG, "Setting AP SSID: %s, Password: %s", DEFAULT_AP_SSID, DEFAULT_AP_PASSWORD);
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-
-    // Start WiFi
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    // Wait for AP to start
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    // Start the web server
-    start_webserver();
-
-    // Only attempt to connect if we have valid saved credentials
-    if (has_saved_config && strlen(s_wifi_ssid) > 0) {
-        ESP_LOGI(TAG, "Attempting to connect with saved/hardcoded credentials");
-        connect_to_ap();
-    } else {
-        ESP_LOGI(TAG, "No valid WiFi credentials available, starting in AP mode only");
-        // Reset any previous connection attempts
-        s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
-        s_connection_given_up = true;
-    }
-
-    ESP_LOGI(TAG, "WiFi initialized successfully");
-    return 0;
+  ESP_LOGI(TAG, "WiFi initialized successfully");
+  return 0;
 }
 
 // Shutdown WiFi
@@ -332,6 +340,10 @@ bool wifi_wait_for_connection(uint32_t timeout_ms) {
     if (wifi_is_connected()) {
         ESP_LOGI(TAG, "Already connected to WiFi");
         return true;
+    }
+    if (!has_saved_config) {
+        ESP_LOGI(TAG, "No saved config, won't connect.");
+        return false;
     }
 
     // Wait for connection or timeout
