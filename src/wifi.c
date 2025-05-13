@@ -35,8 +35,8 @@
 #define WIFI_FAIL_BIT      BIT1
 
 // Maximum string lengths
-#define MAX_SSID_LEN 52
-#define MAX_PASSWORD_LEN 52
+#define MAX_SSID_LEN 32
+#define MAX_PASSWORD_LEN 64
 #define MAX_URL_LEN 110
 
 // Maximum number of reconnection attempts before giving up
