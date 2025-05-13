@@ -152,6 +152,7 @@ static void gfx_loop(void *args) {
       len = _state->len;
       counter = _state->counter;
       memcpy(webp, _state->buf, _state->len);
+      if (*isAnimating == -1) *isAnimating = 1; // set to 1 if -1
     }
 
     // Give mutex
@@ -179,7 +180,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   
   int64_t dwell_us;
   
-  if (app_dwell_secs == 0 ) {
+  if (app_dwell_secs <= 0 ) {
     ESP_LOGW(TAG,"isAnimating is already 0. Looping one more time while we wait.");
     dwell_us = 1 * 1000000; // default to 1s if it's zero so we loop again or show the image for 1 more second.
   } else {
@@ -215,7 +216,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     TickType_t drawStartTick = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
-    while (WebPAnimDecoderHasMoreFrames(decoder)) {
+    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);

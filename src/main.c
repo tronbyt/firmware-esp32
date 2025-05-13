@@ -129,8 +129,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           // Process the complete binary data as a WebP image
           gfx_update(webp, data->payload_len);
 
-          // We don't control timing during websocket operation so just set this to 1
-          isAnimating = 1;
+          // We don't control timing during websocket so use this to notify new data and to break out of current animation.
+          isAnimating = -1;
 
           // Free the buffer after processing
           free(webp);
