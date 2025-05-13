@@ -5,6 +5,7 @@
 #include <freertos/timers.h>
 #include <webp/demux.h>
 #include <esp_websocket_client.h>
+#include <esp_crt_bundle.h>
 
 #include "display.h"
 #include "flash.h"
@@ -194,12 +195,12 @@ void app_main(void) {
   const char* url_to_use = (image_url != NULL && strlen(image_url) > 0) ? image_url : DEFAULT_URL;
 
   // Load up the config webp so that we don't just loop the boot screen over and over again but show the ap config info webp
-  ESP_LOGI(TAG,"Loading Config WEBP");
+  ESP_LOGI(TAG, "Loading Config WEBP");
   gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
 
   if (!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
-    while(!wifi_is_connected()) {
+    while (!wifi_is_connected()) {
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     }
   }
@@ -207,12 +208,15 @@ void app_main(void) {
   ESP_LOGI(TAG, "WiFi Connected, continuing main task thread . . . ");
 
   // Check for ws:// or wss:// in the URL
-  if (strstr(url_to_use, "ws://") != NULL) {
+  if (strncmp(url_to_use, "ws://", 5) == 0 || strncmp(url_to_use, "wss://", 6) == 0) {
     ESP_LOGI(TAG, "Using websockets with URL: %s", url_to_use);
     use_websocket = true;
     // setup ws event handlers
-    const esp_websocket_client_config_t ws_cfg = {.uri = url_to_use,
-                                                  .buffer_size = 10000};
+    const esp_websocket_client_config_t ws_cfg = {
+      .uri = url_to_use,
+      .buffer_size = 10000,
+      .crt_bundle_attach = esp_crt_bundle_attach,
+    };
     ws_handle = esp_websocket_client_init(&ws_cfg);
     esp_err_t start_error = esp_websocket_client_start(ws_handle);
     if (start_error != ESP_OK) {
