@@ -13,9 +13,11 @@ shutil.copy(file_path, new_path)
 # extract ssid, password and url from command-line arguments
 # substitutions = sys.argv[1:4]
 dict = {
-    "XplaceholderWIFISSID____________________________________": sys.argv[1],
-    "XplaceholderWIFIPASSWORD____________________________": sys.argv[2],
-    "XplaceholderREMOTEURL_________________________________________________________________________________________": sys.argv[3],
+    "XplaceholderWIFISSID____________": sys.argv[1],
+    "XplaceholderWIFIPASSWORD________________________________________": sys.argv[2],
+    "XplaceholderREMOTEURL___________________________________________________________________________________________________________": sys.argv[
+        3
+    ],
 }
 
 with open(new_path, "r+b") as f:

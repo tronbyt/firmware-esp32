@@ -34,9 +34,9 @@ def main() -> None:
             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWARNING : edit secrets.json.example and save as secrets.json\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
         )
         print("Using Xplaceholder values for direct firmware.bin modification.")
-        wifi_ssid = "XplaceholderWIFISSID________________________________"
-        wifi_password = "XplaceholderWIFIPASSWORD____________________________"
-        remote_url = "XplaceholderREMOTEURL_________________________________________________________________________________________"
+        wifi_ssid = "XplaceholderWIFISSID____________"
+        wifi_password = "XplaceholderWIFIPASSWORD________________________________________"
+        remote_url = "XplaceholderREMOTEURL___________________________________________________________________________________________________________"
         refresh_interval_seconds = (
             10  # int(os.environ.get("REFRESH_INTERVAL_SECONDS"))
         )

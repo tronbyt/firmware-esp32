@@ -37,7 +37,7 @@
 // Maximum string lengths
 #define MAX_SSID_LEN 32
 #define MAX_PASSWORD_LEN 64
-#define MAX_URL_LEN 110
+#define MAX_URL_LEN 128
 
 // Maximum number of reconnection attempts before giving up
 #define MAX_RECONNECT_ATTEMPTS 10
