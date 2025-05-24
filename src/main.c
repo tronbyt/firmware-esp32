@@ -190,23 +190,24 @@ void app_main(void) {
     ESP_LOGI(TAG, "WiFi connected successfully!");
   }
 
-  // Get the image URL from WiFi manager
-  const char* image_url = wifi_get_image_url();
-  const char* url_to_use = (image_url != NULL && strlen(image_url) > 0) ? image_url : DEFAULT_URL;
-
+  
   // Load up the config webp so that we don't just loop the boot screen over and over again but show the ap config info webp
   ESP_LOGI(TAG, "Loading Config WEBP");
   gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-
+  
   if (!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
     while (!wifi_is_connected()) {
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
     }
   }
-
+  
   ESP_LOGI(TAG, "WiFi Connected, continuing main task thread . . . ");
 
+  // Get the image URL from WiFi manager
+  const char* image_url = wifi_get_image_url();
+  const char* url_to_use = (image_url != NULL && strlen(image_url) > 0) ? image_url : DEFAULT_URL;
+  
   // Check for ws:// or wss:// in the URL
   if (strncmp(url_to_use, "ws://", 5) == 0 || strncmp(url_to_use, "wss://", 6) == 0) {
     ESP_LOGI(TAG, "Using websockets with URL: %s", url_to_use);
@@ -242,15 +243,6 @@ void app_main(void) {
       uint8_t *webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
-
-      // Check if the image URL has changed (user might have updated it via
-      // WiFi manager)
-      const char *new_image_url = wifi_get_image_url();
-      if (new_image_url != NULL && strlen(new_image_url) > 0) {
-        url_to_use = new_image_url;
-      } else {
-        url_to_use = DEFAULT_URL;
-      }
 
       ESP_LOGI(TAG, "Fetching from URL: %s", url_to_use);
       if (remote_get(url_to_use, &webp, &len, &brightness_pct,
