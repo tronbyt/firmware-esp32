@@ -218,18 +218,22 @@ void app_main(void) {
       .crt_bundle_attach = esp_crt_bundle_attach,
     };
     ws_handle = esp_websocket_client_init(&ws_cfg);
-    esp_err_t start_error = esp_websocket_client_start(ws_handle);
-    if (start_error != ESP_OK) {
-      ESP_LOGE(TAG, "couldn't connect to websocket url %s with error code %i",
-                url_to_use, start_error);
-      // display error ?
-    } else {
-      // esp_websocket_register_events(ws_handle, RX_EVENT, RX_HANDLER_FUNC,
-      //                               void *event_handler_arg)
-      esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,
-                                    websocket_event_handler,
-                                    (void *)ws_handle);
-      esp_websocket_client_start(ws_handle);
+    esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,
+                                  websocket_event_handler,
+                                  (void *)ws_handle);
+    for (;;) {
+      if (!esp_websocket_client_is_connected(ws_handle)) {
+        ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
+        esp_websocket_client_stop(ws_handle);  // Safe even if already stopped
+        esp_err_t err = esp_websocket_client_start(ws_handle);
+        if (err != ESP_OK) {
+          ESP_LOGE(TAG, "Reconnection failed with error %d", err);
+        } else {
+          ESP_LOGI(TAG, "Reconnected to WebSocket server.");
+        }
+      }
+      // Do other stuff or vTaskDelay
+      vTaskDelay(pdMS_TO_TICKS(5000));  // check every 5s
     }
   } else {
     // normal http
@@ -239,42 +243,38 @@ void app_main(void) {
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-      if (use_websocket) {
-        // let the events do the work.
+      // Check if the image URL has changed (user might have updated it via
+      // WiFi manager)
+      const char *new_image_url = wifi_get_image_url();
+      if (new_image_url != NULL && strlen(new_image_url) > 0) {
+        url_to_use = new_image_url;
       } else {
-        // Check if the image URL has changed (user might have updated it via
-        // WiFi manager)
-        const char *new_image_url = wifi_get_image_url();
-        if (new_image_url != NULL && strlen(new_image_url) > 0) {
-          url_to_use = new_image_url;
-        } else {
-          url_to_use = DEFAULT_URL;
-        }
+        url_to_use = DEFAULT_URL;
+      }
 
-        ESP_LOGI(TAG, "Fetching from URL: %s", url_to_use);
-        if (remote_get(url_to_use, &webp, &len, &brightness_pct,
-                      &app_dwell_secs)) {
-          ESP_LOGE(TAG, "Failed to get webp");
-          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
-        } else {
-          // Successful remote_get
-          display_set_brightness(brightness_pct);
-          ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-          gfx_update(webp, len);
-          free(webp);
-          // Wait for app_dwell_secs to expire (isAnimating will be 0)
-          ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-          if (isAnimating > 0)
-            ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
-          while (isAnimating > 0) {
-            vTaskDelay(pdMS_TO_TICKS(1));
-          }
-          ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
-                  (int)app_dwell_secs);
-          isAnimating = app_dwell_secs;  // use isAnimating as the container
-                                        // for app_dwell_secs
-          vTaskDelay(pdMS_TO_TICKS(1000));
+      ESP_LOGI(TAG, "Fetching from URL: %s", url_to_use);
+      if (remote_get(url_to_use, &webp, &len, &brightness_pct,
+                    &app_dwell_secs)) {
+        ESP_LOGE(TAG, "Failed to get webp");
+        vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+      } else {
+        // Successful remote_get
+        display_set_brightness(brightness_pct);
+        ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
+        gfx_update(webp, len);
+        free(webp);
+        // Wait for app_dwell_secs to expire (isAnimating will be 0)
+        ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
+        if (isAnimating > 0)
+          ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
+        while (isAnimating > 0) {
+          vTaskDelay(pdMS_TO_TICKS(1));
         }
+        ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
+                (int)app_dwell_secs);
+        isAnimating = app_dwell_secs;  // use isAnimating as the container
+                                      // for app_dwell_secs
+        vTaskDelay(pdMS_TO_TICKS(1000));
       }
     }
   }
