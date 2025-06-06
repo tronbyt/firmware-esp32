@@ -198,9 +198,12 @@ void display_shutdown() {
 
 void display_draw(const uint8_t *pix, int width, int height,
                  int channels, int ixR, int ixG, int ixB) {
+  int scale = 1;
   #ifdef TRONBYT_S3_WIDE
-  // Scale factor for doubling the size
-  const int scale = 2;
+  if (width == 64 && height == 32) {
+    scale = 2; // Scale up to 128x64
+  }
+  #endif
 
   for (unsigned int i = 0; i < height; i++) {
     for (unsigned int j = 0; j < width; j++) {
@@ -217,17 +220,6 @@ void display_draw(const uint8_t *pix, int width, int height,
       }
     }
   }
-  #else
-  for (unsigned int i = 0; i < height; i++) {
-    for (unsigned int j = 0; j < width; j++) {
-      const uint8_t *p = &pix[(i * width + j) * channels];
-      uint8_t r = p[ixR];
-      uint8_t g = p[ixG];
-      uint8_t b = p[ixB];
-      _matrix->drawPixelRGB888(j, i, r, g, b);
-    }
-  }
-  #endif
   _matrix->flipDMABuffer();
 }
 
