@@ -146,6 +146,14 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
   }
 }
 
+// Whenever we fall back into AP+STA, redraw the config page:
+static void show_config_screen(void) {
+    // Render the “TRONBYT-CONFIG” WebP asset
+    gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
+    // Force an immediate repaint
+    isAnimating = -1;
+}
+
 void app_main(void) {
   ESP_LOGI(TAG, "App Main Start");
 
@@ -171,6 +179,7 @@ void app_main(void) {
     ESP_LOGE(TAG, "failed to initialize WiFi");
     return;
   }
+  wifi_register_disconnect_callback(show_config_screen);
   esp_register_shutdown_handler(&wifi_shutdown);
 
   // Wait a bit for the AP to start
@@ -190,10 +199,8 @@ void app_main(void) {
     ESP_LOGI(TAG, "WiFi connected successfully!");
   }
 
-  
   // Load up the config webp so that we don't just loop the boot screen over and over again but show the ap config info webp
-  ESP_LOGI(TAG, "Loading Config WEBP");
-  gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
+  show_config_screen();
   
   if (!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");

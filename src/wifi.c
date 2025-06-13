@@ -61,6 +61,9 @@ static bool s_connection_given_up = false;
 static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
 
+// Track whether AP is currently active
+static bool s_ap_running = true;  // on boot we start in AP+STA
+
 // HTML for the configuration page
 static const char *s_html_page = "<!DOCTYPE html>"
 "<html>"
@@ -381,10 +384,15 @@ void wifi_register_disconnect_callback(void (*callback)(void)) {
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
         if (event_id == WIFI_EVENT_STA_START) {
-            // STA started, reset reconnection counter and try to connect
-            s_reconnect_attempts = 0;
-            s_connection_given_up = false;
-            esp_wifi_connect();
+            if (!s_connection_given_up) {
+                // Only auto-reconnect if we're still “trying”
+                s_reconnect_attempts = 0;
+                ESP_LOGI(TAG, "STA_START: auto-connecting to %s", s_wifi_ssid);
+                esp_wifi_connect();
+            } else {
+                // We've already given up and left AP up — do nothing
+                ESP_LOGI(TAG, "STA_START: in fallback mode, skipping auto-connect");
+            }
         } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
             // Increment reconnection counter
             s_reconnect_attempts++;
@@ -402,7 +410,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
             if (s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS && !s_connection_given_up) {
                 ESP_LOGW(TAG, "Maximum reconnection attempts (%d) reached, giving up", MAX_RECONNECT_ATTEMPTS);
                 s_connection_given_up = true;
-                // We'll continue in AP mode only at this point
+
+                // Flip back into AP+STA so config SSID comes back
+                if (!s_ap_running) {
+                    ESP_LOGI(TAG, "Re-enabling configuration AP (AP+STA mode)");
+                    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
+                    ESP_ERROR_CHECK(esp_netif_dhcps_start(s_ap_netif));
+                    s_ap_running = true;
+                }
             } else if (!s_connection_given_up) {
                 // Only try to reconnect if we haven't given up yet
                 ESP_LOGI(TAG, "WiFi disconnected, trying to reconnect... (attempt %d/%d)",
@@ -427,6 +442,15 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         // Set connection bit and clear fail bit
         xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+        if (s_ap_running) {
+            ESP_LOGI(TAG, "Station connected - disabling configuration AP");
+            // Also, stop the DHCP server
+            ESP_ERROR_CHECK(esp_netif_dhcps_stop(s_ap_netif));
+            // Drop the AP interface, leaving STA-only
+            ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+            s_ap_running = false;
+        }
 
         // Call connect callback if registered
         if (s_connect_callback != NULL) {
