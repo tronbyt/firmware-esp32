@@ -710,7 +710,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Re-enabling AP+STA to attempt new connection");
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
     // Enable the DHCP server here, just in case we were previously in STA mode only (no DHCP)
-    esp_netif_dhcps_start(s_ap_netif)
+    esp_netif_dhcps_start(s_ap_netif);
     connect_to_ap();
 
     return ESP_OK;
