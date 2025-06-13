@@ -61,9 +61,6 @@ static bool s_connection_given_up = false;
 static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
 
-// Track whether AP is currently active
-static bool s_ap_running = true;  // on boot we start in AP+STA
-
 // HTML for the configuration page
 static const char *s_html_page = "<!DOCTYPE html>"
 "<html>"
@@ -123,6 +120,16 @@ static const char *s_success_html = "<!DOCTYPE html>"
 "<p>You can close this page.</p>"
 "</body>"
 "</html>";
+
+// Returns true if our AP interface is currently active
+static bool ap_is_running(void) {
+    wifi_mode_t mode;
+    if (esp_wifi_get_mode(&mode) != ESP_OK) {
+        return false;
+    }
+    // APSTA or AP-only both count
+    return (mode == WIFI_MODE_APSTA || mode == WIFI_MODE_AP);
+}
 
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
@@ -411,12 +418,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 ESP_LOGW(TAG, "Maximum reconnection attempts (%d) reached, giving up", MAX_RECONNECT_ATTEMPTS);
                 s_connection_given_up = true;
 
-                // Flip back into AP+STA so config SSID comes back
-                if (!s_ap_running) {
-                    ESP_LOGI(TAG, "Re-enabling configuration AP (AP+STA mode)");
-                    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
-                    ESP_ERROR_CHECK(esp_netif_dhcps_start(s_ap_netif));
-                    s_ap_running = true;
+                // Flip back into AP so config SSID comes back
+                if (!ap_is_running()) {
+                    ESP_LOGI(TAG, "Switching to AP-only mode for configuration");
+                    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_AP) );
+                    ESP_ERROR_CHECK( esp_netif_dhcps_start(s_ap_netif) );
                 }
             } else if (!s_connection_given_up) {
                 // Only try to reconnect if we haven't given up yet
@@ -443,13 +449,12 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
-        if (s_ap_running) {
+        if (ap_is_running()) {
             ESP_LOGI(TAG, "Station connected - disabling configuration AP");
             // Also, stop the DHCP server
             ESP_ERROR_CHECK(esp_netif_dhcps_stop(s_ap_netif));
             // Drop the AP interface, leaving STA-only
             ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
-            s_ap_running = false;
         }
 
         // Call connect callback if registered
@@ -702,6 +707,8 @@ static esp_err_t save_handler(httpd_req_t *req) {
     httpd_resp_send(req, s_success_html, strlen(s_success_html));
 
     // Connect to the new AP
+    ESP_LOGI(TAG, "Re-enabling AP+STA to attempt new connection");
+    ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
     connect_to_ap();
 
     return ESP_OK;
