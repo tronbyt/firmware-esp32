@@ -148,10 +148,11 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
 // Whenever we fall back into AP+STA, redraw the config page:
 static void show_config_screen(void) {
-    // Render the “TRONBYT-CONFIG” WebP asset
-    gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-    // Force an immediate repaint
-    isAnimating = -1;
+  ESP_LOGI(TAG, "Loading Config WEBP");
+  // Render the “TRONBYT-CONFIG” WebP asset
+  gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
+  // Force an immediate repaint
+  isAnimating = -1;
 }
 
 void app_main(void) {
