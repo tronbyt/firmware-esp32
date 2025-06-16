@@ -295,6 +295,13 @@ static bool has_saved_config = false;
   return 0;
 }
 
+// Shudwont the AP by switching wifi mode to STA
+void wifi_shutdown_ap() {
+    ESP_LOGI(TAG, "Shuting down config portal");
+    stop_webserver();
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+}
+
 // Shutdown WiFi
 void wifi_shutdown() {
     // Stop the web server if it's running

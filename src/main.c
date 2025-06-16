@@ -202,7 +202,15 @@ void app_main(void) {
     }
   }
   
-  ESP_LOGI(TAG, "WiFi Connected, continuing main task thread . . . ");
+  // Create a timer to auto-shutdown the AP after 5 minutes
+  TimerHandle_t ap_shutdown_timer =
+      xTimerCreate("ap_shutdown_timer",
+                   pdMS_TO_TICKS(5 * 60 * 1000),  // 5 minutes in milliseconds
+                   pdFALSE,                       // One-shot timer
+                   NULL, (TimerCallbackFunction_t)wifi_shutdown_ap);
+
+  xTimerStart(ap_shutdown_timer, 0);
+  ESP_LOGI(TAG, "AP will automatically shut down in 5 minutes");
 
   // Get the image URL from WiFi manager
   const char* image_url = wifi_get_image_url();
