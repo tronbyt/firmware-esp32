@@ -62,3 +62,12 @@ void wifi_register_connect_callback(void (*callback)(void));
  * @param callback Function to call when WiFi disconnects
  */
 void wifi_register_disconnect_callback(void (*callback)(void));
+
+/**
+ * @brief Check WiFi health and attempt reconnection if needed
+ * 
+ * Checks if WiFi is connected. If not, attempts to reconnect and increments
+ * a counter. If the counter reaches 10 consecutive failures, the system will
+ * reboot. The counter is reset whenever WiFi is connected.
+ */
+void wifi_health_check(void);

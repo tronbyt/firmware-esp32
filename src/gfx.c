@@ -162,7 +162,7 @@ static void gfx_loop(void *args) {
     }
 
     // Draw it
-    ESP_LOGI(TAG, "calling draw_webp");
+    // ESP_LOGI(TAG, "calling draw_webp");
     if (draw_webp(webp, len, isAnimating)) {
       ESP_LOGE(TAG, "Could not draw webp");
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -174,14 +174,14 @@ static void gfx_loop(void *args) {
 
 static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
   // Set up WebP decoder
-  ESP_LOGI(TAG, "starting draw_webp");
+  // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = *isAnimating;
 
   
   int64_t dwell_us;
   
   if (app_dwell_secs <= 0 ) {
-    ESP_LOGW(TAG,"isAnimating is already 0. Looping one more time while we wait.");
+    // ESP_LOGW(TAG,"isAnimating is already 0. Looping one more time while we wait.");
     dwell_us = 1 * 1000000; // default to 1s if it's zero so we loop again or show the image for 1 more second.
   } else {
     // ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
@@ -243,7 +243,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     
     // In case of a single frame, sleep for app_dwell_secs
     if (animation.frame_count == 1) {
-      ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
+      // ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
       // xTaskDelayUntil(&start_us, dwell_us);
       vTaskDelay(pdMS_TO_TICKS(dwell_us / 1000));  // full dwell delay 
       // *isAnimating = 0;

@@ -198,7 +198,10 @@ void app_main(void) {
   if (!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
     while (!wifi_is_connected()) {
+      static int counter = 0;
+      counter++;
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+      if (counter > 600) esp_restart(); // after 10 minutes reboot because maybe we got stuck here after power outage or something.
     }
   }
   
@@ -233,6 +236,7 @@ void app_main(void) {
           ESP_LOGI(TAG, "Reconnected to WebSocket server.");
         }
       }
+      wifi_health_check();
       // Do other stuff or vTaskDelay
       vTaskDelay(pdMS_TO_TICKS(5000));  // check every 5s
     }
@@ -268,6 +272,7 @@ void app_main(void) {
                                       // for app_dwell_secs
         vTaskDelay(pdMS_TO_TICKS(1000));
       }
+      wifi_health_check();
     }
   }
 
