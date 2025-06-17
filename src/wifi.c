@@ -142,8 +142,7 @@ static void connect_to_ap(void);
 static void url_decode(char *str);
 static bool has_saved_config = false;
     // Initialize WiFi
-    int
-    wifi_initialize(const char *ssid, const char *password) {
+int wifi_initialize(const char *ssid, const char *password) {
   ESP_LOGI(TAG, "Initializing WiFi");
 
   // Initialize NVS

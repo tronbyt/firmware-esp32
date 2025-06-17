@@ -159,6 +159,11 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
   };
 
   esp_http_client_handle_t http = esp_http_client_init(&config);
+  if (http == NULL) {
+    ESP_LOGE(TAG, "HTTP client initialization failed for URL: %s", url);
+    free(state.buf);
+    return 1;
+  }
 
   // Do the request
   esp_err_t err = esp_http_client_perform(http);
