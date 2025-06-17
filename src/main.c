@@ -205,7 +205,28 @@ void app_main(void) {
     }
   }
   
-  ESP_LOGI(TAG, "WiFi Connected, continuing main task thread . . . ");
+  // Create a timer to auto-shutdown the AP after 5 minutes
+  TimerHandle_t ap_shutdown_timer = xTimerCreate(
+      "ap_shutdown_timer",
+      pdMS_TO_TICKS(2 * 60 * 1000),  // 2 minutes in milliseconds
+      pdFALSE,                       // One-shot timer
+      NULL,                          // No timer ID
+      wifi_shutdown_ap               // Callback function (now with correct signature)
+  );
+
+  if (ap_shutdown_timer != NULL) {
+    // Timer created successfully, now try to start it
+    BaseType_t timer_started = xTimerStart(ap_shutdown_timer, 0);
+    if (timer_started == pdPASS) {
+      ESP_LOGI(TAG, "AP will automatically shut down in 2 minutes");
+    } else {
+      ESP_LOGE(TAG, "Failed to start AP shutdown timer");
+      // Clean up the timer if we couldn't start it
+      xTimerDelete(ap_shutdown_timer, 0);
+    }
+  } else {
+    ESP_LOGE(TAG, "Failed to create AP shutdown timer");
+  }
 
   // Get the image URL from WiFi manager
   const char* image_url = wifi_get_image_url();
@@ -218,6 +239,7 @@ void app_main(void) {
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
       .uri = url_to_use,
+      .task_stack  = 8192,
       .buffer_size = 10000,
       .crt_bundle_attach = esp_crt_bundle_attach,
     };

@@ -65,44 +65,49 @@ static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
 
 // HTML for the configuration page
-static const char *s_html_page = "<!DOCTYPE html>"
-"<html>"
-"<head>"
-"<title>Tronbyt WiFi Setup</title>"
-"<meta name='viewport' content='width=device-width, initial-scale=1'>"
-"<style>"
-"body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }"
-"h1 { color: #333; }"
-".form-container { max-width: 400px; margin: 0 auto; }"
-".form-group { margin-bottom: 15px; }"
-"label { display: block; margin-bottom: 5px; font-weight: bold; }"
-"input[type='text'], input[type='password'] { width: 100%; padding: 8px; box-sizing: border-box; }"
-"button { background-color: #4CAF50; color: white; padding: 10px 15px; border: none; cursor: pointer; }"
-"button:hover { background-color: #45a049; }"
-".networks { margin-top: 20px; }"
-"</style>"
-"</head>"
-"<body>"
-"<div class='form-container'>"
-"<h1>Tronbyt WiFi Setup</h1>"
-"<form action='/save' method='post' enctype='application/x-www-form-urlencoded'>"
-"<div class='form-group'>"
-"<label for='ssid'>WiFi Network Name:</label>"
-"<input type='text' id='ssid' name='ssid' maxlength='32' required>"
-"</div>"
-"<div class='form-group'>"
-"<label for='password'>WiFi Password:</label>"
-"<input type='text' id='password' name='password' maxlength='64'>"
-"</div>"
-"<div class='form-group'>"
-"<label for='image_url'>Image URL:</label>"
-"<input type='text' id='image_url' name='image_url' maxlength='256'>"
-"</div>"
-"<button type='submit'>Save and Connect</button>"
-"</form>"
-"</div>"
-"</body>"
-"</html>";
+static const char *s_html_page =
+    "<!DOCTYPE html>"
+    "<html>"
+    "<head>"
+    "<title>Tronbyt WiFi Setup</title>"
+    "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+    "<style>"
+    "body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }"
+    "h1 { color: #333; }"
+    ".form-container { max-width: 400px; margin: 0 auto; }"
+    ".form-group { margin-bottom: 15px; }"
+    "label { display: block; margin-bottom: 5px; font-weight: bold; }"
+    "input[type='text'], input[type='password'] { width: 100%; padding: 8px; "
+    "box-sizing: border-box; }"
+    "button { background-color: #4CAF50; color: white; padding: 10px 15px; "
+    "border: none; cursor: pointer; }"
+    "button:hover { background-color: #45a049; }"
+    ".networks { margin-top: 20px; }"
+    "</style>"
+    "</head>"
+    "<body>"
+    "<div class='form-container'>"
+    "<h1>Tronbyt WiFi Setup</h1>"
+    "<form action='/save' method='post' "
+    "enctype='application/x-www-form-urlencoded'>"
+    "<div class='form-group'>"
+    "<label for='ssid'>WiFi Network Name:</label>"
+    "<input type='text' id='ssid' name='ssid' maxlength='32' required>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='password'>WiFi Password:</label>"
+    "<input type='text' id='password' name='password' maxlength='64'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='image_url'>Image URL:</label>"
+    "<input type='text' id='image_url' name='image_url' maxlength='256'>"
+    "( If modifying Image URL reboot Tronbyt after saving. )"
+    "</div>"
+    "<button type='submit'>Save and Connect</button>"
+    "</form>"
+    "</div>"
+    "</body>"
+    "</html>";
 
 // Success page HTML
 static const char *s_success_html = "<!DOCTYPE html>"
@@ -120,6 +125,7 @@ static const char *s_success_html = "<!DOCTYPE html>"
 "<h1>Configuration Saved!</h1>"
 "<p>WiFi credentials and image URL have been saved.</p>"
 "<p>The device will now attempt to connect to the WiFi network.</p>"
+"<p>If you modified a previously saved Image URL please manually reboot your tron for the changes to take effect."
 "<p>You can close this page.</p>"
 "</body>"
 "</html>";
@@ -297,6 +303,13 @@ static bool has_saved_config = false;
 
   ESP_LOGI(TAG, "WiFi initialized successfully");
   return 0;
+}
+
+// Shutdown the AP by switching wifi mode to STA
+void wifi_shutdown_ap(TimerHandle_t xTimer) {
+  ESP_LOGI(TAG, "Shutting down config portal");
+  stop_webserver();
+  esp_wifi_set_mode(WIFI_MODE_STA);
 }
 
 // Shutdown WiFi
@@ -741,8 +754,8 @@ static void url_decode(char *str) {
             *dst = (char)strtol(hex, NULL, 16);
             src += 3;
         } else if (*src == '+') {
-            *dst = ' ';
-            src++;
+          *dst = ' ';
+          src++;
         } else {
             *dst = *src;
             src++;
