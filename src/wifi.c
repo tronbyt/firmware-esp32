@@ -784,7 +784,7 @@ void wifi_health_check(void) {
 
     // WiFi is not connected, increment counter
     s_wifi_disconnect_counter++;
-    ESP_LOGW(TAG, "WiFi not connected. Disconnect count: %d/10", s_wifi_disconnect_counter);
+    ESP_LOGW(TAG, "WiFi Health check. Disconnect count: %d/15", s_wifi_disconnect_counter);
 
     // Try to reconnect
     if (strlen(s_wifi_ssid) > 0) {
@@ -798,8 +798,8 @@ void wifi_health_check(void) {
     }
 
     // If counter reaches threshold, reboot the system
-    if (s_wifi_disconnect_counter >= 10) {
-        ESP_LOGE(TAG, "WiFi disconnected for 10 consecutive checks. Rebooting system...");
+    if (s_wifi_disconnect_counter >= 15) {
+        ESP_LOGE(TAG, "WiFi disconnected for 15 consecutive checks. Rebooting system...");
         // Wait a moment before rebooting
         vTaskDelay(pdMS_TO_TICKS(1000));
         esp_restart();
