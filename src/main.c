@@ -205,7 +205,7 @@ void app_main(void) {
   // Create a timer to auto-shutdown the AP after 5 minutes
   TimerHandle_t ap_shutdown_timer =
       xTimerCreate("ap_shutdown_timer",
-                   pdMS_TO_TICKS(5 * 60 * 1000),  // 5 minutes in milliseconds
+                   pdMS_TO_TICKS(2 * 60 * 1000),  // 2 minutes in milliseconds
                    pdFALSE,                       // One-shot timer
                    NULL, (TimerCallbackFunction_t)wifi_shutdown_ap);
 
