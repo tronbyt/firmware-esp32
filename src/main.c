@@ -271,9 +271,9 @@ void app_main(void) {
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
       ESP_LOGI(TAG, "Fetching from URL: %s", url_to_use);
-      if (remote_get(url_to_use, &webp, &len, &brightness_pct,
-                    &app_dwell_secs)) {
-        ESP_LOGE(TAG, "Failed to get webp");
+      if (!wifi_is_connected() || remote_get(url_to_use, &webp, &len,
+                                         &brightness_pct, &app_dwell_secs)) {
+        ESP_LOGE(TAG, "No WiFi or Failed to get webp");
         vTaskDelay(pdMS_TO_TICKS(1 * 5000));
       } else {
         // Successful remote_get
