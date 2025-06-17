@@ -215,6 +215,7 @@ void app_main(void) {
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
       .uri = url_to_use,
+      .task_stack  = 8192,
       .buffer_size = 10000,
       .crt_bundle_attach = esp_crt_bundle_attach,
     };
