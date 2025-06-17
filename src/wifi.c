@@ -57,6 +57,9 @@ static char s_image_url[MAX_URL_LEN + 1] = {0};
 static int s_reconnect_attempts = 0;
 static bool s_connection_given_up = false;
 
+// Counter for tracking consecutive WiFi disconnections
+static int s_wifi_disconnect_counter = 0;
+
 // Callback functions
 static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
@@ -272,8 +275,9 @@ static bool has_saved_config = false;
   ap_config.ap.max_connection = 4;
   ap_config.ap.authmode = WIFI_AUTH_OPEN;
   ap_config.ap.beacon_interval = 100;  // Default beacon interval
+  // failure_retry_cnt ??
 
-  ESP_LOGI(TAG, "Setting AP SSID: %s", DEFAULT_AP_SSID);
+      ESP_LOGI(TAG, "Setting AP SSID: %s", DEFAULT_AP_SSID);
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
 
   // Start WiFi
@@ -759,4 +763,45 @@ static void url_decode(char *str) {
         dst++;
     }
     *dst = '\0'; // Null-terminate the decoded string
+}
+
+/**
+ * @brief Check WiFi health and attempt reconnection if needed
+ * 
+ * This function checks if WiFi is connected. If not, it attempts to reconnect
+ * and increments a counter. If the counter reaches 10 consecutive failures,
+ * the system will reboot. The counter is reset whenever WiFi is connected.
+ */
+void wifi_health_check(void) {
+    if (wifi_is_connected()) {
+        // Reset counter when WiFi is connected
+        if (s_wifi_disconnect_counter > 0) {
+            // ESP_LOGI(TAG, "WiFi reconnected successfully, resetting disconnect counter");
+            s_wifi_disconnect_counter = 0;
+        }
+        return;
+    }
+
+    // WiFi is not connected, increment counter
+    s_wifi_disconnect_counter++;
+    ESP_LOGW(TAG, "WiFi Health check. Disconnect count: %d/15", s_wifi_disconnect_counter);
+
+    // Try to reconnect
+    if (strlen(s_wifi_ssid) > 0) {
+        ESP_LOGI(TAG, "Attempting to reconnect to WiFi...");
+        esp_err_t err = esp_wifi_connect();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "WiFi reconnect attempt failed: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGW(TAG, "No SSID configured, cannot reconnect");
+    }
+
+    // If counter reaches threshold, reboot the system
+    if (s_wifi_disconnect_counter >= 15) {
+        ESP_LOGE(TAG, "WiFi disconnected for 15 consecutive checks. Rebooting system...");
+        // Wait a moment before rebooting
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        esp_restart();
+    }
 }
