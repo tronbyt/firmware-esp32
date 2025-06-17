@@ -295,11 +295,14 @@ static bool has_saved_config = false;
   return 0;
 }
 
-// Shudwont the AP by switching wifi mode to STA
-void wifi_shutdown_ap() {
-    ESP_LOGI(TAG, "Shuting down config portal");
-    stop_webserver();
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+// Shutdown the AP by switching wifi mode to STA
+void wifi_shutdown_ap(TimerHandle_t xTimer) {
+  ESP_LOGI(TAG, "Shutting down config portal");
+  stop_webserver();
+  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+  if (xTimer != NULL) {
+    xTimerDelete(xTimer, 0);
+  }
 }
 
 // Shutdown WiFi
@@ -744,8 +747,8 @@ static void url_decode(char *str) {
             *dst = (char)strtol(hex, NULL, 16);
             src += 3;
         } else if (*src == '+') {
-            *dst = ' ';
-            src++;
+          *dst = ' ';
+          src++;
         } else {
             *dst = *src;
             src++;

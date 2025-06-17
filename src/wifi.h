@@ -18,7 +18,7 @@ int wifi_initialize(const char *ssid, const char *password);
 /**
  * @brief Shutdown WiFi Config Portal
  */
-void wifi_shutdown_ap();
+void wifi_shutdown_ap(TimerHandle_t xTimer);
 
 /**
  * @brief Shutdown WiFi
