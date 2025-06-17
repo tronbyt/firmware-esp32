@@ -305,10 +305,7 @@ static bool has_saved_config = false;
 void wifi_shutdown_ap(TimerHandle_t xTimer) {
   ESP_LOGI(TAG, "Shutting down config portal");
   stop_webserver();
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  if (xTimer != NULL) {
-    xTimerDelete(xTimer, 0);
-  }
+  esp_wifi_set_mode(WIFI_MODE_STA);
 }
 
 // Shutdown WiFi
