@@ -73,14 +73,14 @@ def load_secrets_config():
         print("=" * 60)
 
     # Return placeholder values for scenarios 2 and 3
-    return {
-        "wifi_ssid": "XplaceholderWIFISSID____________",
-        "wifi_password": "XplaceholderWIFIPASSWORD________________________________________",
-        "remote_url": "XplaceholderREMOTEURL___________________________________________________________________________________________________________",
-        "refresh_interval_seconds": 10,
-        "default_brightness": 30,
-        "source": "placeholder"
-    }
+        return {
+            "wifi_ssid": "XplaceholderWIFISSID____________",
+            "wifi_password": "XplaceholderWIFIPASSWORD________________________________________",
+            "remote_url": "XplaceholderREMOTEURL___________________________________________________________________________________________________________",
+            "refresh_interval_seconds": 10,
+            "default_brightness": 30,
+            "source": "secrets.json.injected"
+        }
 
 
 def main() -> None:
