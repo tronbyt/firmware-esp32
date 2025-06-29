@@ -40,11 +40,7 @@ If using tronbyt_manager in docker replace the ip address to the docker host's i
 Then run the following command:
 
 ```
-pio run \
-    --target erase &&
-    pio run \
-        --environment tidbyt-gen1 \
-        --target upload
+pio run --environment tidbyt-gen1 --target erase --target upload
 ```
 
 If you're flashing to a Tidbyt Gen2, just change to the above to use
