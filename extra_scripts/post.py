@@ -52,7 +52,7 @@ def rename_secrets_after_upload(*args, **kwargs):
             syntax_error_content = f'''{{
     "WARNING_REMOVE_THIS_LINE_TO_USE": "If you modified secrets, ERASE DEVICE FIRST: pio run -e <env> -t erase",
     // INTENTIONAL SYNTAX ERROR: Remove this comment line and the line above to use
-{original_content[1:-1]},
+{original_content[1:-1] if len(original_content) >= 2 else ''},
     "INJECTED_TIMESTAMP": "{timestamp}",
 }}'''
 
