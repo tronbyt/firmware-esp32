@@ -100,7 +100,7 @@ const char *s_html_page_template =
     "</div>"
     "<div class='form-group'>"
     "<label for='image_url'>Image URL:</label>"
-    "<input type='text' id='image_url' name='image_url' maxlength='256' value='%s'>"
+    "<input type='text' id='image_url' name='image_url' maxlength='128' value='%s'>"
     "( If modifying Image URL reboot Tronbyt after saving. )"
     "</div>"
     "<button type='submit'>Save and Connect</button>"
@@ -109,7 +109,7 @@ const char *s_html_page_template =
     "</body>"
     "</html>";
 
-char s_html_page[4096];  // Make sure this is large enough
+static char s_html_page[4096];  // Make sure this is large enough
 
 // Success page HTML
 static const char *s_success_html = "<!DOCTYPE html>"
