@@ -65,7 +65,7 @@ static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
 
 // HTML for the configuration page
-static const char *s_html_page =
+const char *s_html_page_template =
     "<!DOCTYPE html>"
     "<html>"
     "<head>"
@@ -92,7 +92,7 @@ static const char *s_html_page =
     "enctype='application/x-www-form-urlencoded'>"
     "<div class='form-group'>"
     "<label for='ssid'>WiFi Network Name:</label>"
-    "<input type='text' id='ssid' name='ssid' maxlength='32' required>"
+    "<input type='text' id='ssid' name='ssid' maxlength='32'>"
     "</div>"
     "<div class='form-group'>"
     "<label for='password'>WiFi Password:</label>"
@@ -100,7 +100,7 @@ static const char *s_html_page =
     "</div>"
     "<div class='form-group'>"
     "<label for='image_url'>Image URL:</label>"
-    "<input type='text' id='image_url' name='image_url' maxlength='256'>"
+    "<input type='text' id='image_url' name='image_url' maxlength='256' value='%s'>"
     "( If modifying Image URL reboot Tronbyt after saving. )"
     "</div>"
     "<button type='submit'>Save and Connect</button>"
@@ -108,6 +108,8 @@ static const char *s_html_page =
     "</div>"
     "</body>"
     "</html>";
+
+char s_html_page[4096];  // Make sure this is large enough
 
 // Success page HTML
 static const char *s_success_html = "<!DOCTYPE html>"
@@ -206,8 +208,7 @@ int wifi_initialize(const char *ssid, const char *password) {
 
     // Force the compiler to include these strings in the binary
     char placeholder_ssid[MAX_SSID_LEN + 1] = WIFI_SSID;  // PATCH:SSID
-    char placeholder_password[MAX_PASSWORD_LEN + 1] =
-        WIFI_PASSWORD;  // PATCH:PASS
+    char placeholder_password[MAX_PASSWORD_LEN + 1] = WIFI_PASSWORD;  // PATCH:PASS
     char placeholder_url[MAX_URL_LEN + 1] = REMOTE_URL;
 
     ESP_LOGI(TAG, "Hardcoded WIFI_SSID: %s", placeholder_ssid);
@@ -462,25 +463,32 @@ static esp_err_t save_wifi_config_to_nvs(void) {
         return err;
     }
 
-    err = nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
-    if (err != ESP_OK) {
+    if (s_wifi_ssid[0] != '\0') {
+      err = nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
+      if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error saving SSID to NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
+      }
     }
 
-    err = nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
-    if (err != ESP_OK) {
+    if (s_wifi_password[0] != '\0') {
+      err = nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
+      if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error saving password to NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
+      }
     }
 
-    err = nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error saving image URL to NVS: %s", esp_err_to_name(err));
+    if (s_image_url[0] != '\0') {
+      err = nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error saving image URL to NVS: %s",
+                 esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
+      }
     }
 
     err = nvs_commit(nvs_handle);
@@ -597,6 +605,8 @@ static esp_err_t stop_webserver(void) {
 
 // Root page handler
 static esp_err_t root_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "Injecting image url (%s) to html template", s_image_url);
+    snprintf(s_html_page, sizeof(s_html_page), s_html_page_template, s_image_url);
     ESP_LOGI(TAG, "Serving root page");
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, s_html_page, strlen(s_html_page));
@@ -681,8 +691,11 @@ static esp_err_t save_handler(httpd_req_t *req) {
     // Save the new configuration
     strncpy(s_wifi_ssid, ssid, MAX_SSID_LEN);
     strncpy(s_wifi_password, password, MAX_PASSWORD_LEN);
-    strncpy(s_image_url, image_url, MAX_URL_LEN);
-
+    if (strlen(image_url) < 6) {
+        ESP_LOGI(TAG, "new image url is blank, leaving as is");
+    } else {
+        strncpy(s_image_url, image_url, MAX_URL_LEN);
+    }
     // Free the buffer as we don't need it anymore
     free(buf);
 
