@@ -228,17 +228,30 @@ void app_main(void) {
     ESP_LOGE(TAG, "Failed to create AP shutdown timer");
   }
 
-  // Get the image URL from WiFi manager
-  const char* image_url = wifi_get_image_url();
-  const char* url_to_use = (image_url != NULL && strlen(image_url) > 0) ? image_url : DEFAULT_URL;
-  
+  const char *image_url = NULL;
+
+  while (true) {
+    image_url = wifi_get_image_url();
+
+    if (image_url != NULL && strlen(image_url) > 0 ) {
+      // It's not blank now
+      break;
+    }
+
+    ESP_LOGW(TAG, "Image URL is not set. Waiting for configuration...");
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  }
+
+  // image_url is now valid and usable here
+  ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
+
   // Check for ws:// or wss:// in the URL
-  if (strncmp(url_to_use, "ws://", 5) == 0 || strncmp(url_to_use, "wss://", 6) == 0) {
-    ESP_LOGI(TAG, "Using websockets with URL: %s", url_to_use);
+  if (strncmp(image_url, "ws://", 5) == 0 || strncmp(image_url, "wss://", 6) == 0) {
+    ESP_LOGI(TAG, "Using websockets with URL: %s", image_url);
     use_websocket = true;
     // setup ws event handlers
     const esp_websocket_client_config_t ws_cfg = {
-      .uri = url_to_use,
+      .uri = image_url,
       .task_stack  = 8192,
       .buffer_size = 10000,
       .crt_bundle_attach = esp_crt_bundle_attach,
@@ -264,14 +277,14 @@ void app_main(void) {
     }
   } else {
     // normal http
-    ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", url_to_use);
+    ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", image_url);
     for (;;) {
       uint8_t *webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
 
-      ESP_LOGI(TAG, "Fetching from URL: %s", url_to_use);
-      if (!wifi_is_connected() || remote_get(url_to_use, &webp, &len,
+      ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
+      if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
                                          &brightness_pct, &app_dwell_secs)) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp");
         vTaskDelay(pdMS_TO_TICKS(1 * 5000));
