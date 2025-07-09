@@ -133,8 +133,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           // We don't control timing during websocket so use this to notify new data and to break out of current animation.
           isAnimating = -1;
 
-          // Free the buffer after processing
-          free(webp);
+          // Do not free(webp) here; ownership is transferred to gfx
           webp = NULL;
         }
       }
@@ -293,7 +292,8 @@ void app_main(void) {
         display_set_brightness(brightness_pct);
         ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
         gfx_update(webp, len);
-        free(webp);
+        // Do not free(webp) here; ownership is transferred to gfx
+        webp = NULL;
         // Wait for app_dwell_secs to expire (isAnimating will be 0)
         ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
         if (isAnimating > 0)
