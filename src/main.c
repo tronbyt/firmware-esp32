@@ -6,6 +6,7 @@
 #include <webp/demux.h>
 #include <esp_websocket_client.h>
 #include <esp_crt_bundle.h>
+#include <ctype.h> // For isdigit
 
 #include "display.h"
 #include "flash.h"
@@ -65,18 +66,42 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
         if (brightness_pos) {
           // Find position after the space that follows the colon
-          char *value_start = brightness_pos + 13; // brightness": is 13 chars
+          char *value_str_start = brightness_pos + 13; // "brightness\":" is 13 chars long
 
-          // Parse the integer value directly
-          int brightness_value = atoi(value_start);
-          ESP_LOGI(TAG, "Parsed brightness: %d", brightness_value);
+          // Safely parse the integer value
+          char temp_val_buf[12]; // Buffer for up to 10 digits (e.g., "2147483647") + sign + null
+          int k = 0;
+          // Iterate while char is digit and we have space in temp_val_buf (excluding null term)
+          // and we are within data->data_ptr + data->data_len bounds
+          while (k < (sizeof(temp_val_buf) - 1) && (value_str_start + k < (char*)data->data_ptr + data->data_len) && isdigit((unsigned char)value_str_start[k])) {
+              temp_val_buf[k] = value_str_start[k];
+              k++;
+          }
+          temp_val_buf[k] = '\0'; // Null-terminate the copied digits
 
-          // Clamp value between min and max
-          if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
-          if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
+          int brightness_value = 0;
+          if (k > 0) { // Only call atoi if we copied some digits
+            brightness_value = atoi(temp_val_buf);
+            ESP_LOGI(TAG, "Parsed brightness: %d from string '%s'", brightness_value, temp_val_buf);
+          } else {
+            ESP_LOGW(TAG, "No digits found for brightness value. Original string segment starts with: %.5s", value_str_start);
+            // Default to a safe brightness or handle as an error? For now, 0.
+            brightness_value = -1; // Indicate parsing failure or use a default
+          }
 
-          // Set the brightness
-          display_set_brightness((uint8_t)brightness_value);
+          if (brightness_value == -1) { // If parsing failed
+            // Optionally, log error and skip setting brightness or set a default
+            ESP_LOGE(TAG, "Failed to parse brightness value from WebSocket message.");
+            // Keep existing brightness or set to a safe default like DISPLAY_MIN_BRIGHTNESS
+            // For now, we'll just not update if parsing fails.
+          } else {
+            // Clamp value between min and max
+            if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
+            if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
+
+            // Set the brightness
+            display_set_brightness((uint8_t)brightness_value);
+          }
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
@@ -192,7 +217,19 @@ void app_main(void) {
   
   // Load up the config webp so that we don't just loop the boot screen over and over again but show the ap config info webp
   ESP_LOGI(TAG, "Loading Config WEBP");
-  gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
+  // gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN); // OLD LINE - passes non-heap pointer
+
+  // Corrected approach: Copy asset to heap buffer before passing to gfx_update
+  uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
+  if (config_webp_heap_copy != NULL) {
+    memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
+    gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN);
+    // gfx_update now owns the config_webp_heap_copy buffer.
+    // main.c should not free it.
+  } else {
+    ESP_LOGE(TAG, "Failed to allocate memory for config webp copy. Skipping config webp display.");
+    // Optionally, handle this error further, e.g., by not proceeding or using a default.
+  }
   
   if (!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
