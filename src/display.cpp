@@ -157,7 +157,15 @@ int display_initialize() {
 
   _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
+  if (_matrix == NULL) { // Should not happen with new if it throws std::bad_alloc
+    ESP_LOGE(TAG, "Failed to allocate MatrixPanel_I2S_DMA object");
+    return 1;
+  }
+
   if (!_matrix->begin()) {
+    ESP_LOGE(TAG, "MatrixPanel_I2S_DMA begin() failed");
+    delete _matrix;
+    _matrix = NULL;
     return 1;
   }
   display_set_brightness(DEFAULT_BRIGHTNESS);
@@ -194,6 +202,8 @@ uint8_t display_get_brightness() { return _brightness; }
 void display_shutdown() {
   _matrix->clearScreen();
   _matrix->stopDMAoutput();
+  delete _matrix;
+  _matrix = NULL;
 }
 
 void display_draw(const uint8_t *pix, int width, int height,
