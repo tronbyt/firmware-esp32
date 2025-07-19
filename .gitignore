@@ -10,3 +10,4 @@ build
 dependencies.lock
 _secrets.json
 sdkconfig.matrixportal-s3
+_secrets.json.injected
