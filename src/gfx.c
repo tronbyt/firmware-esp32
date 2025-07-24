@@ -150,10 +150,12 @@ static void gfx_loop(void *args) {
         ESP_LOGE(TAG, "Could not draw webp");
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         *isAnimating = 0;
+        // Free the invalid buffer to prevent re-drawing it
+        free(webp);
+        webp = NULL;
+        len = 0;
       }
-      free(webp); // Free after use
-      webp = NULL;
-      len = 0;
+      // keep webp around to loop until the next image arrives
     } else {
       vTaskDelay(pdMS_TO_TICKS(100));
     }
