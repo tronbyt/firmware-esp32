@@ -84,40 +84,24 @@ int gfx_initialize(const void *webp, size_t len) {
   return 0;
 }
 
-int gfx_update(const void *webp, size_t len) {
-  // Take mutex
+int gfx_update(void *webp, size_t len) {
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
     return 1;
   }
 
-  // Update state
-  if (len > _state->len) {
-    // Free the old buffer only if it exists
-    if (_state->buf) {
-      free(_state->buf);
-      _state->buf = NULL;  // Set to NULL to avoid dangling pointers
-    }
-
-    // Allocate new memory
-    _state->buf = malloc(len);
-    if (!_state->buf) {
-      ESP_LOGE("main", "Failed to allocate memory for _state->buf");
-      return 1;  // Exit early to avoid using NULL buffer
-    }
-
-    _state->len = len;  // Update length after successful allocation
+  // If a new frame arrives before the previous one is consumed by the gfx task,
+  // free the old buffer here to prevent a memory leak (frame-dropping strategy).
+  if (_state->buf) {
+    free(_state->buf);
+    _state->buf = NULL;
   }
 
-  // Copy data to buffer
-  if (_state->buf && webp) {
-    memcpy(_state->buf, webp, len);
-    _state->counter++;
-  } else {
-    ESP_LOGE("main", "Buffer or input data is NULL");
-  }
+  // Take ownership of new buffer (no copy)
+  _state->buf = webp;
+  _state->len = len;
+  _state->counter++;
 
-  // Give mutex
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
     return 1;
@@ -132,43 +116,49 @@ static void gfx_loop(void *args) {
   void *webp = NULL;
   size_t len = 0;
   int counter = -1;
-  int32_t *isAnimating = (int32_t *)args;  // Cast to pointer type
+  int32_t *isAnimating = (int32_t *)args;
   ESP_LOGI(TAG, "Graphics loop running on core %d", xPortGetCoreID());
 
   for (;;) {
-    // Take mutex
     if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
       ESP_LOGE(TAG, "Could not take gfx mutex");
+      if (webp) {
+        free(webp);
+        webp = NULL;
+      }
       break;
     }
 
-    // If there's new data, copy it to local buffer
+    // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
       ESP_LOGI(TAG, "Loaded new webp");
-      if (_state->len > len) {
-        free(webp);
-        webp = malloc(_state->len);
-      }
+      if (webp) free(webp);
+      webp = _state->buf;
       len = _state->len;
+      _state->buf = NULL; // gfx_loop now owns the buffer
       counter = _state->counter;
-      memcpy(webp, _state->buf, _state->len);
-      if (*isAnimating == -1) *isAnimating = 1; // set to 1 if -1
+      if (*isAnimating == -1) *isAnimating = 1;
     }
 
-    // Give mutex
     if (pdTRUE != xSemaphoreGive(_state->mutex)) {
       ESP_LOGE(TAG, "Could not give gfx mutex");
       continue;
     }
 
-    // Draw it
-    // ESP_LOGI(TAG, "calling draw_webp");
-    if (draw_webp(webp, len, isAnimating)) {
-      ESP_LOGE(TAG, "Could not draw webp");
-      vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-      *isAnimating = 0;
+    if (webp && len > 0) {
+      if (draw_webp(webp, len, isAnimating)) {
+        ESP_LOGE(TAG, "Could not draw webp");
+        vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+        *isAnimating = 0;
+        // Free the invalid buffer to prevent re-drawing it
+        free(webp);
+        webp = NULL;
+        len = 0;
+      }
+      // keep webp around to loop until the next image arrives
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(100));
     }
-    // vTaskDelay(pdMS_TO_TICKS(500)); // delay for anti barf
   }
 }
 
