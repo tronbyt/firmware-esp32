@@ -87,7 +87,7 @@
   #define CLK 2
   #define LAT 47
   #define OE 14
-  #ifdef SWAP_COLORS
+#ifdef SWAP_COLORS
     #define G1 40
     #define BL1 41
     #define G2 37
