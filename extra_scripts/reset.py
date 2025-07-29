@@ -10,7 +10,8 @@ PRODUCTION_VERSION = {
     "tronbyt-s3": "v10/35833",
     "tronbyt-s3-wide": "v10/35833",
     "tidbyt-gen2": "v11/35369",
-    "matrixportal-s3": "v11/35369" # just to shut up the errors.
+    "matrixportal-s3": "v11/35369", # just to shut up the errors.
+    "matrixportal-s3-waveshare": "v11/35369" # just to shut up the errors.
 }[env["PIOENV"]]
 
 def fetch_firmware():
