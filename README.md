@@ -54,6 +54,18 @@ To check the output of your running firmware, run the following:
 pio device monitor
 ```
 
+## Alternative Displays
+
+There have been minor issues with certain displays showing red artifacts and slightly off color-pallettes.
+
+In these cases you can use the following environments to try the display at 8Hz instead of 10Hz for the coresponding environments:
+
+- `tidbyt-gen1-patched`
+- `tidbyt-gen1_swap-patched`
+- `tidbyt-gen2-patched`
+
+This patches the HUB75 matrix library to use the legacy clock division calculation that the OS Tidbyt library uses before build.
+
 ## Back to Normal
 
 To get your Tidbyt back to normal, you can run the following to flash the
