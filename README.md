@@ -54,9 +54,9 @@ To check the output of your running firmware, run the following:
 pio device monitor
 ```
 
-## Alternative Displays
+## 8Hz Displays
 
-There have been minor issues with certain displays showing red artifacts and slightly off color-pallettes.
+There have been minor issues with certain displays showing red artifacts and slightly off color-pallettes. This seems most likely related to manufacturing tolerances.
 
 In these cases you can use the following environments to try the display at 8Hz instead of 10Hz for the coresponding environments:
 
@@ -64,7 +64,7 @@ In these cases you can use the following environments to try the display at 8Hz 
 - `tidbyt-gen1_swap-patched`
 - `tidbyt-gen2-patched`
 
-This patches the HUB75 matrix library to use the legacy clock division calculation that the OS Tidbyt library uses before build.
+This [patches](extra_scripts/patch_i2s_divider.py) the HUB75 matrix library to use the legacy clock division calculation that the [OS Tidbyt library](https://github.com/tidbyt/ESP32-HUB75-MatrixPanel-I2S-DMA/blob/8f284afe7ba4ff369a4427121338e1673026320e/esp32_i2s_parallel_dma.c#L163) uses before build.
 
 ## Back to Normal
 
