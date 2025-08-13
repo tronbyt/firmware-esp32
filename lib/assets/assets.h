@@ -8,8 +8,6 @@ extern const size_t ASSET_BOOT_WEBP_LEN;
 
 #ifdef BOOT_WEBP_WINDYTRON
 #include "lib/assets/windytron_c"
-#elif defined(BOOT_WEBP_PARROT)
-#include "lib/assets/parrot_c"
 #else
 #include "lib/assets/tronbyt_c"
 #endif
