@@ -30,7 +30,6 @@ int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
-bool boot_button_pressed = false;
 
 bool use_websocket = false;
 esp_websocket_client_handle_t ws_handle;
@@ -295,10 +294,6 @@ void app_main(void) {
       config_wait_counter++;
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
 
-      if (config_wait_counter >= 60) {
-        ESP_LOGW(TAG, "Configuration timeout reached - proceeding anyway");
-        break;
-      }
     }
   } else if(!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
