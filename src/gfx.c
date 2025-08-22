@@ -8,8 +8,18 @@
 
 #include "display.h"
 #include "esp_timer.h"
+#ifdef BUTTON_PIN
+#include <driver/gpio.h>
+#endif
 
 static const char *TAG = "gfx";
+
+#ifdef BUTTON_PIN
+static inline bool gfx_button_pressed_now() {
+  // Active low with pull-up in main; mirror behavior here
+  return gpio_get_level(BUTTON_PIN) == 0;
+}
+#endif
 
 #define GFX_TASK_CORE 1
 #define GFX_TASK_PRIO 2
@@ -200,7 +210,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     return 1;
   }
   int64_t start_us = esp_timer_get_time();
-  while (esp_timer_get_time() - start_us < dwell_us) {
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
@@ -210,6 +220,12 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
+#ifdef BUTTON_PIN
+      if (gfx_button_pressed_now()) {
+        *isAnimating = -1; // request early exit
+        break;
+      }
+#endif
       if (delay > 0) {
         xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
       } else {
@@ -228,15 +244,27 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t *isAnimating) {
     if (delay > 0) {
       xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
     } else {
-      vTaskDelay(pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
+#ifdef BUTTON_PIN
+      if (gfx_button_pressed_now()) {
+        *isAnimating = -1; // early exit on single-frame dwell
+        break;
+      }
+#endif
+      vTaskDelay(pdMS_TO_TICKS(50));  // Yield CPU and recheck button frequently
     }
     
-    // In case of a single frame, sleep for app_dwell_secs
+    // In case of a single frame, sleep for app_dwell_secs, interruptible by button
     if (animation.frame_count == 1) {
-      // ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
-      // xTaskDelayUntil(&start_us, dwell_us);
-      vTaskDelay(pdMS_TO_TICKS(dwell_us / 1000));  // full dwell delay 
-      // *isAnimating = 0;
+      int64_t single_start = esp_timer_get_time();
+      while ((esp_timer_get_time() - single_start) < dwell_us && *isAnimating != -1) {
+#ifdef BUTTON_PIN
+        if (gfx_button_pressed_now()) {
+          *isAnimating = -1; // early exit
+          break;
+        }
+#endif
+        vTaskDelay(pdMS_TO_TICKS(20));
+      }
       break;
     }
   }
