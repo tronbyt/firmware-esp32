@@ -15,6 +15,10 @@
 #include "sdkconfig.h"
 #include "wifi.h"
 
+#ifdef BUTTON_PIN
+#include <driver/gpio.h>
+#endif
+
 #define BLUE "\033[1;34m"
 #define RESET "\033[0m"  // Reset to default color
 
@@ -26,9 +30,19 @@ int32_t isAnimating =
     5;  // Initialize with a valid value enough time for boot animation
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
+bool boot_button_pressed = false;
 
 bool use_websocket = false;
 esp_websocket_client_handle_t ws_handle;
+
+bool button_boot = false;
+
+bool config_received = false;
+
+void config_saved_callback(void) {
+  config_received = true;
+  ESP_LOGI(TAG, "Configuration saved - signaling main task");
+}
 
 static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                                     int32_t event_id, void *event_data) {
@@ -171,7 +185,34 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 }
 
 void app_main(void) {
+  // delete here for 5 seconds to allow for serial port to connect.
   ESP_LOGI(TAG, "App Main Start");
+
+#ifdef BUTTON_PIN
+  // Configure button pin as input with pull-up
+  gpio_config_t button_config = {
+    .pin_bit_mask = (1ULL << BUTTON_PIN),
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE
+  };
+  gpio_config(&button_config);
+
+  // Check if button is pressed (active low with pull-up)
+  button_boot = (gpio_get_level(BUTTON_PIN) == 0);
+  
+  if (button_boot) {
+    ESP_LOGI(TAG, "Boot button pressed - forcing configuration mode");
+  } else {
+    ESP_LOGI(TAG, "Boot button not pressed");
+  }
+#else
+  ESP_LOGI(TAG, "No button pin defined - skipping button check");
+#endif
+
+  ESP_LOGI(TAG, "Check for button press");
+  
 
   // Setup the device flash storage.
   if (flash_initialize()) {
@@ -197,6 +238,9 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&wifi_shutdown);
 
+  // Register callback to detect configuration events
+  wifi_register_config_callback(config_saved_callback);
+
   // Wait a bit for the AP to start
   vTaskDelay(pdMS_TO_TICKS(1000));
 
@@ -207,31 +251,56 @@ void app_main(void) {
   }
 
   // Wait for WiFi connection (with a 60-second timeout)
-  // This will block until either connected or timeout
-  if (!wifi_wait_for_connection(60000)) {
-    ESP_LOGW(TAG, "No WiFi connection established. Will continue to try connecting in the background.");
+  // This will block until either connected or timeout or short circuit if button was held during button.
+  if (button_boot || !wifi_wait_for_connection(60000)) {
+    
+    ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
+    // Load up the config webp so that we don't just loop the boot screen over
+    // and over again but show the ap config info webp
+    ESP_LOGI(TAG, "Loading Config WEBP");
+    // gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN); // OLD LINE -
+    // passes non-heap pointer
+
+    // Corrected approach: Copy asset to heap buffer before passing to
+    // gfx_update
+    uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
+    if (config_webp_heap_copy != NULL) {
+      memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
+      gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN);
+      // gfx_update now owns the config_webp_heap_copy buffer.
+      // main.c should not free it.
+    } else {
+      ESP_LOGE(TAG,
+               "Failed to allocate memory for config webp copy. Skipping "
+               "config webp display.");
+      // Optionally, handle this error further, e.g., by not proceeding or using
+      // a default.
+    }
   } else {
     ESP_LOGI(TAG, "WiFi connected successfully!");
   }
 
-  
-  // Load up the config webp so that we don't just loop the boot screen over and over again but show the ap config info webp
-  ESP_LOGI(TAG, "Loading Config WEBP");
-  // gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN); // OLD LINE - passes non-heap pointer
+  // Wait for configuration when boot button was pressed
+  if (button_boot) {
+    ESP_LOGW(TAG,
+             "Boot button pressed - waiting for configuration or timeout...");
+    int config_wait_counter = 0;
+    while (config_wait_counter < 120) {  // Wait up xx seconds
+      // Check if configuration was received
+      if (config_received) {
+        ESP_LOGI(TAG, "Configuration received - proceeding");
+        break;
+      }
 
-  // Corrected approach: Copy asset to heap buffer before passing to gfx_update
-  uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
-  if (config_webp_heap_copy != NULL) {
-    memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-    gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN);
-    // gfx_update now owns the config_webp_heap_copy buffer.
-    // main.c should not free it.
-  } else {
-    ESP_LOGE(TAG, "Failed to allocate memory for config webp copy. Skipping config webp display.");
-    // Optionally, handle this error further, e.g., by not proceeding or using a default.
-  }
-  
-  if (!wifi_is_connected()) {
+      config_wait_counter++;
+      vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+
+      if (config_wait_counter >= 60) {
+        ESP_LOGW(TAG, "Configuration timeout reached - proceeding anyway");
+        break;
+      }
+    }
+  } else if(!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
     while (!wifi_is_connected()) {
       static int counter = 0;
@@ -240,7 +309,8 @@ void app_main(void) {
       if (counter > 600) esp_restart(); // after 10 minutes reboot because maybe we got stuck here after power outage or something.
     }
   }
-  
+
+
   // Create a timer to auto-shutdown the AP after 5 minutes
   TimerHandle_t ap_shutdown_timer = xTimerCreate(
       "ap_shutdown_timer",
