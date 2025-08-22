@@ -20,6 +20,10 @@
 #include <driver/gpio.h>
 #endif
 
+#ifdef BUTTON_PIN
+#include <driver/gpio.h>
+#endif
+
 #define BLUE "\033[1;34m"
 #define RESET "\033[0m"  // Reset to default color
 
@@ -288,6 +292,9 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&display_shutdown);
+
+  // Register callback to detect configuration events
+  wifi_register_config_callback(config_saved_callback);
 
   // Register callback to detect configuration events
   wifi_register_config_callback(config_saved_callback);
