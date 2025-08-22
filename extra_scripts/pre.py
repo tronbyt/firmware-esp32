@@ -16,6 +16,7 @@ def load_secrets_config():
     """
     secrets_file = "secrets.json"
     injected_file = "secrets.json.injected"
+    placeholders_file = "secrets_place.json"
 
     secrets_exist = os.path.exists(secrets_file)
     injected_exist = os.path.exists(injected_file)
@@ -72,15 +73,26 @@ def load_secrets_config():
         print("   3. Run: pio run -e <your-env> --target upload")
         print("=" * 60)
 
-    # Return placeholder values for scenarios 2 and 3
-        return {
-            "wifi_ssid": "XplaceholderWIFISSID____________",
-            "wifi_password": "XplaceholderWIFIPASSWORD________________________________________",
-            "remote_url": "XplaceholderREMOTEURL___________________________________________________________________________________________________________",
-            "refresh_interval_seconds": 10,
-            "default_brightness": 30,
-            "source": "secrets.json.injected"
-        }
+        # Return placeholder values for scenarios 2 and 3
+        try:
+            with open(placeholders_file, "r") as f:
+                json_config = json.load(f)
+                return {
+                    "wifi_ssid": json_config.get("WIFI_SSID", ""),
+                    "wifi_password": json_config.get("WIFI_PASSWORD", ""),
+                    "remote_url": json_config.get("REMOTE_URL", ""),
+                    "refresh_interval_seconds": json_config.get(
+                        "REFRESH_INTERVAL_SECONDS", 10
+                    ),
+                    "default_brightness": json_config.get("DEFAULT_BRIGHTNESS", 10),
+                    "source": "secrets.json",
+                }
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"❌ Error reading secrets_place.json: {e}")
+            print(
+                "   Build failed - cannot proceed without valid secrets configuration."
+            )
+            exit(1)
 
 
 def main() -> None:

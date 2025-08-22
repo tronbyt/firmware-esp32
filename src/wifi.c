@@ -47,6 +47,7 @@ static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t *s_sta_netif = NULL;
 static esp_netif_t *s_ap_netif = NULL;
 static httpd_handle_t s_server = NULL;
+static void (*s_config_callback)(void) = NULL;
 
 // WiFi credentials
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
@@ -394,6 +395,11 @@ void wifi_register_disconnect_callback(void (*callback)(void)) {
     s_disconnect_callback = callback;
 }
 
+// Add new function to register config callback
+void wifi_register_config_callback(void (*callback)(void)) {
+    s_config_callback = callback;
+}
+
 // WiFi event handler
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
@@ -497,6 +503,12 @@ static esp_err_t save_wifi_config_to_nvs(void) {
     }
 
     nvs_close(nvs_handle);
+
+    // Call config callback if registered and save was successful
+    if (err == ESP_OK && s_config_callback != NULL) {
+        s_config_callback();
+    }
+
     return err;
 }
 
