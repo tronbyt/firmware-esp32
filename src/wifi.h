@@ -70,6 +70,13 @@ void wifi_register_connect_callback(void (*callback)(void));
 void wifi_register_disconnect_callback(void (*callback)(void));
 
 /**
+ * @brief Register a callback to be called when WiFi configuration is saved
+ *
+ * @param callback Function to call when WiFi configuration is saved
+ */
+void wifi_register_config_callback(void (*callback)(void));
+
+/**
  * @brief Check WiFi health and attempt reconnection if needed
  * 
  * Checks if WiFi is connected. If not, attempts to reconnect and increments
