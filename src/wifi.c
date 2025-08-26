@@ -10,6 +10,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_netif.h"
@@ -272,13 +273,17 @@ int wifi_initialize(const char *ssid, const char *password) {
   strcpy((char *)ap_config.ap.ssid, DEFAULT_AP_SSID);
   // strcpy((char *)ap_config.ap.password, DEFAULT_AP_PASSWORD);
   ap_config.ap.ssid_len = strlen(DEFAULT_AP_SSID);
-  ap_config.ap.channel = 1;
+
+  // Pick a random WiFi channel (1-11 for 2.4GHz)
+  uint8_t random_channel = (esp_random() % 11) + 1;
+  ap_config.ap.channel = random_channel;
+
   ap_config.ap.max_connection = 4;
   ap_config.ap.authmode = WIFI_AUTH_OPEN;
   ap_config.ap.beacon_interval = 100;  // Default beacon interval
   // failure_retry_cnt ??
 
-      ESP_LOGI(TAG, "Setting AP SSID: %s", DEFAULT_AP_SSID);
+      ESP_LOGI(TAG, "Setting AP SSID: %s on channel %d", DEFAULT_AP_SSID, random_channel);
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
 
   // Start WiFi

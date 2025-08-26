@@ -26,8 +26,7 @@
 #define DEFAULT_URL "http://URL.NOT.SET/"
 
 static const char* TAG = "main";
-int32_t isAnimating =
-    5;  // Initialize with a valid value enough time for boot animation
+int32_t isAnimating = 1;
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
 
@@ -166,7 +165,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         // If complete, process the WebP image
         if (is_complete) {
           // Process the complete binary data as a WebP image
-          gfx_update(webp, data->payload_len);
+          gfx_update(webp, data->payload_len, app_dwell_secs);
 
           // We don't control timing during websocket so use this to notify new data and to break out of current animation.
           isAnimating = -1;
@@ -265,7 +264,7 @@ void app_main(void) {
     uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
     if (config_webp_heap_copy != NULL) {
       memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-      gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN);
+      gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN, 0);  // No dwell for config screen
       // gfx_update now owns the config_webp_heap_copy buffer.
       // main.c should not free it.
     } else {
@@ -393,21 +392,20 @@ void app_main(void) {
         // Successful remote_get
         display_set_brightness(brightness_pct);
         ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-        gfx_update(webp, len);
+        
+        gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
         // Wait for app_dwell_secs to expire (isAnimating will be 0)
-        ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        if (isAnimating > 0)
-          ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
+        // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
+        if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
         while (isAnimating > 0) {
+          // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
           vTaskDelay(pdMS_TO_TICKS(1));
         }
-        ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
-                (int)app_dwell_secs);
-        isAnimating = app_dwell_secs;  // use isAnimating as the container
-                                      // for app_dwell_secs
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        // ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
+        isAnimating = 1;
+        vTaskDelay(pdMS_TO_TICKS(500));
       }
       wifi_health_check();
     }
