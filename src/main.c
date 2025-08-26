@@ -404,8 +404,7 @@ void app_main(void) {
           vTaskDelay(pdMS_TO_TICKS(1));
         }
         // ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
-        isAnimating = 1;  // use isAnimating as the container
-                                      // for app_dwell_secs
+        isAnimating = 1;
         vTaskDelay(pdMS_TO_TICKS(500));
       }
       wifi_health_check();

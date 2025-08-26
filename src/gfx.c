@@ -84,7 +84,6 @@ int gfx_initialize(const void *webp, size_t len) {
 
   return 0;
 }
-
 int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
@@ -245,11 +244,8 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
     }
   }
   WebPAnimDecoderDelete(decoder);
-  if (app_dwell_secs != 0) {
-    ESP_LOGI(TAG, "Setting isAnimating to 0");
-    *isAnimating = 0;  // only set this to zero if it wasn't already set to
-                       // zero. setting it again might overwrite what the main
-                       // loop did while we were re-looping
-  }
+
+  ESP_LOGI(TAG, "Setting isAnimating to 0");
+  *isAnimating = 0;
   return 0;
 }
