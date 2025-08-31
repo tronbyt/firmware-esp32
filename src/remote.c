@@ -6,6 +6,8 @@
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_tls.h>
+#include "lib/assets/404_c"
+#include "gfx.h"
 
 static const char* TAG = "remote";
 
@@ -110,6 +112,11 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
     case HTTP_EVENT_ON_FINISH:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+      int status_code = esp_http_client_get_status_code(event->client);
+      if (status_code == 404) {
+        ESP_LOGI(TAG, "HTTP 404, displaying parrot");
+        gfx_update((void*)ASSET_404_WEBP, ASSET_404_webp_LEN, 5);
+      }
       break;
 
     case HTTP_EVENT_DISCONNECTED:
