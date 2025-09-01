@@ -10,6 +10,7 @@
 #include "esp_timer.h"
 #include "lib/assets/config_c"
 #include "lib/assets/404_c"
+#include "lib/assets/no_connect_c"
 
 #ifdef BOOT_WEBP_PARROT
 #include "lib/assets/parrot_c"
@@ -130,6 +131,9 @@ int gfx_display_asset(const char* asset_type) {
   } else if (strcmp(asset_type, "error_404") == 0) {
     asset_data = ASSET_404_WEBP;
     asset_len = ASSET_404_WEBP_LEN;
+  } else if (strcmp(asset_type, "no_connect") == 0) {
+    asset_data = ASSET_NOCONNECT_WEBP;
+    asset_len = ASSET_NOCONNECT_WEBP_LEN;
   } else {
     ESP_LOGE(TAG, "Unknown asset type: %s", asset_type);
     return 1;

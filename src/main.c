@@ -372,8 +372,14 @@ void app_main(void) {
       if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
                                          &brightness_pct, &app_dwell_secs, &status_code)) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
-        if (status_code == 404 || status_code == 400 || status_code == 0) {
-          ESP_LOGI(TAG, "HTTP 404, displaying 404");
+        if (status_code == 0) {
+          ESP_LOGI(TAG, "No connection, displaying no connect screen");
+          if (gfx_display_asset("no_connect")) {
+            ESP_LOGE(TAG, "Failed to display no connect screen");
+          }
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        } else if (status_code == 404 || status_code == 400) {
+          ESP_LOGI(TAG, "HTTP 404/400, displaying 404");
           if (gfx_display_asset("error_404")) {
             ESP_LOGE(TAG, "Failed to display 404 screen");
           }
