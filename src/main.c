@@ -14,6 +14,7 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "wifi.h"
+#include "lib/assets/404_c"
 
 #ifdef BUTTON_PIN
 #include <driver/gpio.h>
@@ -382,23 +383,32 @@ void app_main(void) {
       uint8_t *webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
-
+      int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
-                                         &brightness_pct, &app_dwell_secs)) {
-        ESP_LOGE(TAG, "No WiFi or Failed to get webp");
-        vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+                                         &brightness_pct, &app_dwell_secs, &status_code)) {
+        ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
+        if (status_code == 404 || status_code == 400 || status_code == 0) {
+          ESP_LOGI(TAG, "HTTP 404, displaying 404");
+          uint8_t *_404_webp_heap_copy = (uint8_t *)malloc(ASSET_404_WEBP_LEN);
+          if (_404_webp_heap_copy != NULL) {
+            memcpy(_404_webp_heap_copy, ASSET_404_WEBP, ASSET_404_WEBP_LEN);
+            gfx_update(_404_webp_heap_copy, ASSET_404_WEBP_LEN, 0);  // No dwell for config screen
+          }
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        }
       } else {
         // Successful remote_get
         display_set_brightness(brightness_pct);
         ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-        
+
         gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
         // Wait for app_dwell_secs to expire (isAnimating will be 0)
         // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
+        if (isAnimating > 0)
+          ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
         while (isAnimating > 0) {
           // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
           vTaskDelay(pdMS_TO_TICKS(1));
@@ -407,7 +417,7 @@ void app_main(void) {
         isAnimating = 1;
         vTaskDelay(pdMS_TO_TICKS(500));
       }
-      wifi_health_check();
+    wifi_health_check();
     }
   }
 

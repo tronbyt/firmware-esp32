@@ -6,8 +6,6 @@
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_tls.h>
-#include "lib/assets/404_c"
-#include "gfx.h"
 
 static const char* TAG = "remote";
 
@@ -112,11 +110,6 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
     case HTTP_EVENT_ON_FINISH:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
-      int status_code = esp_http_client_get_status_code(event->client);
-      if (status_code == 404) {
-        ESP_LOGI(TAG, "HTTP 404, displaying parrot");
-        gfx_update((void*)ASSET_404_WEBP, ASSET_404_webp_LEN, 5);
-      }
       break;
 
     case HTTP_EVENT_DISCONNECTED:
@@ -140,7 +133,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),
@@ -184,6 +177,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
   }
 
   int status_code = esp_http_client_get_status_code(http);
+  *return_status_code = status_code;
   if (status_code != 200) {
     ESP_LOGE(TAG, "Server returned HTTP status %d", status_code);
     if (state.buf != NULL) {
