@@ -17,3 +17,8 @@ extern const size_t ASSET_CONFIG_WEBP_LEN;
 
 #include "lib/assets/config_c"
 
+extern const uint8_t ASSET_404_WEBP[];
+extern const size_t ASSET_404_WEBP_LEN;
+
+#include "lib/assets/404_c"
+

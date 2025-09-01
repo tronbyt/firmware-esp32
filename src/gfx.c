@@ -8,6 +8,14 @@
 
 #include "display.h"
 #include "esp_timer.h"
+#include "lib/assets/config_c"
+#include "lib/assets/404_c"
+
+#ifdef BOOT_WEBP_PARROT
+#include "lib/assets/parrot_c"
+#else
+#include "lib/assets/tronbyt_c"
+#endif
 
 static const char *TAG = "gfx";
 
@@ -29,7 +37,7 @@ static struct gfx_state *_state = NULL;
 static void gfx_loop(void *arg);
 static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
 
-int gfx_initialize(const void *webp, size_t len) {
+int gfx_initialize() {
   // Only initialize once
   if (_state) {
     ESP_LOGE(TAG, "Already initialized");
@@ -41,18 +49,18 @@ int gfx_initialize(const void *webp, size_t len) {
   ESP_LOGI(TAG, "largest heap %d", heapl);
   // ESP_LOGI(TAG, "calling calloc");
   // Initialize state
-  ESP_LOGI(TAG, "Allocating buffer of size: %d", len);
+  ESP_LOGI(TAG, "Allocating buffer of size: %d", ASSET_BOOT_WEBP_LEN);
 
   _state = calloc(1, sizeof(struct gfx_state));
-  _state->len = len;
+  _state->len = ASSET_BOOT_WEBP_LEN;
   ESP_LOGI(TAG,"calloc buff");
-  _state->buf = calloc(1, len);
+  _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
   ESP_LOGI(TAG, "done calloc, copying");
   if (_state->buf == NULL) {
     ESP_LOGE("gfx", "Memory allocation failed!");
     return 1;
   }
-  memcpy(_state->buf, webp, len);
+  memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
   ESP_LOGI(TAG, "done, copying");
   
   _state->mutex = xSemaphoreCreateMutex();
@@ -108,6 +116,43 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
     return 1;
   }
 
+  return 0;
+}
+
+int gfx_display_asset(const char* asset_type) {
+  const uint8_t* asset_data = NULL;
+  size_t asset_len = 0;
+
+  // Determine which asset to display
+  if (strcmp(asset_type, "config") == 0) {
+    asset_data = ASSET_CONFIG_WEBP;
+    asset_len = ASSET_CONFIG_WEBP_LEN;
+  } else if (strcmp(asset_type, "error_404") == 0) {
+    asset_data = ASSET_404_WEBP;
+    asset_len = ASSET_404_WEBP_LEN;
+  } else {
+    ESP_LOGE(TAG, "Unknown asset type: %s", asset_type);
+    return 1;
+  }
+
+  // Allocate heap memory and copy asset data
+  uint8_t *asset_heap_copy = (uint8_t *)malloc(asset_len);
+  if (asset_heap_copy == NULL) {
+    ESP_LOGE(TAG, "Failed to allocate memory for %s asset copy", asset_type);
+    return 1;
+  }
+
+  memcpy(asset_heap_copy, asset_data, asset_len);
+
+  // Display the asset with no dwell time (static display)
+  int result = gfx_update(asset_heap_copy, asset_len, 0);
+  if (result != 0) {
+    ESP_LOGE(TAG, "Failed to update graphics with %s asset", asset_type);
+    free(asset_heap_copy);
+    return 1;
+  }
+
+  // gfx_update now owns the asset_heap_copy buffer
   return 0;
 }
 

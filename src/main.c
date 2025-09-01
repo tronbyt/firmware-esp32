@@ -1,4 +1,3 @@
-#include <assets.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -14,7 +13,6 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "wifi.h"
-#include "lib/assets/404_c"
 
 #ifdef BUTTON_PIN
 #include <driver/gpio.h>
@@ -222,7 +220,7 @@ void app_main(void) {
   esp_register_shutdown_handler(&flash_shutdown);
 
   // Setup the display.
-  if (gfx_initialize(ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN)) {
+  if (gfx_initialize()) {
     ESP_LOGE(TAG, "failed to initialize gfx");
     return;
   }
@@ -257,23 +255,9 @@ void app_main(void) {
     // Load up the config webp so that we don't just loop the boot screen over
     // and over again but show the ap config info webp
     ESP_LOGI(TAG, "Loading Config WEBP");
-    // gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN); // OLD LINE -
-    // passes non-heap pointer
 
-    // Corrected approach: Copy asset to heap buffer before passing to
-    // gfx_update
-    uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
-    if (config_webp_heap_copy != NULL) {
-      memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-      gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN, 0);  // No dwell for config screen
-      // gfx_update now owns the config_webp_heap_copy buffer.
-      // main.c should not free it.
-    } else {
-      ESP_LOGE(TAG,
-               "Failed to allocate memory for config webp copy. Skipping "
-               "config webp display.");
-      // Optionally, handle this error further, e.g., by not proceeding or using
-      // a default.
+    if (gfx_display_asset("config")) {
+      ESP_LOGE(TAG, "Failed to display config screen");
     }
   } else {
     ESP_LOGI(TAG, "WiFi connected successfully!");
@@ -390,10 +374,8 @@ void app_main(void) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
         if (status_code == 404 || status_code == 400 || status_code == 0) {
           ESP_LOGI(TAG, "HTTP 404, displaying 404");
-          uint8_t *_404_webp_heap_copy = (uint8_t *)malloc(ASSET_404_WEBP_LEN);
-          if (_404_webp_heap_copy != NULL) {
-            memcpy(_404_webp_heap_copy, ASSET_404_WEBP, ASSET_404_WEBP_LEN);
-            gfx_update(_404_webp_heap_copy, ASSET_404_WEBP_LEN, 0);  // No dwell for config screen
+          if (gfx_display_asset("error_404")) {
+            ESP_LOGE(TAG, "Failed to display 404 screen");
           }
           vTaskDelay(pdMS_TO_TICKS(1 * 5000));
         }
