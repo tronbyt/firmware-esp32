@@ -50,6 +50,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+      if (gfx_display_asset("no_connect")) {
+        ESP_LOGE(TAG, "Failed to display no connect screen for websocket disconnect");
+      }
       break;
     case WEBSOCKET_EVENT_DATA:
       ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
@@ -177,6 +180,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_ERROR:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      if (gfx_display_asset("no_connect")) {
+        ESP_LOGE(TAG, "Failed to display no connect screen for websocket error");
+      }
       break;
   }
 }
@@ -352,6 +358,9 @@ void app_main(void) {
         esp_err_t err = esp_websocket_client_start(ws_handle);
         if (err != ESP_OK) {
           ESP_LOGE(TAG, "Reconnection failed with error %d", err);
+          if (gfx_display_asset("no_connect")) {
+            ESP_LOGE(TAG, "Failed to display no connect screen for websocket reconnection failure");
+          }
         } else {
           ESP_LOGI(TAG, "Reconnected to WebSocket server.");
         }
@@ -383,6 +392,9 @@ void app_main(void) {
           if (gfx_display_asset("error_404")) {
             ESP_LOGE(TAG, "Failed to display 404 screen");
           }
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        } else if (status_code == 413) {
+          ESP_LOGI(TAG, "Content too large - oversize graphic already displayed");
           vTaskDelay(pdMS_TO_TICKS(1 * 5000));
         }
       } else {

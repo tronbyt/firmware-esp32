@@ -6,6 +6,7 @@
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_tls.h>
+#include "gfx.h"
 
 static const char* TAG = "remote";
 
@@ -16,6 +17,7 @@ struct remote_state {
   size_t max;
   uint8_t brightness;
   int32_t dwell_secs;
+  bool oversize_detected;
 };
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
@@ -49,6 +51,11 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
           ESP_LOGE(TAG,
                    "Content-Length (%d bytes) exceeds allowed max (%d bytes)",
                    content_length, state->max);
+          // Display the oversize graphic
+          if (gfx_display_asset("oversize") != 0) {
+            ESP_LOGE(TAG, "Failed to display oversize graphic");
+          }
+          state->oversize_detected = true;
           err = ESP_ERR_NO_MEM;
           esp_http_client_close(event->client);  // Abort the HTTP request
         } else {
@@ -71,6 +78,12 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
       if (event->user_data == NULL) {
         ESP_LOGW(TAG, "Discarding HTTP response due to missing state");
+        break;
+      }
+
+      // If oversize was detected, don't process any data
+      if (state->oversize_detected) {
+        ESP_LOGD(TAG, "Discarding HTTP data due to oversize detection");
         break;
       }
 
@@ -142,6 +155,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
       .max = HTTP_BUFFER_SIZE_MAX,
       .brightness = -1,
       .dwell_secs = -1,
+      .oversize_detected = false,
   };
 
   if (state.buf == NULL) {
@@ -174,6 +188,17 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
     }
     esp_http_client_cleanup(http);
     return 1;
+  }
+
+  // Check if oversize was detected during the request
+  if (state.oversize_detected) {
+    ESP_LOGI(TAG, "Request aborted due to oversize content");
+    if (state.buf != NULL) {
+      free(state.buf);
+    }
+    esp_http_client_cleanup(http);
+    *return_status_code = 413;  // HTTP 413 Payload Too Large
+    return 1;  // Return error so main loop doesn't process the result
   }
 
   int status_code = esp_http_client_get_status_code(http);

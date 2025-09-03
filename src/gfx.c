@@ -8,15 +8,7 @@
 
 #include "display.h"
 #include "esp_timer.h"
-#include "lib/assets/config_c"
-#include "lib/assets/404_c"
-#include "lib/assets/no_connect_c"
-
-#ifdef BOOT_WEBP_PARROT
-#include "lib/assets/parrot_c"
-#else
-#include "lib/assets/tronbyt_c"
-#endif
+#include "lib/assets/assets.h"
 
 static const char *TAG = "gfx";
 
@@ -134,6 +126,10 @@ int gfx_display_asset(const char* asset_type) {
   } else if (strcmp(asset_type, "no_connect") == 0) {
     asset_data = ASSET_NOCONNECT_WEBP;
     asset_len = ASSET_NOCONNECT_WEBP_LEN;
+  } else if (strcmp(asset_type, "oversize") == 0) {
+    ESP_LOGI(TAG, "DISPLAYING OVERSIZE GRAPHIC");
+    asset_data = ASSET_OVERSIZE_WEBP;
+    asset_len = ASSET_OVERSIZE_WEBP_LEN;
   } else {
     ESP_LOGE(TAG, "Unknown asset type: %s", asset_type);
     return 1;
@@ -251,6 +247,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
     ESP_LOGE(TAG, "Could not get WebP animation");
     return 1;
   }
+  // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
   while (esp_timer_get_time() - start_us < dwell_us) {
     int lastTimestamp = 0;

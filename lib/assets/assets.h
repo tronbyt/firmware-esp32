@@ -22,3 +22,14 @@ extern const size_t ASSET_404_WEBP_LEN;
 
 #include "lib/assets/404_c"
 
+extern const uint8_t ASSET_OVERSIZE_WEBP[];
+extern const size_t ASSET_OVERSIZE_WEBP_LEN;
+
+#include "lib/assets/oversize_c"
+
+extern const uint8_t ASSET_NOCONNECT_WEBP[];
+extern const size_t ASSET_NOCONNECT_WEBP_LEN;
+
+#include "lib/assets/no_connect_c"
+
+
