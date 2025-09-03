@@ -28,6 +28,7 @@ static const char* TAG = "main";
 int32_t isAnimating = 1;
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
+static bool websocket_oversize_detected = false; // Flag to track oversize websocket messages
 
 bool use_websocket = false;
 esp_websocket_client_handle_t ws_handle;
@@ -55,11 +56,11 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       }
       break;
     case WEBSOCKET_EVENT_DATA:
-      ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
-      ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
+      // ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
+      // ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
       // ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
-      ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
-        data->payload_len, data->data_len, data->payload_offset);
+      // ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
+      //  data->payload_len, data->data_len, data->payload_offset);
       // Check if this is a complete message or just a fragment
       bool is_complete =
           (data->payload_offset + data->data_len >= data->payload_len);
@@ -68,8 +69,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         ESP_LOGI(TAG, "Message is complete");
 
       } else {
-        ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-                 data->payload_offset + data->data_len, data->payload_len);
+        // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
+        //          data->payload_offset + data->data_len, data->payload_len);
       }
 
       // Check if data contains "brightness"
@@ -119,7 +120,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
-        ESP_LOGI(TAG, "Binary data detected (WebP image)");
+        // ESP_LOGI(TAG, "Binary data detected (WebP image)");
 
         // Check if this is a complete message or just a fragment
         bool is_complete =
@@ -127,15 +128,28 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
         if (is_complete) {
           ESP_LOGI(TAG, "Message is complete");
+          // Reset oversize flag for next message
+          websocket_oversize_detected = false;
         } else {
-          ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-                   data->payload_offset + data->data_len, data->payload_len);
+          // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
+          //          data->payload_offset + data->data_len, data->payload_len);
         }
 
-        // Check if payload size exceeds maximum buffer size
-        if (data->payload_len > HTTP_BUFFER_SIZE_MAX) {
+        // Check if payload size exceeds maximum buffer size (only on first fragment)
+        if (data->payload_offset == 0 && data->payload_len > HTTP_BUFFER_SIZE_MAX) {
           ESP_LOGE(TAG, "WebP payload size (%d bytes) exceeds maximum buffer size (%d bytes)",
                    data->payload_len, HTTP_BUFFER_SIZE_MAX);
+          // Display the oversize graphic
+          if (gfx_display_asset("oversize") != 0) {
+            ESP_LOGE(TAG, "Failed to display oversize graphic");
+          }
+          websocket_oversize_detected = true;
+          break;
+        }
+
+        // Skip processing if oversize was detected for this message
+        if (websocket_oversize_detected) {
+          ESP_LOGD(TAG, "Skipping fragment due to oversize detection");
           break;
         }
 
