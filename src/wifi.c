@@ -93,7 +93,7 @@ const char *s_html_page_template =
     "<form action='/save' method='post' "
     "enctype='application/x-www-form-urlencoded'>"
     "<div class='form-group'>"
-    "<label for='ssid'>WiFi Network Name:</label>"
+    "<label for='ssid'>WiFi Network Name (2.4Ghz Only) :</label>"
     "<input type='text' id='ssid' name='ssid' maxlength='32'>"
     "</div>"
     "<div class='form-group'>"
