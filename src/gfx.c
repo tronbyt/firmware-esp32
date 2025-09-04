@@ -144,6 +144,9 @@ int gfx_display_asset(const char* asset_type) {
 
   memcpy(asset_heap_copy, asset_data, asset_len);
 
+  // Interrupt current animation to display asset immediately
+  isAnimating = -1;
+
   // Display the asset with no dwell time (static display)
   int result = gfx_update(asset_heap_copy, asset_len, 0);
   if (result != 0) {
