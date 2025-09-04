@@ -1,4 +1,3 @@
-#include <assets.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -29,6 +28,7 @@ static const char* TAG = "main";
 int32_t isAnimating = 1;
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
+static bool websocket_oversize_detected = false; // Flag to track oversize websocket messages
 
 bool use_websocket = false;
 esp_websocket_client_handle_t ws_handle;
@@ -51,13 +51,16 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+      if (gfx_display_asset("no_connect")) {
+        ESP_LOGE(TAG, "Failed to display no connect screen for websocket disconnect");
+      }
       break;
     case WEBSOCKET_EVENT_DATA:
-      ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
-      ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
+      // ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
+      // ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
       // ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
-      ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
-        data->payload_len, data->data_len, data->payload_offset);
+      // ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
+      //  data->payload_len, data->data_len, data->payload_offset);
       // Check if this is a complete message or just a fragment
       bool is_complete =
           (data->payload_offset + data->data_len >= data->payload_len);
@@ -66,8 +69,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         ESP_LOGI(TAG, "Message is complete");
 
       } else {
-        ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-                 data->payload_offset + data->data_len, data->payload_len);
+        // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
+        //          data->payload_offset + data->data_len, data->payload_len);
       }
 
       // Check if data contains "brightness"
@@ -117,7 +120,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
-        ESP_LOGI(TAG, "Binary data detected (WebP image)");
+        // ESP_LOGI(TAG, "Binary data detected (WebP image)");
 
         // Check if this is a complete message or just a fragment
         bool is_complete =
@@ -125,15 +128,28 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
         if (is_complete) {
           ESP_LOGI(TAG, "Message is complete");
+          // Reset oversize flag for next message
+          websocket_oversize_detected = false;
         } else {
-          ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-                   data->payload_offset + data->data_len, data->payload_len);
+          // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
+          //          data->payload_offset + data->data_len, data->payload_len);
         }
 
-        // Check if payload size exceeds maximum buffer size
-        if (data->payload_len > HTTP_BUFFER_SIZE_MAX) {
+        // Check if payload size exceeds maximum buffer size (only on first fragment)
+        if (data->payload_offset == 0 && data->payload_len > HTTP_BUFFER_SIZE_MAX) {
           ESP_LOGE(TAG, "WebP payload size (%d bytes) exceeds maximum buffer size (%d bytes)",
                    data->payload_len, HTTP_BUFFER_SIZE_MAX);
+          // Display the oversize graphic
+          if (gfx_display_asset("oversize") != 0) {
+            ESP_LOGE(TAG, "Failed to display oversize graphic");
+          }
+          websocket_oversize_detected = true;
+          break;
+        }
+
+        // Skip processing if oversize was detected for this message
+        if (websocket_oversize_detected) {
+          ESP_LOGD(TAG, "Skipping fragment due to oversize detection");
           break;
         }
 
@@ -178,6 +194,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_ERROR:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      if (gfx_display_asset("no_connect")) {
+        ESP_LOGE(TAG, "Failed to display no connect screen for websocket error");
+      }
       break;
   }
 }
@@ -221,7 +240,7 @@ void app_main(void) {
   esp_register_shutdown_handler(&flash_shutdown);
 
   // Setup the display.
-  if (gfx_initialize(ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN)) {
+  if (gfx_initialize()) {
     ESP_LOGE(TAG, "failed to initialize gfx");
     return;
   }
@@ -256,23 +275,9 @@ void app_main(void) {
     // Load up the config webp so that we don't just loop the boot screen over
     // and over again but show the ap config info webp
     ESP_LOGI(TAG, "Loading Config WEBP");
-    // gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN); // OLD LINE -
-    // passes non-heap pointer
 
-    // Corrected approach: Copy asset to heap buffer before passing to
-    // gfx_update
-    uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
-    if (config_webp_heap_copy != NULL) {
-      memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-      gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN, 0);  // No dwell for config screen
-      // gfx_update now owns the config_webp_heap_copy buffer.
-      // main.c should not free it.
-    } else {
-      ESP_LOGE(TAG,
-               "Failed to allocate memory for config webp copy. Skipping "
-               "config webp display.");
-      // Optionally, handle this error further, e.g., by not proceeding or using
-      // a default.
+    if (gfx_display_asset("config")) {
+      ESP_LOGE(TAG, "Failed to display config screen");
     }
   } else {
     ESP_LOGI(TAG, "WiFi connected successfully!");
@@ -367,6 +372,9 @@ void app_main(void) {
         esp_err_t err = esp_websocket_client_start(ws_handle);
         if (err != ESP_OK) {
           ESP_LOGE(TAG, "Reconnection failed with error %d", err);
+          if (gfx_display_asset("no_connect")) {
+            ESP_LOGE(TAG, "Failed to display no connect screen for websocket reconnection failure");
+          }
         } else {
           ESP_LOGI(TAG, "Reconnected to WebSocket server.");
         }
@@ -382,23 +390,39 @@ void app_main(void) {
       uint8_t *webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
-
+      int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
-                                         &brightness_pct, &app_dwell_secs)) {
-        ESP_LOGE(TAG, "No WiFi or Failed to get webp");
-        vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+                                         &brightness_pct, &app_dwell_secs, &status_code)) {
+        ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
+        if (status_code == 0) {
+          ESP_LOGI(TAG, "No connection, displaying no connect screen");
+          if (gfx_display_asset("no_connect")) {
+            ESP_LOGE(TAG, "Failed to display no connect screen");
+          }
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        } else if (status_code == 404 || status_code == 400) {
+          ESP_LOGI(TAG, "HTTP 404/400, displaying 404");
+          if (gfx_display_asset("error_404")) {
+            ESP_LOGE(TAG, "Failed to display 404 screen");
+          }
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        } else if (status_code == 413) {
+          ESP_LOGI(TAG, "Content too large - oversize graphic already displayed");
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        }
       } else {
         // Successful remote_get
         display_set_brightness(brightness_pct);
         ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-        
+
         gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
         // Wait for app_dwell_secs to expire (isAnimating will be 0)
         // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        if (isAnimating > 0) ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
+        if (isAnimating > 0)
+          ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
         while (isAnimating > 0) {
           // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
           vTaskDelay(pdMS_TO_TICKS(1));
@@ -407,7 +431,7 @@ void app_main(void) {
         isAnimating = 1;
         vTaskDelay(pdMS_TO_TICKS(500));
       }
-      wifi_health_check();
+    wifi_health_check();
     }
   }
 
