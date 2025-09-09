@@ -253,6 +253,11 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
   while (esp_timer_get_time() - start_us < dwell_us) {
+    // If we've been asked to interrupt (e.g., new frame via websocket), exit ASAP
+    if (*isAnimating == -1) {
+      break;
+    }
+
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
@@ -273,21 +278,26 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
-  
+
+    // If interrupted during frame loop, exit without any extra delay/reset
+    if (*isAnimating == -1) {
+      break;
+    }
+
     // reset decoder to start from the beginning
     WebPAnimDecoderReset(decoder);
-    
+
     if (delay > 0) {
       xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
     } else {
       vTaskDelay(pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
     }
-    
+
     // In case of a single frame, sleep for app_dwell_secs
     if (animation.frame_count == 1) {
       // ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
       // xTaskDelayUntil(&start_us, dwell_us);
-      vTaskDelay(pdMS_TO_TICKS(dwell_us / 1000));  // full dwell delay 
+      vTaskDelay(pdMS_TO_TICKS(dwell_us / 1000));  // full dwell delay
       // *isAnimating = 0;
       break;
     }
