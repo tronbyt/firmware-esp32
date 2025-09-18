@@ -51,9 +51,6 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-      if (gfx_display_asset("no_connect")) {
-        ESP_LOGE(TAG, "Failed to display no connect screen for websocket disconnect");
-      }
       break;
     case WEBSOCKET_EVENT_DATA:
       // ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
@@ -194,9 +191,6 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_ERROR:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
-      if (gfx_display_asset("no_connect")) {
-        ESP_LOGE(TAG, "Failed to display no connect screen for websocket error");
-      }
       break;
   }
 }
@@ -372,9 +366,6 @@ void app_main(void) {
         esp_err_t err = esp_websocket_client_start(ws_handle);
         if (err != ESP_OK) {
           ESP_LOGE(TAG, "Reconnection failed with error %d", err);
-          if (gfx_display_asset("no_connect")) {
-            ESP_LOGE(TAG, "Failed to display no connect screen for websocket reconnection failure");
-          }
         } else {
           ESP_LOGI(TAG, "Reconnected to WebSocket server.");
         }
@@ -396,11 +387,8 @@ void app_main(void) {
                                          &brightness_pct, &app_dwell_secs, &status_code)) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
         if (status_code == 0) {
-          ESP_LOGI(TAG, "No connection, displaying no connect screen");
-          if (gfx_display_asset("no_connect")) {
-            ESP_LOGE(TAG, "Failed to display no connect screen");
-          }
-          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+          ESP_LOGI(TAG, "No connection");
+          vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         } else if (status_code == 404 || status_code == 400) {
           ESP_LOGI(TAG, "HTTP 404/400, displaying 404");
           if (gfx_display_asset("error_404")) {
