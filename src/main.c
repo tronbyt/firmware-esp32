@@ -51,6 +51,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+      draw_error_indicator_pixel();
       break;
     case WEBSOCKET_EVENT_DATA:
       // ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
@@ -63,7 +64,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           (data->payload_offset + data->data_len >= data->payload_len);
 
       if (is_complete) {
-        ESP_LOGI(TAG, "Message is complete");
+        // ESP_LOGI(TAG, "Message is complete");
 
       } else {
         // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
@@ -124,7 +125,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
             (data->payload_offset + data->data_len >= data->payload_len);
 
         if (is_complete) {
-          ESP_LOGI(TAG, "Message is complete");
+          // ESP_LOGI(TAG, "Message is complete");
           // Reset oversize flag for next message
           websocket_oversize_detected = false;
         } else {
@@ -191,6 +192,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_ERROR:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      draw_error_indicator_pixel();
       break;
   }
 }
@@ -386,9 +388,9 @@ void app_main(void) {
       if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
                                          &brightness_pct, &app_dwell_secs, &status_code)) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
+        draw_error_indicator_pixel();  // Add this
         if (status_code == 0) {
           ESP_LOGI(TAG, "No connection");
-          vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         } else if (status_code == 404 || status_code == 400) {
           ESP_LOGI(TAG, "HTTP 404/400, displaying 404");
           if (gfx_display_asset("error_404")) {
@@ -411,6 +413,7 @@ void app_main(void) {
         // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
         if (isAnimating > 0)
           ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
+          
         while (isAnimating > 0) {
           // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
           vTaskDelay(pdMS_TO_TICKS(1));

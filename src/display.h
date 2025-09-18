@@ -19,6 +19,8 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB);
 
 void display_clear();
+void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
+void draw_error_indicator_pixel();
 // int32_t isAnimating = 0;  // Initialize with a valid value
 
 #ifdef __cplusplus
