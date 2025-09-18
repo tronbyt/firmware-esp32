@@ -199,6 +199,7 @@ static void gfx_loop(void *args) {
     if (webp && len > 0) {
       if (draw_webp(webp, len, dwell_secs, isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
+        draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         *isAnimating = 0;
         // Free the invalid buffer to prevent re-drawing it
@@ -242,12 +243,14 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
   if (decoder == NULL) {
     ESP_LOGE(TAG, "Could not create WebP decoder");
+    draw_error_indicator_pixel();
     return 1;
   }
   
   WebPAnimInfo animation;
   if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
     ESP_LOGE(TAG, "Could not get WebP animation");
+    draw_error_indicator_pixel();
     return 1;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
