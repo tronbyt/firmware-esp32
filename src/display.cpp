@@ -244,3 +244,14 @@ void display_draw(const uint8_t *pix, int width, int height,
 }
 
 void display_clear() { _matrix->clearScreen(); }
+
+void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+  if (_matrix != NULL) {
+    _matrix->drawPixelRGB888(x, y, r, g, b);
+    _matrix->flipDMABuffer();
+  }
+}
+
+void draw_error_indicator_pixel() {
+  display_draw_pixel(0, 0, 100, 0, 0);
+}
