@@ -388,6 +388,7 @@ void app_main(void) {
       if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
                                          &brightness_pct, &app_dwell_secs, &status_code)) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
+        vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         draw_error_indicator_pixel();  // Add this
         if (status_code == 0) {
           ESP_LOGI(TAG, "No connection");
