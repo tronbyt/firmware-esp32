@@ -101,6 +101,9 @@ And if you're working with a Tidbyt Gen 2:
 ```
 pio run --target reset --environment tidbyt-gen2
 ```
+### Using the WiFi config portal
+The firmware has a rudimentary wifi config portal page that can be accessed by joining the TRONBYT-CONFIG network and navigating to http://10.10.0.1  . 
+[WiFi Config Portal How-To Video](https://www.youtube.com/watch?v=OAWUCG-HRDs)
 
 [1]: https://github.com/tidbyt/pixlet
 [2]: https://docs.platformio.org/en/latest/core/installation/index.html
