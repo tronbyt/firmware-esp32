@@ -5,6 +5,7 @@
 #include <webp/demux.h>
 #include <esp_websocket_client.h>
 #include <esp_crt_bundle.h>
+#include <esp_timer.h>
 #include <ctype.h> // For isdigit
 
 #include "display.h"
@@ -36,6 +37,8 @@ esp_websocket_client_handle_t ws_handle;
 bool button_boot = false;
 
 bool config_received = false;
+
+
 
 void config_saved_callback(void) {
   config_received = true;
@@ -385,8 +388,16 @@ void app_main(void) {
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
-      if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
-                                         &brightness_pct, &app_dwell_secs, &status_code)) {
+
+      // Start timing the HTTP fetch
+      int64_t fetch_start_us = esp_timer_get_time();
+      bool fetch_failed = !wifi_is_connected() || remote_get(image_url, &webp, &len,
+                                         &brightness_pct, &app_dwell_secs, &status_code);
+      int64_t fetch_duration_ms = (esp_timer_get_time() - fetch_start_us) / 1000;
+
+      ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
+
+      if (fetch_failed) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         draw_error_indicator_pixel();  // Add this
@@ -412,16 +423,19 @@ void app_main(void) {
         webp = NULL;
         // Wait for app_dwell_secs to expire (isAnimating will be 0)
         // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        if (isAnimating > 0)
+        if (isAnimating > 0) {
           ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
-          
+        } else {
+          ESP_LOGE(TAG,"long fetch took place");
+          // vTaskDelay(pdMS_TO_TICKS(1000));
+        }
         while (isAnimating > 0) {
           // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
           vTaskDelay(pdMS_TO_TICKS(1));
         }
-        // ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
+        ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
         isAnimating = 1;
-        vTaskDelay(pdMS_TO_TICKS(500));
+        // vTaskDelay(pdMS_TO_TICKS(500));
       }
     wifi_health_check();
     }

@@ -168,7 +168,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
       .url = url,
       .event_handler = _httpCallback,
       .user_data = &state,
-      .timeout_ms = 10e3,
+      .timeout_ms = 20e3,  // Increased from 10s to 20s
       .crt_bundle_attach = esp_crt_bundle_attach,
   };
 
@@ -219,6 +219,6 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
   if (state.dwell_secs > -1 && state.dwell_secs < 300) *dwell_secs = state.dwell_secs; // 5 minute max ?
 
   esp_http_client_cleanup(http);
-  ESP_LOGI(TAG,"fetched new webp");
+  // ESP_LOGI(TAG,"fetched new webp");
   return 0;
 }
