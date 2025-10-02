@@ -423,11 +423,12 @@ void app_main(void) {
         webp = NULL;
         // Wait for app_dwell_secs to expire (isAnimating will be 0)
         // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
+        bool long_fetch = false;
         if (isAnimating > 0) {
           ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
         } else {
           ESP_LOGE(TAG,"long fetch took place");
-          // vTaskDelay(pdMS_TO_TICKS(1000));
+          long_fetch = true;
         }
         while (isAnimating > 0) {
           // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
@@ -435,7 +436,12 @@ void app_main(void) {
         }
         ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
         isAnimating = 1;
-        // vTaskDelay(pdMS_TO_TICKS(500));
+
+        // If long fetch occurred, give gfx task extra time to pick up the new image
+        if (long_fetch) {
+          ESP_LOGI(TAG, "Waiting extra time for gfx task to load new image after long fetch");
+          vTaskDelay(pdMS_TO_TICKS(2000));
+        }
       }
     wifi_health_check();
     }
