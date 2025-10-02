@@ -23,12 +23,13 @@ struct gfx_state {
   size_t len;
   int32_t dwell_secs;
   int counter;
+  int loaded_counter;  // Counter that tracks which image has been loaded by gfx task
 };
 
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
+static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter);
 
 int gfx_initialize() {
   // Only initialize once
@@ -109,7 +110,25 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
     return 1;
   }
 
-  return 0;
+  return _state->counter;  // Return the counter value so caller can wait for it to be loaded
+}
+
+int gfx_get_loaded_counter() {
+  if (!_state) return -1;
+
+  if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
+    ESP_LOGE(TAG, "Could not take gfx mutex");
+    return -1;
+  }
+
+  int loaded = _state->loaded_counter;
+
+  if (pdTRUE != xSemaphoreGive(_state->mutex)) {
+    ESP_LOGE(TAG, "Could not give gfx mutex");
+    return -1;
+  }
+
+  return loaded;
 }
 
 int gfx_display_asset(const char* asset_type) {
@@ -188,6 +207,7 @@ static void gfx_loop(void *args) {
       dwell_secs = _state->dwell_secs;
       _state->buf = NULL; // gfx_loop now owns the buffer
       counter = _state->counter;
+      _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (*isAnimating == -1) *isAnimating = 1;
     }
 
@@ -197,7 +217,7 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
+      if (draw_webp(webp, len, dwell_secs, isAnimating, counter)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -214,7 +234,7 @@ static void gfx_loop(void *args) {
   }
 }
 
-static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating) {
+static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -256,6 +276,17 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
   while (esp_timer_get_time() - start_us < dwell_us) {
+    // Check if a new image has been queued - if so, exit early to load it
+    if (pdTRUE == xSemaphoreTake(_state->mutex, 0)) {
+      bool new_image_queued = (_state->counter != current_counter);
+      xSemaphoreGive(_state->mutex);
+      if (new_image_queued) {
+        ESP_LOGI(TAG, "New image queued, exiting draw loop early");
+        WebPAnimDecoderDelete(decoder);
+        *isAnimating = 0;
+        return 0;
+      }
+    }
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
