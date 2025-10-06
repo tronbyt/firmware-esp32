@@ -956,13 +956,14 @@ static void dns_server_task(void *pvParameters) {
 
         // Set response flags: QR=1 (response), AA=1 (authoritative)
         resp_header->flags = htons(0x8400);
-        resp_header->ancount = header->qdcount; // Same number of answers as questions
 
         int response_len = len;
+        int answers_added = 0;
 
-        // For each question, add an answer pointing to our AP IP (10.10.0.1)
+        // For captive portal, we only need to answer the first question
+        // Most DNS queries only have one question anyway
         uint16_t num_questions = ntohs(header->qdcount);
-        for (int i = 0; i < num_questions && i < 1; i++) {
+        if (num_questions > 0 && response_len + 16 < DNS_MAX_LEN) {
             // Answer: pointer to question name (0xC00C), type A, class IN, TTL, length 4, IP
             uint8_t answer[] = {
                 0xC0, 0x0C,           // Pointer to domain name in question
@@ -973,11 +974,13 @@ static void dns_server_task(void *pvParameters) {
                 10, 10, 0, 1          // IP address 10.10.0.1
             };
 
-            if (response_len + sizeof(answer) < DNS_MAX_LEN) {
-                memcpy(tx_buffer + response_len, answer, sizeof(answer));
-                response_len += sizeof(answer);
-            }
+            memcpy(tx_buffer + response_len, answer, sizeof(answer));
+            response_len += sizeof(answer);
+            answers_added = 1;
         }
+
+        // Set the actual answer count
+        resp_header->ancount = htons(answers_added);
 
         // Send response
         sendto(sock, tx_buffer, response_len, 0,
@@ -1009,20 +1012,39 @@ static void stop_dns_server(void) {
 
 // Captive portal handler - redirects all requests to config page
 static esp_err_t captive_portal_handler(httpd_req_t *req) {
-    const char *host = NULL;
-    size_t host_len = httpd_req_get_hdr_value_len(req, "Host");
+    char *host_buf = NULL;
+    bool serve_directly = false;
 
+    // Try to get the Host header
+    size_t host_len = httpd_req_get_hdr_value_len(req, "Host");
     if (host_len > 0) {
-        char *host_buf = malloc(host_len + 1);
-        if (host_buf && httpd_req_get_hdr_value_str(req, "Host", host_buf, host_len + 1) == ESP_OK) {
-            host = host_buf;
+        host_buf = malloc(host_len + 1);
+        if (host_buf == NULL) {
+            ESP_LOGE(TAG, "Failed to allocate memory for Host header");
+            // Continue without host check - will redirect
+        } else {
+            if (httpd_req_get_hdr_value_str(req, "Host", host_buf, host_len + 1) != ESP_OK) {
+                // Failed to get header value, free buffer and continue
+                free(host_buf);
+                host_buf = NULL;
+            }
         }
     }
 
     // Check if this is already our IP address
-    if (host && (strcmp(host, "10.10.0.1") == 0 || strstr(host, "10.10.0.1") != NULL)) {
-        if (host) free((void*)host);
-        // Serve the config page directly
+    if (host_buf != NULL &&
+        (strcmp(host_buf, "10.10.0.1") == 0 || strstr(host_buf, "10.10.0.1") != NULL)) {
+        serve_directly = true;
+    }
+
+    // Clean up host buffer
+    if (host_buf != NULL) {
+        free(host_buf);
+        host_buf = NULL;
+    }
+
+    // Serve the config page directly or redirect
+    if (serve_directly) {
         return root_handler(req);
     }
 
@@ -1031,6 +1053,5 @@ static esp_err_t captive_portal_handler(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Location", "http://10.10.0.1/");
     httpd_resp_send(req, NULL, 0);
 
-    if (host) free((void*)host);
     return ESP_OK;
 }
