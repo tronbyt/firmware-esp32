@@ -269,14 +269,15 @@ void app_main(void) {
   // Wait for WiFi connection (with a 60-second timeout)
   // This will block until either connected or timeout or short circuit if button was held during button.
   if (button_boot || !wifi_wait_for_connection(60000)) {
-    
+
     ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
     // Load up the config webp so that we don't just loop the boot screen over
     // and over again but show the ap config info webp
     ESP_LOGI(TAG, "Loading Config WEBP");
 
     if (gfx_display_asset("config")) {
-      ESP_LOGE(TAG, "Failed to display config screen");
+      ESP_LOGE(TAG, "Failed to display config screen - continuing without it");
+      // Don't crash, just continue - the AP is still running
     }
   } else {
     ESP_LOGI(TAG, "WiFi connected successfully!");

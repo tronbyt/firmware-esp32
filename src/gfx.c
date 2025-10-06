@@ -89,7 +89,7 @@ int gfx_initialize() {
 int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
-    return 1;
+    return -1;  // Return negative on error
   }
 
   // If a new frame arrives before the previous one is consumed by the gfx task,
@@ -107,10 +107,10 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
 
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
-    return 1;
+    return -1;  // Return negative on error
   }
 
-  return _state->counter;  // Return the counter value so caller can wait for it to be loaded
+  return _state->counter;  // Return the counter value (>= 0) so caller can wait for it to be loaded
 }
 
 int gfx_get_loaded_counter() {
@@ -168,13 +168,14 @@ int gfx_display_asset(const char* asset_type) {
 
   // Display the asset with no dwell time (static display)
   int result = gfx_update(asset_heap_copy, asset_len, 0);
-  if (result != 0) {
+  if (result < 0) {
+    // Only free if gfx_update failed to take ownership (returned negative error)
     ESP_LOGE(TAG, "Failed to update graphics with %s asset", asset_type);
     free(asset_heap_copy);
     return 1;
   }
 
-  // gfx_update now owns the asset_heap_copy buffer
+  // gfx_update now owns the asset_heap_copy buffer (returns counter >= 0 on success)
   return 0;
 }
 
@@ -271,6 +272,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
     ESP_LOGE(TAG, "Could not get WebP animation");
     draw_error_indicator_pixel();
+    WebPAnimDecoderDelete(decoder);  // Clean up decoder before returning
     return 1;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);

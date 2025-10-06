@@ -18,6 +18,8 @@
 #include "lwip/sys.h"
 #include "lwip/ip4_addr.h"
 #include "esp_http_server.h"
+#include "lwip/sockets.h"
+#include "lwip/dns.h"
 
 #define TAG "WIFI"
 
@@ -134,6 +136,9 @@ static const char *s_success_html = "<!DOCTYPE html>"
 "</body>"
 "</html>";
 
+// DNS server task handle
+static TaskHandle_t s_dns_task_handle = NULL;
+
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static esp_err_t save_wifi_config_to_nvs(void);
@@ -142,8 +147,12 @@ static esp_err_t start_webserver(void);
 static esp_err_t stop_webserver(void);
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
+static esp_err_t captive_portal_handler(httpd_req_t *req);
 static void connect_to_ap(void);
 static void url_decode(char *str);
+static void dns_server_task(void *pvParameters);
+static void start_dns_server(void);
+static void stop_dns_server(void);
 static bool has_saved_config = false;
     // Initialize WiFi
 int wifi_initialize(const char *ssid, const char *password) {
@@ -589,7 +598,7 @@ static esp_err_t start_webserver(void) {
         return ESP_FAIL;
     }
 
-    // URI handlers
+    // URI handlers - order matters, specific routes first
     httpd_uri_t root_uri = {
         .uri = "/",
         .method = HTTP_GET,
@@ -606,6 +615,46 @@ static esp_err_t start_webserver(void) {
     };
     httpd_register_uri_handler(s_server, &save_uri);
 
+    // Common captive portal detection URLs for various operating systems
+    // iOS and macOS
+    httpd_uri_t hotspot_detect_uri = {
+        .uri = "/hotspot-detect.html",
+        .method = HTTP_GET,
+        .handler = captive_portal_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(s_server, &hotspot_detect_uri);
+
+    // Android
+    httpd_uri_t generate_204_uri = {
+        .uri = "/generate_204",
+        .method = HTTP_GET,
+        .handler = captive_portal_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(s_server, &generate_204_uri);
+
+    // Windows
+    httpd_uri_t ncsi_uri = {
+        .uri = "/ncsi.txt",
+        .method = HTTP_GET,
+        .handler = captive_portal_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(s_server, &ncsi_uri);
+
+    // Catch-all wildcard handler for any other requests
+    httpd_uri_t wildcard_uri = {
+        .uri = "/*",
+        .method = HTTP_GET,
+        .handler = captive_portal_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(s_server, &wildcard_uri);
+
+    // Start DNS server for captive portal
+    start_dns_server();
+
     return ESP_OK;
 }
 
@@ -614,6 +663,9 @@ static esp_err_t stop_webserver(void) {
     if (s_server == NULL) {
         return ESP_OK;
     }
+
+    // Stop DNS server
+    stop_dns_server();
 
     esp_err_t err = httpd_stop(s_server);
     s_server = NULL;
@@ -833,4 +885,173 @@ void wifi_health_check(void) {
     //     vTaskDelay(pdMS_TO_TICKS(1000));
     //     esp_restart();
     // }
+}
+
+// DNS server implementation for captive portal
+#define DNS_PORT 53
+#define DNS_MAX_LEN 512
+
+// DNS header structure
+typedef struct __attribute__((packed)) {
+    uint16_t id;
+    uint16_t flags;
+    uint16_t qdcount;
+    uint16_t ancount;
+    uint16_t nscount;
+    uint16_t arcount;
+} dns_header_t;
+
+// DNS server task - responds to all DNS queries with AP IP
+static void dns_server_task(void *pvParameters) {
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Failed to create DNS socket");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(DNS_PORT);
+
+    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        ESP_LOGE(TAG, "Failed to bind DNS socket");
+        close(sock);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "DNS server started on port 53");
+
+    char rx_buffer[DNS_MAX_LEN];
+    char tx_buffer[DNS_MAX_LEN];
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    while (1) {
+        int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0,
+                          (struct sockaddr *)&client_addr, &client_addr_len);
+
+        if (len < 0) {
+            ESP_LOGE(TAG, "DNS recvfrom failed");
+            break;
+        }
+
+        if (len < sizeof(dns_header_t)) {
+            continue; // Invalid DNS packet
+        }
+
+        dns_header_t *header = (dns_header_t *)rx_buffer;
+
+        // Only respond to queries (QR bit = 0)
+        if ((ntohs(header->flags) & 0x8000) != 0) {
+            continue;
+        }
+
+        // Build response
+        memcpy(tx_buffer, rx_buffer, len);
+        dns_header_t *resp_header = (dns_header_t *)tx_buffer;
+
+        // Set response flags: QR=1 (response), AA=1 (authoritative)
+        resp_header->flags = htons(0x8400);
+
+        int response_len = len;
+        int answers_added = 0;
+
+        // For captive portal, we only need to answer the first question
+        // Most DNS queries only have one question anyway
+        uint16_t num_questions = ntohs(header->qdcount);
+        if (num_questions > 0 && response_len + 16 < DNS_MAX_LEN) {
+            // Answer: pointer to question name (0xC00C), type A, class IN, TTL, length 4, IP
+            uint8_t answer[] = {
+                0xC0, 0x0C,           // Pointer to domain name in question
+                0x00, 0x01,           // Type A
+                0x00, 0x01,           // Class IN
+                0x00, 0x00, 0x00, 0x3C, // TTL (60 seconds)
+                0x00, 0x04,           // Data length (4 bytes)
+                10, 10, 0, 1          // IP address 10.10.0.1
+            };
+
+            memcpy(tx_buffer + response_len, answer, sizeof(answer));
+            response_len += sizeof(answer);
+            answers_added = 1;
+        }
+
+        // Set the actual answer count
+        resp_header->ancount = htons(answers_added);
+
+        // Send response
+        sendto(sock, tx_buffer, response_len, 0,
+               (struct sockaddr *)&client_addr, client_addr_len);
+    }
+
+    close(sock);
+    vTaskDelete(NULL);
+}
+
+// Start DNS server
+static void start_dns_server(void) {
+    if (s_dns_task_handle != NULL) {
+        ESP_LOGW(TAG, "DNS server already running");
+        return;
+    }
+
+    xTaskCreate(dns_server_task, "dns_server", 4096, NULL, 5, &s_dns_task_handle);
+}
+
+// Stop DNS server
+static void stop_dns_server(void) {
+    if (s_dns_task_handle != NULL) {
+        vTaskDelete(s_dns_task_handle);
+        s_dns_task_handle = NULL;
+        ESP_LOGI(TAG, "DNS server stopped");
+    }
+}
+
+// Captive portal handler - redirects all requests to config page
+static esp_err_t captive_portal_handler(httpd_req_t *req) {
+    char *host_buf = NULL;
+    bool serve_directly = false;
+
+    // Try to get the Host header
+    size_t host_len = httpd_req_get_hdr_value_len(req, "Host");
+    if (host_len > 0) {
+        host_buf = malloc(host_len + 1);
+        if (host_buf == NULL) {
+            ESP_LOGE(TAG, "Failed to allocate memory for Host header");
+            // Continue without host check - will redirect
+        } else {
+            if (httpd_req_get_hdr_value_str(req, "Host", host_buf, host_len + 1) != ESP_OK) {
+                // Failed to get header value, free buffer and continue
+                free(host_buf);
+                host_buf = NULL;
+            }
+        }
+    }
+
+    // Check if this is already our IP address
+    if (host_buf != NULL &&
+        (strcmp(host_buf, "10.10.0.1") == 0 || strstr(host_buf, "10.10.0.1") != NULL)) {
+        serve_directly = true;
+    }
+
+    // Clean up host buffer
+    if (host_buf != NULL) {
+        free(host_buf);
+        host_buf = NULL;
+    }
+
+    // Serve the config page directly or redirect
+    if (serve_directly) {
+        return root_handler(req);
+    }
+
+    // Redirect to our config page
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "http://10.10.0.1/");
+    httpd_resp_send(req, NULL, 0);
+
+    return ESP_OK;
 }
