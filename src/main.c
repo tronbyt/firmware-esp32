@@ -422,36 +422,27 @@ void app_main(void) {
         int queued_counter = gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
-        // Wait for app_dwell_secs to expire (isAnimating will be 0)
-        // ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        bool long_fetch = false;
+
+        // Wait for the current animation to finish (isAnimating will be 0)
         if (isAnimating > 0) {
           ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
-        } else {
-          ESP_LOGE(TAG,"long fetch took place");
-          long_fetch = true;
-        }
-        while (isAnimating > 0) {
-          // ESP_LOGI(TAG, BLUE "Delay 1" RESET);
-          vTaskDelay(pdMS_TO_TICKS(1));
+          while (isAnimating > 0) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+          }
         }
 
-        // If long fetch occurred, wait for gfx task to load the image BEFORE setting isAnimating
-        // Skip wait for first couple images (counter 0 or 1) as they load immediately
-        if (long_fetch && queued_counter > 1) {
-          ESP_LOGI(TAG, "Waiting for gfx task to load new image after long fetch (counter=%d)", queued_counter);
-          int timeout = 0;
-          while (gfx_get_loaded_counter() != queued_counter && timeout < 20000) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-            timeout += 10;
-          }
-          if (timeout >= 20000) {
-            ESP_LOGE(TAG, "Timeout waiting for gfx task to load image");
-          } else {
-            ESP_LOGI(TAG, "Gfx task loaded image after %d ms", timeout);
-          }
-        } else if (long_fetch) {
-          ESP_LOGI(TAG, "Skipping wait for early image (counter=%d)", queued_counter);
+        // Wait for gfx task to load the newly queued image before fetching the next one
+        // This ensures the image has begun displaying before we fetch again
+        ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)", queued_counter);
+        int timeout = 0;
+        while (gfx_get_loaded_counter() != queued_counter && timeout < 20000) {
+          vTaskDelay(pdMS_TO_TICKS(10));
+          timeout += 10;
+        }
+        if (timeout >= 20000) {
+          ESP_LOGE(TAG, "Timeout waiting for gfx task to load image");
+        } else {
+          ESP_LOGI(TAG, "Gfx task loaded image after %d ms", timeout);
         }
 
         ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);

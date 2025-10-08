@@ -278,17 +278,6 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
   while (esp_timer_get_time() - start_us < dwell_us) {
-    // Check if a new image has been queued - if so, exit early to load it
-    if (pdTRUE == xSemaphoreTake(_state->mutex, 0)) {
-      bool new_image_queued = (_state->counter != current_counter);
-      xSemaphoreGive(_state->mutex);
-      if (new_image_queued) {
-        ESP_LOGI(TAG, "New image queued, exiting draw loop early");
-        WebPAnimDecoderDelete(decoder);
-        *isAnimating = 0;
-        return 0;
-      }
-    }
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
