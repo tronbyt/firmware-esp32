@@ -74,8 +74,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         //          data->payload_offset + data->data_len, data->payload_len);
       }
 
+      // Process text messages (op_code == 1) only when complete to avoid processing fragments multiple times
       // Check if data contains "immediate"
-      if (data->op_code == 1 && strstr((char *)data->data_ptr, "{\"immediate\":")) {
+      if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"immediate\":")) {
         ESP_LOGI(TAG, "Immediate command detected");
 
         // Check if the value is true
@@ -85,8 +86,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       }
       // Check if data contains "dwell_secs"
-      else if (data->op_code == 1 && strstr((char *)data->data_ptr, "{\"dwell_secs\":")) {
-        ESP_LOGI(TAG, "Dwell seconds data detected");
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"dwell_secs\":")) {
 
         // Simple string parsing for {"dwell_secs": xxx}
         char *dwell_pos = strstr((char *)data->data_ptr, "dwell_secs");
@@ -108,7 +108,6 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           int dwell_value = 0;
           if (k > 0) { // Only call atoi if we copied some digits
             dwell_value = atoi(temp_val_buf);
-            ESP_LOGI(TAG, "Parsed dwell_secs: %d from string '%s'", dwell_value, temp_val_buf);
           } else {
             ESP_LOGW(TAG, "No digits found for dwell_secs value. Original string segment starts with: %.5s", value_str_start);
             dwell_value = -1; // Indicate parsing failure
@@ -128,7 +127,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       }
       // Check if data contains "brightness"
-      else if (data->op_code == 1 && strstr((char *)data->data_ptr, "{\"brightness\":")) {
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"brightness\":")) {
         ESP_LOGI(TAG, "Brightness data detected");
 
         // Simple string parsing for {"brightness": xxx}
