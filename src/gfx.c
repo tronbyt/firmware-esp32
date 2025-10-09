@@ -149,12 +149,24 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   _state->dwell_secs = dwell_secs;
   _state->counter++;
 
+  int counter = _state->counter;
+
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
     return -1;  // Return negative on error
   }
 
-  return _state->counter;  // Return the counter value (>= 0) so caller can wait for it to be loaded
+  // Send "queued" notification immediately when image is queued
+  if (_state->ws_handle && esp_websocket_client_is_connected(_state->ws_handle)) {
+    char message[64];
+    int msg_len = snprintf(message, sizeof(message), "{\"queued\":%d}", counter);
+    if (msg_len > 0 && msg_len < sizeof(message)) {
+      esp_websocket_client_send_text(_state->ws_handle, message, msg_len, portMAX_DELAY);
+      ESP_LOGI(TAG, "Sent queued notification: %s", message);
+    }
+  }
+
+  return counter;  // Return the counter value (>= 0) so caller can wait for it to be loaded
 }
 
 int gfx_get_loaded_counter() {
