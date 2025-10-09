@@ -32,7 +32,7 @@ static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
 static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
-static void send_websocket_notification(int counter, int64_t timestamp);
+static void send_websocket_notification(int counter);
 
 int gfx_initialize() {
   // Only initialize once
@@ -99,7 +99,7 @@ void gfx_set_websocket_handle(esp_websocket_client_handle_t ws_handle) {
   }
 }
 
-static void send_websocket_notification(int counter, int64_t timestamp) {
+static void send_websocket_notification(int counter) {
   if (!_state || !_state->ws_handle) {
     // No websocket handle set, skip notification
     return;
@@ -110,11 +110,11 @@ static void send_websocket_notification(int counter, int64_t timestamp) {
     return;
   }
 
-  // Create JSON message: {"status": "displaying", "counter": 42, "timestamp": 1234567890}
+  // Create JSON message: {"displaying": 42}
   char message[128];
   int len = snprintf(message, sizeof(message),
-                     "{\"status\":\"displaying\",\"counter\":%d,\"timestamp\":%lld}",
-                     counter, timestamp);
+                     "{\"displaying\":%d}",
+                     counter);
 
   if (len < 0 || len >= sizeof(message)) {
     ESP_LOGE(TAG, "Failed to format websocket notification message");
@@ -138,6 +138,7 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   // If a new frame arrives before the previous one is consumed by the gfx task,
   // free the old buffer here to prevent a memory leak (frame-dropping strategy).
   if (_state->buf) {
+    ESP_LOGW(TAG, "Dropping queued image (counter %d) - new image arrived before it was displayed", _state->counter);
     free(_state->buf);
     _state->buf = NULL;
   }
@@ -255,7 +256,7 @@ static void gfx_loop(void *args) {
       if (*isAnimating == -1) *isAnimating = 1;
 
       // Send websocket notification that we're now displaying this image
-      send_websocket_notification(counter, esp_timer_get_time() / 1000);
+      send_websocket_notification(counter);
     }
 
     if (pdTRUE != xSemaphoreGive(_state->mutex)) {

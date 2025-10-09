@@ -66,13 +66,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       bool is_complete =
           (data->payload_offset + data->data_len >= data->payload_len);
 
-      if (is_complete) {
-        // ESP_LOGI(TAG, "Message is complete");
 
-      } else {
-        // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-        //          data->payload_offset + data->data_len, data->payload_len);
-      }
 
       // Process text messages (op_code == 1) only when complete to avoid processing fragments multiple times
       // Check if data contains "immediate"
@@ -173,19 +167,14 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
-        // ESP_LOGI(TAG, "Binary data detected (WebP image)");
 
         // Check if this is a complete message or just a fragment
         bool is_complete =
             (data->payload_offset + data->data_len >= data->payload_len);
 
         if (is_complete) {
-          // ESP_LOGI(TAG, "Message is complete");
           // Reset oversize flag for next message
           websocket_oversize_detected = false;
-        } else {
-          // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-          //          data->payload_offset + data->data_len, data->payload_len);
         }
 
         // Check if payload size exceeds maximum buffer size (only on first fragment)
@@ -210,6 +199,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         if (data->payload_offset == 0) {
           // Free previous buffer if it exists
           if (webp != NULL) {
+            ESP_LOGW(TAG, "Discarding incomplete previous WebP buffer");
             free(webp);
             webp = NULL;
           }
@@ -217,7 +207,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           // Allocate memory for the full payload
           webp = malloc(data->payload_len);
           if (webp == NULL) {
-            ESP_LOGE(TAG, "Failed to allocate memory for WebP image");
+            ESP_LOGE(TAG, "Failed to allocate memory for WebP image (%d bytes)", data->payload_len);
             break;
           }
         }
@@ -235,7 +225,20 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         if (is_complete) {
           // Queue the complete binary data as a WebP image
           // This will wait for the current animation to finish before loading
-          gfx_update(webp, data->payload_len, app_dwell_secs);
+          int counter = gfx_update(webp, data->payload_len, app_dwell_secs);
+
+          // Send immediate "queued" notification so server knows we received it
+          if (ws_handle && esp_websocket_client_is_connected(ws_handle)) {
+            char message[128];
+            int64_t timestamp = esp_timer_get_time() / 1000;
+            int len = snprintf(message, sizeof(message),
+                             "{\"status\":\"queued\",\"counter\":%d,\"timestamp\":%lld}",
+                             counter, timestamp);
+            if (len > 0 && len < sizeof(message)) {
+              // esp_websocket_client_send_text(ws_handle, message, len, portMAX_DELAY);
+              // ESP_LOGI(TAG, "Sent queued notification: %s", message);
+            }
+          }
 
           // Do not free(webp) here; ownership is transferred to gfx
           webp = NULL;
@@ -244,7 +247,13 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
       break;
     case WEBSOCKET_EVENT_ERROR:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
+      // Check if we have an incomplete WebP buffer
+      if (webp != NULL) {
+        ESP_LOGW(TAG, "WebSocket error with incomplete WebP buffer - discarding");
+        free(webp);
+        webp = NULL;
+      }
       draw_error_indicator_pixel();
       break;
   }
