@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <webp/demux.h>
+#include <esp_websocket_client.h>
 
 #include "display.h"
 #include "esp_timer.h"
@@ -24,12 +25,14 @@ struct gfx_state {
   int32_t dwell_secs;
   int counter;
   int loaded_counter;  // Counter that tracks which image has been loaded by gfx task
+  esp_websocket_client_handle_t ws_handle;  // Websocket handle for sending notifications
 };
 
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
 static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter);
+static void send_websocket_notification(int counter, int64_t timestamp);
 
 int gfx_initialize() {
   // Only initialize once
@@ -86,6 +89,46 @@ int gfx_initialize() {
 
   return 0;
 }
+
+void gfx_set_websocket_handle(esp_websocket_client_handle_t ws_handle) {
+  if (_state) {
+    _state->ws_handle = ws_handle;
+    ESP_LOGI(TAG, "Websocket handle set for notifications");
+  } else {
+    ESP_LOGW(TAG, "Cannot set websocket handle - gfx not initialized");
+  }
+}
+
+static void send_websocket_notification(int counter, int64_t timestamp) {
+  if (!_state || !_state->ws_handle) {
+    // No websocket handle set, skip notification
+    return;
+  }
+
+  if (!esp_websocket_client_is_connected(_state->ws_handle)) {
+    ESP_LOGW(TAG, "Websocket not connected, skipping notification");
+    return;
+  }
+
+  // Create JSON message: {"status": "displaying", "counter": 42, "timestamp": 1234567890}
+  char message[128];
+  int len = snprintf(message, sizeof(message),
+                     "{\"status\":\"displaying\",\"counter\":%d,\"timestamp\":%lld}",
+                     counter, timestamp);
+
+  if (len < 0 || len >= sizeof(message)) {
+    ESP_LOGE(TAG, "Failed to format websocket notification message");
+    return;
+  }
+
+  int sent = esp_websocket_client_send_text(_state->ws_handle, message, len, portMAX_DELAY);
+  if (sent < 0) {
+    ESP_LOGE(TAG, "Failed to send websocket notification");
+  } else {
+    ESP_LOGI(TAG, "Sent websocket notification: %s", message);
+  }
+}
+
 int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
@@ -210,6 +253,9 @@ static void gfx_loop(void *args) {
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (*isAnimating == -1) *isAnimating = 1;
+
+      // Send websocket notification that we're displaying this image
+      send_websocket_notification(counter, esp_timer_get_time() / 1000);
     }
 
     if (pdTRUE != xSemaphoreGive(_state->mutex)) {
@@ -277,6 +323,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
+
   while (esp_timer_get_time() - start_us < dwell_us) {
     int lastTimestamp = 0;
     int delay = 0;

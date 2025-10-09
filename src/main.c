@@ -365,6 +365,10 @@ void app_main(void) {
     esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,
                                   websocket_event_handler,
                                   (void *)ws_handle);
+
+    // Set the websocket handle in gfx module for bidirectional communication
+    gfx_set_websocket_handle(ws_handle);
+
     for (;;) {
       if (!esp_websocket_client_is_connected(ws_handle)) {
         ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
