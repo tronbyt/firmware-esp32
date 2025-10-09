@@ -31,7 +31,7 @@ struct gfx_state {
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter);
+static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
 static void send_websocket_notification(int counter, int64_t timestamp);
 
 int gfx_initialize() {
@@ -254,7 +254,7 @@ static void gfx_loop(void *args) {
       _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (*isAnimating == -1) *isAnimating = 1;
 
-      // Send websocket notification that we're displaying this image
+      // Send websocket notification that we're now displaying this image
       send_websocket_notification(counter, esp_timer_get_time() / 1000);
     }
 
@@ -264,7 +264,7 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, isAnimating, counter)) {
+      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -281,7 +281,7 @@ static void gfx_loop(void *args) {
   }
 }
 
-static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter) {
+static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -324,7 +324,7 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
 
-  while (esp_timer_get_time() - start_us < dwell_us) {
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
@@ -357,10 +357,16 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
     
     // In case of a single frame, sleep for app_dwell_secs
     if (animation.frame_count == 1) {
-      // ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
-      // xTaskDelayUntil(&start_us, dwell_us);
-      vTaskDelay(pdMS_TO_TICKS(dwell_us / 1000));  // full dwell delay 
-      // *isAnimating = 0;
+      // For static images, we need to check isAnimating periodically during the dwell time
+      // Break the dwell time into 100ms chunks so we can respond to immediate commands
+      int64_t static_start_us = esp_timer_get_time();
+      while (esp_timer_get_time() - static_start_us < dwell_us) {
+        if (*isAnimating == -1) {
+          // Immediate command received, break out of dwell time
+          break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
+      }
       break;
     }
   }
