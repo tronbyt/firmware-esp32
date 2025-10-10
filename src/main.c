@@ -66,74 +66,70 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       bool is_complete =
           (data->payload_offset + data->data_len >= data->payload_len);
 
-      if (is_complete) {
-        // ESP_LOGI(TAG, "Message is complete");
 
-      } else {
-        // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-        //          data->payload_offset + data->data_len, data->payload_len);
+
+      // Process text messages (op_code == 1) only when complete to avoid processing fragments multiple times
+      // Check if data contains "immediate"
+      if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"immediate\":")) {
+        ESP_LOGI(TAG, "Immediate command detected");
+
+        // Check if the value is true
+        if (strstr((char *)data->data_ptr, "true")) {
+          ESP_LOGI(TAG, "Interrupting current animation to load queued image");
+          isAnimating = -1;
+        }
       }
+      // Check if data contains "dwell_secs"
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"dwell_secs\"")) {
+        // Find "dwell_secs" key and parse the value after the colon
+        char *key_pos = strstr((char *)data->data_ptr, "\"dwell_secs\"");
+        if (key_pos) {
+          // Find the colon after the key
+          char *colon_pos = strchr(key_pos, ':');
+          if (colon_pos) {
+            // Parse the integer value (atoi skips whitespace and stops at non-digits)
+            int dwell_value = atoi(colon_pos + 1);
 
+            // Clamp value to reasonable range (1 to 3600 seconds = 1 hour)
+            if (dwell_value < 1) dwell_value = 1;
+            if (dwell_value > 3600) dwell_value = 3600;
+
+            // Set the dwell time
+            app_dwell_secs = dwell_value;
+            ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
+          }
+        }
+      }
       // Check if data contains "brightness"
-      if (data->op_code == 1 && strstr((char *)data->data_ptr, "{\"brightness\":")) {
-        ESP_LOGI(TAG, "Brightness data detected");
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"brightness\"")) {
+        // Find "brightness" key and parse the value after the colon
+        char *key_pos = strstr((char *)data->data_ptr, "\"brightness\"");
+        if (key_pos) {
+          // Find the colon after the key
+          char *colon_pos = strchr(key_pos, ':');
+          if (colon_pos) {
+            // Parse the integer value (atoi skips whitespace and stops at non-digits)
+            int brightness_value = atoi(colon_pos + 1);
 
-        // Simple string parsing for {"brightness": xxx}
-        char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
-        if (brightness_pos) {
-          // Find position after the space that follows the colon
-          char *value_str_start = brightness_pos + 13; // "brightness\":" is 13 chars long
-
-          // Safely parse the integer value
-          char temp_val_buf[12]; // Buffer for up to 10 digits (e.g., "2147483647") + sign + null
-          int k = 0;
-          // Iterate while char is digit and we have space in temp_val_buf (excluding null term)
-          // and we are within data->data_ptr + data->data_len bounds
-          while (k < (sizeof(temp_val_buf) - 1) && (value_str_start + k < (char*)data->data_ptr + data->data_len) && isdigit((unsigned char)value_str_start[k])) {
-              temp_val_buf[k] = value_str_start[k];
-              k++;
-          }
-          temp_val_buf[k] = '\0'; // Null-terminate the copied digits
-
-          int brightness_value = 0;
-          if (k > 0) { // Only call atoi if we copied some digits
-            brightness_value = atoi(temp_val_buf);
-            ESP_LOGI(TAG, "Parsed brightness: %d from string '%s'", brightness_value, temp_val_buf);
-          } else {
-            ESP_LOGW(TAG, "No digits found for brightness value. Original string segment starts with: %.5s", value_str_start);
-            // Default to a safe brightness or handle as an error? For now, 0.
-            brightness_value = -1; // Indicate parsing failure or use a default
-          }
-
-          if (brightness_value == -1) { // If parsing failed
-            // Optionally, log error and skip setting brightness or set a default
-            ESP_LOGE(TAG, "Failed to parse brightness value from WebSocket message.");
-            // Keep existing brightness or set to a safe default like DISPLAY_MIN_BRIGHTNESS
-            // For now, we'll just not update if parsing fails.
-          } else {
             // Clamp value between min and max
             if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
             if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
 
             // Set the brightness
             display_set_brightness((uint8_t)brightness_value);
+            ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
           }
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
-        // ESP_LOGI(TAG, "Binary data detected (WebP image)");
 
         // Check if this is a complete message or just a fragment
         bool is_complete =
             (data->payload_offset + data->data_len >= data->payload_len);
 
         if (is_complete) {
-          // ESP_LOGI(TAG, "Message is complete");
           // Reset oversize flag for next message
           websocket_oversize_detected = false;
-        } else {
-          // ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-          //          data->payload_offset + data->data_len, data->payload_len);
         }
 
         // Check if payload size exceeds maximum buffer size (only on first fragment)
@@ -158,6 +154,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         if (data->payload_offset == 0) {
           // Free previous buffer if it exists
           if (webp != NULL) {
+            ESP_LOGW(TAG, "Discarding incomplete previous WebP buffer");
             free(webp);
             webp = NULL;
           }
@@ -165,7 +162,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           // Allocate memory for the full payload
           webp = malloc(data->payload_len);
           if (webp == NULL) {
-            ESP_LOGE(TAG, "Failed to allocate memory for WebP image");
+            ESP_LOGE(TAG, "Failed to allocate memory for WebP image (%d bytes)", data->payload_len);
             break;
           }
         }
@@ -181,11 +178,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
         // If complete, process the WebP image
         if (is_complete) {
-          // Process the complete binary data as a WebP image
-          gfx_update(webp, data->payload_len, app_dwell_secs);
-
-          // We don't control timing during websocket so use this to notify new data and to break out of current animation.
-          isAnimating = -1;
+          // Queue the complete binary data as a WebP image
+          // This will wait for the current animation to finish before loading
+          int counter = gfx_update(webp, data->payload_len, app_dwell_secs);
 
           // Do not free(webp) here; ownership is transferred to gfx
           webp = NULL;
@@ -194,7 +189,13 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
       break;
     case WEBSOCKET_EVENT_ERROR:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
+      // Check if we have an incomplete WebP buffer
+      if (webp != NULL) {
+        ESP_LOGW(TAG, "WebSocket error with incomplete WebP buffer - discarding");
+        free(webp);
+        webp = NULL;
+      }
       draw_error_indicator_pixel();
       break;
   }
@@ -365,6 +366,10 @@ void app_main(void) {
     esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,
                                   websocket_event_handler,
                                   (void *)ws_handle);
+
+    // Set the websocket handle in gfx module for bidirectional communication
+    gfx_set_websocket_handle(ws_handle);
+
     for (;;) {
       if (!esp_websocket_client_is_connected(ws_handle)) {
         ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");

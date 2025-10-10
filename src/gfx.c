@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <webp/demux.h>
+#include <esp_websocket_client.h>
 
 #include "display.h"
 #include "esp_timer.h"
@@ -24,12 +25,14 @@ struct gfx_state {
   int32_t dwell_secs;
   int counter;
   int loaded_counter;  // Counter that tracks which image has been loaded by gfx task
+  esp_websocket_client_handle_t ws_handle;  // Websocket handle for sending notifications
 };
 
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter);
+static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
+static void send_websocket_notification(int counter);
 
 int gfx_initialize() {
   // Only initialize once
@@ -86,6 +89,46 @@ int gfx_initialize() {
 
   return 0;
 }
+
+void gfx_set_websocket_handle(esp_websocket_client_handle_t ws_handle) {
+  if (_state) {
+    _state->ws_handle = ws_handle;
+    ESP_LOGI(TAG, "Websocket handle set for notifications");
+  } else {
+    ESP_LOGW(TAG, "Cannot set websocket handle - gfx not initialized");
+  }
+}
+
+static void send_websocket_notification(int counter) {
+  if (!_state || !_state->ws_handle) {
+    // No websocket handle set, skip notification
+    return;
+  }
+
+  if (!esp_websocket_client_is_connected(_state->ws_handle)) {
+    ESP_LOGW(TAG, "Websocket not connected, skipping notification");
+    return;
+  }
+
+  // Create JSON message: {"displaying": 42}
+  char message[128];
+  int len = snprintf(message, sizeof(message),
+                     "{\"displaying\":%d}",
+                     counter);
+
+  if (len < 0 || len >= sizeof(message)) {
+    ESP_LOGE(TAG, "Failed to format websocket notification message");
+    return;
+  }
+
+  int sent = esp_websocket_client_send_text(_state->ws_handle, message, len, portMAX_DELAY);
+  if (sent < 0) {
+    ESP_LOGE(TAG, "Failed to send websocket notification");
+  } else {
+    ESP_LOGI(TAG, "Sent websocket notification: %s", message);
+  }
+}
+
 int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
@@ -95,6 +138,7 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   // If a new frame arrives before the previous one is consumed by the gfx task,
   // free the old buffer here to prevent a memory leak (frame-dropping strategy).
   if (_state->buf) {
+    ESP_LOGW(TAG, "Dropping queued image (counter %d) - new image arrived before it was displayed", _state->counter);
     free(_state->buf);
     _state->buf = NULL;
   }
@@ -105,12 +149,24 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   _state->dwell_secs = dwell_secs;
   _state->counter++;
 
+  int counter = _state->counter;
+
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
     return -1;  // Return negative on error
   }
 
-  return _state->counter;  // Return the counter value (>= 0) so caller can wait for it to be loaded
+  // Send "queued" notification immediately when image is queued
+  if (_state->ws_handle && esp_websocket_client_is_connected(_state->ws_handle)) {
+    char message[64];
+    int msg_len = snprintf(message, sizeof(message), "{\"queued\":%d}", counter);
+    if (msg_len > 0 && msg_len < sizeof(message)) {
+      esp_websocket_client_send_text(_state->ws_handle, message, msg_len, portMAX_DELAY);
+      ESP_LOGI(TAG, "Sent queued notification: %s", message);
+    }
+  }
+
+  return counter;  // Return the counter value (>= 0) so caller can wait for it to be loaded
 }
 
 int gfx_get_loaded_counter() {
@@ -210,6 +266,9 @@ static void gfx_loop(void *args) {
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (*isAnimating == -1) *isAnimating = 1;
+
+      // Send websocket notification that we're now displaying this image
+      send_websocket_notification(counter);
     }
 
     if (pdTRUE != xSemaphoreGive(_state->mutex)) {
@@ -218,7 +277,7 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, isAnimating, counter)) {
+      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -235,7 +294,7 @@ static void gfx_loop(void *args) {
   }
 }
 
-static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating, int current_counter) {
+static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -277,7 +336,8 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
-  while (esp_timer_get_time() - start_us < dwell_us) {
+
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
@@ -310,10 +370,16 @@ static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAn
     
     // In case of a single frame, sleep for app_dwell_secs
     if (animation.frame_count == 1) {
-      // ESP_LOGI(TAG, "single frame delay for %d", app_dwell_secs);
-      // xTaskDelayUntil(&start_us, dwell_us);
-      vTaskDelay(pdMS_TO_TICKS(dwell_us / 1000));  // full dwell delay 
-      // *isAnimating = 0;
+      // For static images, we need to check isAnimating periodically during the dwell time
+      // Break the dwell time into 100ms chunks so we can respond to immediate commands
+      int64_t static_start_us = esp_timer_get_time();
+      while (esp_timer_get_time() - static_start_us < dwell_us) {
+        if (*isAnimating == -1) {
+          // Immediate command received, break out of dwell time
+          break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
+      }
       break;
     }
   }
