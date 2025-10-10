@@ -80,36 +80,16 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       }
       // Check if data contains "dwell_secs"
-      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"dwell_secs\":")) {
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"dwell_secs\"")) {
+        // Find "dwell_secs" key and parse the value after the colon
+        char *key_pos = strstr((char *)data->data_ptr, "\"dwell_secs\"");
+        if (key_pos) {
+          // Find the colon after the key
+          char *colon_pos = strchr(key_pos, ':');
+          if (colon_pos) {
+            // Parse the integer value (atoi skips whitespace and stops at non-digits)
+            int dwell_value = atoi(colon_pos + 1);
 
-        // Simple string parsing for {"dwell_secs": xxx}
-        char *dwell_pos = strstr((char *)data->data_ptr, "dwell_secs");
-        if (dwell_pos) {
-          // Find position after the colon
-          char *value_str_start = dwell_pos + 13; // "dwell_secs\":" is 13 chars long
-
-          // Safely parse the integer value
-          char temp_val_buf[12]; // Buffer for up to 10 digits + sign + null
-          int k = 0;
-          // Iterate while char is digit and we have space in temp_val_buf (excluding null term)
-          // and we are within data->data_ptr + data->data_len bounds
-          while (k < (sizeof(temp_val_buf) - 1) && (value_str_start + k < (char*)data->data_ptr + data->data_len) && isdigit((unsigned char)value_str_start[k])) {
-              temp_val_buf[k] = value_str_start[k];
-              k++;
-          }
-          temp_val_buf[k] = '\0'; // Null-terminate the copied digits
-
-          int dwell_value = 0;
-          if (k > 0) { // Only call atoi if we copied some digits
-            dwell_value = atoi(temp_val_buf);
-          } else {
-            ESP_LOGW(TAG, "No digits found for dwell_secs value. Original string segment starts with: %.5s", value_str_start);
-            dwell_value = -1; // Indicate parsing failure
-          }
-
-          if (dwell_value == -1) { // If parsing failed
-            ESP_LOGE(TAG, "Failed to parse dwell_secs value from WebSocket message.");
-          } else {
             // Clamp value to reasonable range (1 to 3600 seconds = 1 hour)
             if (dwell_value < 1) dwell_value = 1;
             if (dwell_value > 3600) dwell_value = 3600;
@@ -121,48 +101,23 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         }
       }
       // Check if data contains "brightness"
-      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"brightness\":")) {
-        ESP_LOGI(TAG, "Brightness data detected");
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"brightness\"")) {
+        // Find "brightness" key and parse the value after the colon
+        char *key_pos = strstr((char *)data->data_ptr, "\"brightness\"");
+        if (key_pos) {
+          // Find the colon after the key
+          char *colon_pos = strchr(key_pos, ':');
+          if (colon_pos) {
+            // Parse the integer value (atoi skips whitespace and stops at non-digits)
+            int brightness_value = atoi(colon_pos + 1);
 
-        // Simple string parsing for {"brightness": xxx}
-        char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
-        if (brightness_pos) {
-          // Find position after the space that follows the colon
-          char *value_str_start = brightness_pos + 13; // "brightness\":" is 13 chars long
-
-          // Safely parse the integer value
-          char temp_val_buf[12]; // Buffer for up to 10 digits (e.g., "2147483647") + sign + null
-          int k = 0;
-          // Iterate while char is digit and we have space in temp_val_buf (excluding null term)
-          // and we are within data->data_ptr + data->data_len bounds
-          while (k < (sizeof(temp_val_buf) - 1) && (value_str_start + k < (char*)data->data_ptr + data->data_len) && isdigit((unsigned char)value_str_start[k])) {
-              temp_val_buf[k] = value_str_start[k];
-              k++;
-          }
-          temp_val_buf[k] = '\0'; // Null-terminate the copied digits
-
-          int brightness_value = 0;
-          if (k > 0) { // Only call atoi if we copied some digits
-            brightness_value = atoi(temp_val_buf);
-            ESP_LOGI(TAG, "Parsed brightness: %d from string '%s'", brightness_value, temp_val_buf);
-          } else {
-            ESP_LOGW(TAG, "No digits found for brightness value. Original string segment starts with: %.5s", value_str_start);
-            // Default to a safe brightness or handle as an error? For now, 0.
-            brightness_value = -1; // Indicate parsing failure or use a default
-          }
-
-          if (brightness_value == -1) { // If parsing failed
-            // Optionally, log error and skip setting brightness or set a default
-            ESP_LOGE(TAG, "Failed to parse brightness value from WebSocket message.");
-            // Keep existing brightness or set to a safe default like DISPLAY_MIN_BRIGHTNESS
-            // For now, we'll just not update if parsing fails.
-          } else {
             // Clamp value between min and max
             if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
             if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
 
             // Set the brightness
             display_set_brightness((uint8_t)brightness_value);
+            ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
           }
         }
       } else if (data->op_code == 2) {
