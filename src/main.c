@@ -182,19 +182,6 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           // This will wait for the current animation to finish before loading
           int counter = gfx_update(webp, data->payload_len, app_dwell_secs);
 
-          // Send immediate "queued" notification so server knows we received it
-          if (ws_handle && esp_websocket_client_is_connected(ws_handle)) {
-            char message[128];
-            int64_t timestamp = esp_timer_get_time() / 1000;
-            int len = snprintf(message, sizeof(message),
-                             "{\"status\":\"queued\",\"counter\":%d,\"timestamp\":%lld}",
-                             counter, timestamp);
-            if (len > 0 && len < sizeof(message)) {
-              // esp_websocket_client_send_text(ws_handle, message, len, portMAX_DELAY);
-              // ESP_LOGI(TAG, "Sent queued notification: %s", message);
-            }
-          }
-
           // Do not free(webp) here; ownership is transferred to gfx
           webp = NULL;
         }
