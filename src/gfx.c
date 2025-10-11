@@ -10,6 +10,7 @@
 #include "display.h"
 #include "esp_timer.h"
 #include "lib/assets/assets.h"
+#include "version.h"
 
 static const char *TAG = "gfx";
 
@@ -71,6 +72,19 @@ int gfx_initialize() {
   if (display_initialize()) {
     return 1;
   }
+
+  // Display version number for 1 second
+  display_clear();
+  char version_text[32];
+  snprintf(version_text, sizeof(version_text), "v%s", FIRMWARE_VERSION);
+
+  // Calculate x position to center text (approximately)
+  // Each character is 6 pixels wide (5 + 1 spacing)
+  int text_width = strlen(version_text) * 6;
+  int x = (64 - text_width) / 2;  // Center on 64-pixel wide display
+
+  display_text(version_text, x, 12, 255, 255, 255, 1);  // White text, centered
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   // Launch the graphics loop in separate task
   BaseType_t ret =
@@ -233,6 +247,10 @@ int gfx_display_asset(const char* asset_type) {
 
   // gfx_update now owns the asset_heap_copy buffer (returns counter >= 0 on success)
   return 0;
+}
+
+void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t b, int scale) {
+  display_text(text, x, y, r, g, b, scale);
 }
 
 void gfx_shutdown() { display_shutdown(); }
