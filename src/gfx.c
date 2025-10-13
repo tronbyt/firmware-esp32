@@ -73,10 +73,12 @@ int gfx_initialize() {
     return 1;
   }
 
+#ifndef SKIP_DISPLAY_VERSION
   // Display version number for 1 second
   display_clear();
   char version_text[32];
   snprintf(version_text, sizeof(version_text), "v%s", FIRMWARE_VERSION);
+
 
   // Calculate x position to center text (approximately)
   // Each character is 6 pixels wide (5 + 1 spacing)
@@ -85,6 +87,7 @@ int gfx_initialize() {
 
   display_text(version_text, x, 12, 255, 255, 255, 1);  // White text, centered
   vTaskDelay(pdMS_TO_TICKS(1000));
+#endif
 
   // Launch the graphics loop in separate task
   BaseType_t ret =
