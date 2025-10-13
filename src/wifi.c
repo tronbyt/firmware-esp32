@@ -24,7 +24,7 @@
 #define TAG "WIFI"
 
 // Default AP configuration
-#define DEFAULT_AP_SSID "TRONBYT-CONFIG"
+#define DEFAULT_AP_SSID "TRON-CONFIG"
 #define DEFAULT_AP_PASSWORD ""
 
 // NVS namespace and keys
