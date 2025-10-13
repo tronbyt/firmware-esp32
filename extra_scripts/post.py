@@ -84,7 +84,7 @@ def main():
     Main function that sets up the post-upload action
     """
     # Add post-upload action to rename secrets file
-    # env.AddPostAction("upload", rename_secrets_after_upload)
+    env.AddPostAction("upload", rename_secrets_after_upload)
 
 
 # Execute main function
