@@ -1,4 +1,3 @@
-#include <assets.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -6,6 +5,7 @@
 #include <webp/demux.h>
 #include <esp_websocket_client.h>
 #include <esp_crt_bundle.h>
+#include <esp_timer.h>
 #include <ctype.h> // For isdigit
 
 #include "display.h"
@@ -26,10 +26,10 @@
 #define DEFAULT_URL "http://URL.NOT.SET/"
 
 static const char* TAG = "main";
-int32_t isAnimating =
-    5;  // Initialize with a valid value enough time for boot animation
+int32_t isAnimating = 1;
 int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
 uint8_t *webp; // main buffer downloaded webp data
+static bool websocket_oversize_detected = false; // Flag to track oversize websocket messages
 
 bool use_websocket = false;
 esp_websocket_client_handle_t ws_handle;
@@ -37,6 +37,8 @@ esp_websocket_client_handle_t ws_handle;
 bool button_boot = false;
 
 bool config_received = false;
+
+
 
 void config_saved_callback(void) {
   config_received = true;
@@ -52,89 +54,99 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+      draw_error_indicator_pixel();
       break;
     case WEBSOCKET_EVENT_DATA:
-      ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
-      ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
+      // ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
+      // ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
       // ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
-      ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
-        data->payload_len, data->data_len, data->payload_offset);
+      // ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
+      //  data->payload_len, data->data_len, data->payload_offset);
       // Check if this is a complete message or just a fragment
       bool is_complete =
           (data->payload_offset + data->data_len >= data->payload_len);
 
-      if (is_complete) {
-        ESP_LOGI(TAG, "Message is complete");
 
-      } else {
-        ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-                 data->payload_offset + data->data_len, data->payload_len);
+
+      // Process text messages (op_code == 1) only when complete to avoid processing fragments multiple times
+      // Check if data contains "immediate"
+      if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"immediate\":")) {
+        ESP_LOGI(TAG, "Immediate command detected");
+
+        // Check if the value is true
+        if (strstr((char *)data->data_ptr, "true")) {
+          ESP_LOGI(TAG, "Interrupting current animation to load queued image");
+          isAnimating = -1;
+        }
       }
+      // Check if data contains "dwell_secs"
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"dwell_secs\"")) {
+        // Find "dwell_secs" key and parse the value after the colon
+        char *key_pos = strstr((char *)data->data_ptr, "\"dwell_secs\"");
+        if (key_pos) {
+          // Find the colon after the key
+          char *colon_pos = strchr(key_pos, ':');
+          if (colon_pos) {
+            // Parse the integer value (atoi skips whitespace and stops at non-digits)
+            int dwell_value = atoi(colon_pos + 1);
 
+            // Clamp value to reasonable range (1 to 3600 seconds = 1 hour)
+            if (dwell_value < 1) dwell_value = 1;
+            if (dwell_value > 3600) dwell_value = 3600;
+
+            // Set the dwell time
+            app_dwell_secs = dwell_value;
+            ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
+          }
+        }
+      }
       // Check if data contains "brightness"
-      if (data->op_code == 1 && strstr((char *)data->data_ptr, "{\"brightness\":")) {
-        ESP_LOGI(TAG, "Brightness data detected");
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"brightness\"")) {
+        // Find "brightness" key and parse the value after the colon
+        char *key_pos = strstr((char *)data->data_ptr, "\"brightness\"");
+        if (key_pos) {
+          // Find the colon after the key
+          char *colon_pos = strchr(key_pos, ':');
+          if (colon_pos) {
+            // Parse the integer value (atoi skips whitespace and stops at non-digits)
+            int brightness_value = atoi(colon_pos + 1);
 
-        // Simple string parsing for {"brightness": xxx}
-        char *brightness_pos = strstr((char *)data->data_ptr, "brightness");
-        if (brightness_pos) {
-          // Find position after the space that follows the colon
-          char *value_str_start = brightness_pos + 13; // "brightness\":" is 13 chars long
-
-          // Safely parse the integer value
-          char temp_val_buf[12]; // Buffer for up to 10 digits (e.g., "2147483647") + sign + null
-          int k = 0;
-          // Iterate while char is digit and we have space in temp_val_buf (excluding null term)
-          // and we are within data->data_ptr + data->data_len bounds
-          while (k < (sizeof(temp_val_buf) - 1) && (value_str_start + k < (char*)data->data_ptr + data->data_len) && isdigit((unsigned char)value_str_start[k])) {
-              temp_val_buf[k] = value_str_start[k];
-              k++;
-          }
-          temp_val_buf[k] = '\0'; // Null-terminate the copied digits
-
-          int brightness_value = 0;
-          if (k > 0) { // Only call atoi if we copied some digits
-            brightness_value = atoi(temp_val_buf);
-            ESP_LOGI(TAG, "Parsed brightness: %d from string '%s'", brightness_value, temp_val_buf);
-          } else {
-            ESP_LOGW(TAG, "No digits found for brightness value. Original string segment starts with: %.5s", value_str_start);
-            // Default to a safe brightness or handle as an error? For now, 0.
-            brightness_value = -1; // Indicate parsing failure or use a default
-          }
-
-          if (brightness_value == -1) { // If parsing failed
-            // Optionally, log error and skip setting brightness or set a default
-            ESP_LOGE(TAG, "Failed to parse brightness value from WebSocket message.");
-            // Keep existing brightness or set to a safe default like DISPLAY_MIN_BRIGHTNESS
-            // For now, we'll just not update if parsing fails.
-          } else {
             // Clamp value between min and max
             if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
             if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
 
             // Set the brightness
             display_set_brightness((uint8_t)brightness_value);
+            ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
           }
         }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
-        ESP_LOGI(TAG, "Binary data detected (WebP image)");
 
         // Check if this is a complete message or just a fragment
         bool is_complete =
             (data->payload_offset + data->data_len >= data->payload_len);
 
         if (is_complete) {
-          ESP_LOGI(TAG, "Message is complete");
-        } else {
-          ESP_LOGI(TAG, "Message is fragmented - received %d/%d bytes",
-                   data->payload_offset + data->data_len, data->payload_len);
+          // Reset oversize flag for next message
+          websocket_oversize_detected = false;
         }
 
-        // Check if payload size exceeds maximum buffer size
-        if (data->payload_len > HTTP_BUFFER_SIZE_MAX) {
+        // Check if payload size exceeds maximum buffer size (only on first fragment)
+        if (data->payload_offset == 0 && data->payload_len > HTTP_BUFFER_SIZE_MAX) {
           ESP_LOGE(TAG, "WebP payload size (%d bytes) exceeds maximum buffer size (%d bytes)",
                    data->payload_len, HTTP_BUFFER_SIZE_MAX);
+          // Display the oversize graphic
+          if (gfx_display_asset("oversize") != 0) {
+            ESP_LOGE(TAG, "Failed to display oversize graphic");
+          }
+          websocket_oversize_detected = true;
+          break;
+        }
+
+        // Skip processing if oversize was detected for this message
+        if (websocket_oversize_detected) {
+          ESP_LOGD(TAG, "Skipping fragment due to oversize detection");
           break;
         }
 
@@ -142,6 +154,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         if (data->payload_offset == 0) {
           // Free previous buffer if it exists
           if (webp != NULL) {
+            ESP_LOGW(TAG, "Discarding incomplete previous WebP buffer");
             free(webp);
             webp = NULL;
           }
@@ -149,7 +162,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
           // Allocate memory for the full payload
           webp = malloc(data->payload_len);
           if (webp == NULL) {
-            ESP_LOGE(TAG, "Failed to allocate memory for WebP image");
+            ESP_LOGE(TAG, "Failed to allocate memory for WebP image (%d bytes)", data->payload_len);
             break;
           }
         }
@@ -165,11 +178,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
         // If complete, process the WebP image
         if (is_complete) {
-          // Process the complete binary data as a WebP image
-          gfx_update(webp, data->payload_len);
-
-          // We don't control timing during websocket so use this to notify new data and to break out of current animation.
-          isAnimating = -1;
+          // Queue the complete binary data as a WebP image
+          // This will wait for the current animation to finish before loading
+          int counter = gfx_update(webp, data->payload_len, app_dwell_secs);
 
           // Do not free(webp) here; ownership is transferred to gfx
           webp = NULL;
@@ -178,7 +189,14 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
       break;
     case WEBSOCKET_EVENT_ERROR:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+      ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
+      // Check if we have an incomplete WebP buffer
+      if (webp != NULL) {
+        ESP_LOGW(TAG, "WebSocket error with incomplete WebP buffer - discarding");
+        free(webp);
+        webp = NULL;
+      }
+      draw_error_indicator_pixel();
       break;
   }
 }
@@ -222,7 +240,7 @@ void app_main(void) {
   esp_register_shutdown_handler(&flash_shutdown);
 
   // Setup the display.
-  if (gfx_initialize(ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN)) {
+  if (gfx_initialize()) {
     ESP_LOGE(TAG, "failed to initialize gfx");
     return;
   }
@@ -252,28 +270,14 @@ void app_main(void) {
   // Wait for WiFi connection (with a 60-second timeout)
   // This will block until either connected or timeout or short circuit if button was held during button.
   if (button_boot || !wifi_wait_for_connection(60000)) {
-    
     ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
     // Load up the config webp so that we don't just loop the boot screen over
     // and over again but show the ap config info webp
     ESP_LOGI(TAG, "Loading Config WEBP");
-    // gfx_update(ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN); // OLD LINE -
-    // passes non-heap pointer
 
-    // Corrected approach: Copy asset to heap buffer before passing to
-    // gfx_update
-    uint8_t *config_webp_heap_copy = (uint8_t *)malloc(ASSET_CONFIG_WEBP_LEN);
-    if (config_webp_heap_copy != NULL) {
-      memcpy(config_webp_heap_copy, ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN);
-      gfx_update(config_webp_heap_copy, ASSET_CONFIG_WEBP_LEN);
-      // gfx_update now owns the config_webp_heap_copy buffer.
-      // main.c should not free it.
-    } else {
-      ESP_LOGE(TAG,
-               "Failed to allocate memory for config webp copy. Skipping "
-               "config webp display.");
-      // Optionally, handle this error further, e.g., by not proceeding or using
-      // a default.
+    if (gfx_display_asset("config")) {
+      ESP_LOGE(TAG, "Failed to display config screen - continuing without it");
+      // Don't crash, just continue - the AP is still running
     }
   } else {
     ESP_LOGI(TAG, "WiFi connected successfully!");
@@ -361,6 +365,10 @@ void app_main(void) {
     esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,
                                   websocket_event_handler,
                                   (void *)ws_handle);
+
+    // Set the websocket handle in gfx module for bidirectional communication
+    gfx_set_websocket_handle(ws_handle);
+
     for (;;) {
       if (!esp_websocket_client_is_connected(ws_handle)) {
         ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
@@ -383,33 +391,68 @@ void app_main(void) {
       uint8_t *webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
-
+      int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
-      if (!wifi_is_connected() || remote_get(image_url, &webp, &len,
-                                         &brightness_pct, &app_dwell_secs)) {
-        ESP_LOGE(TAG, "No WiFi or Failed to get webp");
-        vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+
+      // Start timing the HTTP fetch
+      int64_t fetch_start_us = esp_timer_get_time();
+      bool fetch_failed = !wifi_is_connected() || remote_get(image_url, &webp, &len,
+                                         &brightness_pct, &app_dwell_secs, &status_code);
+      int64_t fetch_duration_ms = (esp_timer_get_time() - fetch_start_us) / 1000;
+
+      ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
+
+      if (fetch_failed) {
+        ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);
+        vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+        draw_error_indicator_pixel();  // Add this
+        if (status_code == 0) {
+          ESP_LOGI(TAG, "No connection");
+        } else if (status_code == 404 || status_code == 400) {
+          ESP_LOGI(TAG, "HTTP 404/400, displaying 404");
+          if (gfx_display_asset("error_404")) {
+            ESP_LOGE(TAG, "Failed to display 404 screen");
+          }
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        } else if (status_code == 413) {
+          ESP_LOGI(TAG, "Content too large - oversize graphic already displayed");
+          vTaskDelay(pdMS_TO_TICKS(1 * 5000));
+        }
       } else {
         // Successful remote_get
         display_set_brightness(brightness_pct);
         ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
-        gfx_update(webp, len);
+
+        int queued_counter = gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
-        // Wait for app_dwell_secs to expire (isAnimating will be 0)
-        ESP_LOGI(TAG, BLUE "isAnimating is %d" RESET, (int)isAnimating);
-        if (isAnimating > 0)
-          ESP_LOGI(TAG, BLUE "Delay for current webp" RESET);
-        while (isAnimating > 0) {
-          vTaskDelay(pdMS_TO_TICKS(1));
+
+        // Wait for the current animation to finish (isAnimating will be 0)
+        if (isAnimating > 0) {
+          ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
+          while (isAnimating > 0) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+          }
         }
-        ESP_LOGI(TAG, BLUE "Setting isAnimating to %d" RESET,
-                (int)app_dwell_secs);
-        isAnimating = app_dwell_secs;  // use isAnimating as the container
-                                      // for app_dwell_secs
-        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        // Wait for gfx task to load the newly queued image before fetching the next one
+        // This ensures the image has begun displaying before we fetch again
+        ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)", queued_counter);
+        int timeout = 0;
+        while (gfx_get_loaded_counter() != queued_counter && timeout < 20000) {
+          vTaskDelay(pdMS_TO_TICKS(10));
+          timeout += 10;
+        }
+        if (timeout >= 20000) {
+          ESP_LOGE(TAG, "Timeout waiting for gfx task to load image");
+        } else {
+          ESP_LOGI(TAG, "Gfx task loaded image after %d ms", timeout);
+        }
+
+        ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
+        isAnimating = 1;
       }
-      wifi_health_check();
+    wifi_health_check();
     }
   }
 

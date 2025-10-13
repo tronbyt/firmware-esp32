@@ -68,6 +68,27 @@ This [patches](extra_scripts/patch_i2s_divider.py) the HUB75 matrix library to u
 
 ## Back to Normal
 
+### Using Web Flasher (Recommended)
+
+The easiest way to restore your Tidbyt to factory firmware is using the web flasher with the pre-built merged binary files:
+
+1. Download the appropriate merged binary file:
+   - **Gen 1**: [gen1_merged.bin](https://github.com/tronbyt/firmware-esp32/raw/main/reset/gen1_merged.bin)
+   - **Gen 2**: [gen2_merged.bin](https://github.com/tronbyt/firmware-esp32/raw/main/reset/gen2_merged.bin)
+2. Visit [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/) (requires Chrome or Edge browser)
+3. Connect your Tidbyt via USB
+4. Use the following settings:
+   - **Flash Address**: `0x0`
+   - **File**: Select the downloaded merged binary file
+
+![Web Flasher Settings](docs/assets/web_flasher_settings.png)
+
+4. Click "Program" to flash the factory firmware
+
+### Using PlatformIO
+
+Alternatively, you can use PlatformIO to restore the factory firmware.
+
 To get your Tidbyt back to normal, you can run the following to flash the
 production firmware onto your Tidbyt:
 
@@ -80,6 +101,9 @@ And if you're working with a Tidbyt Gen 2:
 ```
 pio run --target reset --environment tidbyt-gen2
 ```
+### Using the WiFi config portal
+The firmware has a rudimentary wifi config portal page that can be accessed by joining the TRONBYT-CONFIG network and navigating to http://10.10.0.1  . 
+[WiFi Config Portal How-To Video](https://www.youtube.com/watch?v=OAWUCG-HRDs)
 
 [1]: https://github.com/tidbyt/pixlet
 [2]: https://docs.platformio.org/en/latest/core/installation/index.html

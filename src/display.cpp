@@ -1,4 +1,5 @@
 #include "display.h"
+#include "font5x7.h"
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #ifdef TIDBYT_GEN2
@@ -244,3 +245,70 @@ void display_draw(const uint8_t *pix, int width, int height,
 }
 
 void display_clear() { _matrix->clearScreen(); }
+
+void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+  if (_matrix != NULL) {
+    _matrix->drawPixelRGB888(x, y, r, g, b);
+    _matrix->flipDMABuffer();
+  }
+}
+
+void draw_error_indicator_pixel() {
+  display_draw_pixel(0, 0, 100, 0, 0);
+}
+
+void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t b, int scale) {
+  if (_matrix == NULL || text == NULL) {
+    return;
+  }
+
+  int cursor_x = x;
+  int cursor_y = y;
+
+  // Iterate through each character in the string
+  for (int i = 0; text[i] != '\0'; i++) {
+    char c = text[i];
+
+    // Check if character is in font range
+    if (c < FONT5X7_FIRST_CHAR || c > FONT5X7_LAST_CHAR) {
+      c = ' '; // Replace unsupported characters with space
+    }
+
+    // Get font data for this character
+    int char_index = c - FONT5X7_FIRST_CHAR;
+    const uint8_t* char_data = font5x7[char_index];
+
+    // Draw each column of the character
+    for (int col = 0; col < FONT5X7_CHAR_WIDTH; col++) {
+      uint8_t column_data = char_data[col];
+
+      // Draw each row in the column
+      for (int row = 0; row < FONT5X7_CHAR_HEIGHT; row++) {
+        if (column_data & (1 << row)) {
+          // Draw pixel(s) based on scale
+          for (int sy = 0; sy < scale; sy++) {
+            for (int sx = 0; sx < scale; sx++) {
+              int px = cursor_x + (col * scale) + sx;
+              int py = cursor_y + (row * scale) + sy;
+
+              // Check bounds
+              #ifdef TRONBYT_S3_WIDE
+              if (px >= 0 && px < 128 && py >= 0 && py < 64) {
+              #else
+              if (px >= 0 && px < 64 && py >= 0 && py < 32) {
+              #endif
+                _matrix->drawPixelRGB888(px, py, r, g, b);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Move cursor to next character position (5 pixels + 1 pixel spacing)
+    cursor_x += (FONT5X7_CHAR_WIDTH + 1) * scale;
+  }
+
+  // Flip the DMA buffer to show the text
+  _matrix->flipDMABuffer();
+}
