@@ -35,7 +35,7 @@ static void gfx_loop(void *arg);
 static int draw_webp(uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
 static void send_websocket_notification(int counter);
 
-int gfx_initialize() {
+int gfx_initialize(const char *img_url) {
   // Only initialize once
   if (_state) {
     ESP_LOGE(TAG, "Already initialized");
@@ -74,19 +74,106 @@ int gfx_initialize() {
   }
 
 #ifndef SKIP_DISPLAY_VERSION
-  // Display version number for 1 second
+  // Display version and image_url for 1 second
   display_clear();
   char version_text[32];
   snprintf(version_text, sizeof(version_text), "v%s", FIRMWARE_VERSION);
 
+  // Parse URL to extract host and last two path components
+  if (img_url != NULL && strlen(img_url) > 0) {
+    ESP_LOGI(TAG, "Full URL: %s", img_url);
+    char host_only[64] = {0};
+    char last_two_components[32] = {0};
 
+    // Find the protocol separator
+    const char *url_start = strstr(img_url, "://");
+    if (url_start != NULL) {
+      url_start += 3;  // Skip past "://"
+
+      // Find the port separator or path separator
+      const char *port_sep = strchr(url_start, ':');
+      const char *path_sep = strchr(url_start, '/');
+
+      // Extract host only (without port)
+      size_t host_len;
+      if (port_sep != NULL && (path_sep == NULL || port_sep < path_sep)) {
+        // Port exists, extract up to the colon
+        host_len = port_sep - url_start;
+      } else if (path_sep != NULL) {
+        // No port, extract up to the path
+        host_len = path_sep - url_start;
+      } else {
+        // No port or path, use entire remaining string
+        host_len = strlen(url_start);
+      }
+
+      if (host_len < sizeof(host_only)) {
+        strncpy(host_only, url_start, host_len);
+        host_only[host_len] = '\0';
+      }
+
+      // Extract last two path components (e.g., "/next/ws" from "/id/next/ws")
+      if (path_sep != NULL) {
+        const char *path = path_sep;
+        const char *last_slash = NULL;
+        const char *second_last_slash = NULL;
+
+        // Find the last two slashes by scanning through the path
+        const char *p = path;
+        while (*p != '\0') {
+          if (*p == '/') {
+            second_last_slash = last_slash;
+            last_slash = p;
+          }
+          p++;
+        }
+
+        // If we found at least two slashes, use from the second-to-last
+        if (second_last_slash != NULL) {
+          strncpy(last_two_components, second_last_slash, sizeof(last_two_components) - 1);
+          last_two_components[sizeof(last_two_components) - 1] = '\0';
+        } else if (path != NULL) {
+          // Otherwise just use the entire path
+          strncpy(last_two_components, path, sizeof(last_two_components) - 1);
+          last_two_components[sizeof(last_two_components) - 1] = '\0';
+        }
+      }
+    }
+
+    // Display host at the top, left-aligned
+    if (strlen(host_only) > 0) {
+      ESP_LOGI(TAG, "Displaying host: '%s' at y=0", host_only);
+      display_text(host_only, 0, 0, 255, 255, 255, 1);
+    }
+
+    // Display last 11 chars of path components in the middle, left-aligned
+    if (strlen(last_two_components) > 0) {
+      const char* display_path = last_two_components;
+      size_t path_len = strlen(last_two_components);
+
+      // If longer than 11 chars, show only the last 11
+      if (path_len > 11) {
+        display_path = last_two_components + (path_len - 11);
+      }
+
+      ESP_LOGI(TAG, "Displaying path components: '%s' at y=10", display_path);
+      display_text(display_path, 0, 10, 255, 255, 255, 1);
+    } else {
+      ESP_LOGW(TAG, "No path components found to display");
+    }
+  }
+
+  // Display version at the bottom, centered
   // Calculate x position to center text (approximately)
   // Each character is 6 pixels wide (5 + 1 spacing)
   int text_width = strlen(version_text) * 6;
   int x = (64 - text_width) / 2;  // Center on 64-pixel wide display
+  display_text(version_text, x, 24, 255, 255, 255, 1);  // White text, centered at bottom
 
-  display_text(version_text, x, 12, 255, 255, 255, 1);  // White text, centered
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  // Flip the buffer once to show all three text lines at the same time
+  display_flip();
+
+  vTaskDelay(pdMS_TO_TICKS(2000));
 #endif
 
   // Launch the graphics loop in separate task
