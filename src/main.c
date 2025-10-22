@@ -202,6 +202,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 }
 
 void app_main(void) {
+
+  const char* image_url = NULL;
+
   // delete here for 5 seconds to allow for serial port to connect.
   ESP_LOGI(TAG, "App Main Start");
 
@@ -239,13 +242,6 @@ void app_main(void) {
   ESP_LOGI(TAG,"finished flash init");
   esp_register_shutdown_handler(&flash_shutdown);
 
-  // Setup the display.
-  if (gfx_initialize()) {
-    ESP_LOGE(TAG, "failed to initialize gfx");
-    return;
-  }
-  esp_register_shutdown_handler(&display_shutdown);
-
   // Setup WiFi.
   ESP_LOGI(TAG, "Initializing WiFi manager...");
   // Pass empty strings to force AP mode
@@ -254,6 +250,14 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
+  image_url = wifi_get_image_url();
+
+  // Setup the display.
+  if (gfx_initialize(image_url)) {
+    ESP_LOGE(TAG, "failed to initialize gfx");
+    return;
+  }
+  esp_register_shutdown_handler(&display_shutdown);
 
   // Register callback to detect configuration events
   wifi_register_config_callback(config_saved_callback);
@@ -332,8 +336,6 @@ void app_main(void) {
   } else {
     ESP_LOGE(TAG, "Failed to create AP shutdown timer");
   }
-
-  const char *image_url = NULL;
 
   while (true) {
     image_url = wifi_get_image_url();

@@ -309,6 +309,11 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
     cursor_x += (FONT5X7_CHAR_WIDTH + 1) * scale;
   }
 
-  // Flip the DMA buffer to show the text
-  _matrix->flipDMABuffer();
+  // Note: Not flipping buffer here anymore - caller must call display_flip()
+}
+
+void display_flip() {
+  if (_matrix != NULL) {
+    _matrix->flipDMABuffer();
+  }
 }
