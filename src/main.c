@@ -14,6 +14,7 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "version.h"
+#include "ws_protocol.h"
 #include "wifi.h"
 
 #ifdef BUTTON_PIN
@@ -39,6 +40,8 @@ bool button_boot = false;
 
 bool config_received = false;
 
+static uint8_t cached_mac[6]; // Cache MAC address at startup
+
 
 
 void config_saved_callback(void) {
@@ -47,13 +50,6 @@ void config_saved_callback(void) {
 }
 
 static char* get_client_info_json() {
-  // Get MAC address
-  uint8_t mac[6];
-  if (!wifi_get_mac(mac)) {
-    ESP_LOGE(TAG, "Failed to get MAC address for client_info");
-    return NULL;
-  }
-
   // Create JSON message: {
   //   "client_info" : {
   //     "firmware_version" : "1.25.0",
@@ -62,10 +58,6 @@ static char* get_client_info_json() {
   //     "mac_address" : "xx:xx:xx:xx:xx:xx"
   //   }
   // }
-//     firmware_version: str | None = None
-//     firmware_type: str | None = None
-//     protocol_version: int | None = None
-//     mac_address: str | None = Field(
   char* message = malloc(256);
   if (message == NULL) {
     ESP_LOGE(TAG, "Failed to allocate memory for client_info JSON");
@@ -73,8 +65,19 @@ static char* get_client_info_json() {
   }
 
   int len = snprintf(message, 256,
-                     "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":1,\"mac_address\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}}",
-                     FIRMWARE_VERSION, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                     "{"
+                       "\"client_info\":{"
+                         "\"firmware_version\":\"%s\","
+                         "\"firmware_type\":\"ESP32\","
+                         "\"protocol_version\":%d,"
+                         "\"mac_address\":\"%02x:%02x:%02x:%02x:%02x:%02x\""
+                       "}"
+                     "}",
+                     "<script alert()",
+                    //  FIRMWARE_VERSION,
+                     WS_PROTOCOL_VERSION,
+                     cached_mac[0], cached_mac[1], cached_mac[2],
+                     cached_mac[3], cached_mac[4], cached_mac[5]);
 
   if (len < 0 || len >= 256) {
     ESP_LOGE(TAG, "Failed to format client_info JSON");
@@ -97,19 +100,18 @@ static void send_websocket_client_info() {
   }
 
   char* message = get_client_info_json();
-  
+
   if (message == NULL) {
     return;
   }
 
   size_t len = strlen(message);
 
+  ESP_LOGI(TAG, "Sending websocket client_info: %s", message);
   int sent = esp_websocket_client_send_text(ws_handle, message, len,
                                             portMAX_DELAY);
   if (sent < 0) {
     ESP_LOGE(TAG, "Failed to send websocket client_info");
-  } else {
-    ESP_LOGI(TAG, "Sent websocket client_info: %s", message);
   }
 
   free(message);
@@ -341,6 +343,7 @@ void app_main(void) {
   if (!wifi_get_mac(mac)) {
     ESP_LOGI(TAG, "WiFi MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1],
              mac[2], mac[3], mac[4], mac[5]);
+    memcpy(cached_mac, mac, 6);
   }
 
   // Wait for WiFi connection (with a 60-second timeout)
@@ -478,6 +481,7 @@ void app_main(void) {
           vTaskDelay(pdMS_TO_TICKS(1 * 1000));
           continue;
         }
+        ESP_LOGI(TAG, "Sending HTTP client_info header: %s", client_info_json);
       }
 
       // Start timing the HTTP fetch
