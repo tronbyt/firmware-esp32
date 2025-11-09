@@ -13,6 +13,7 @@
 #include "gfx.h"
 #include "remote.h"
 #include "sdkconfig.h"
+#include "version.h"
 #include "wifi.h"
 
 #ifdef BUTTON_PIN
@@ -45,12 +46,83 @@ void config_saved_callback(void) {
   ESP_LOGI(TAG, "Configuration saved - signaling main task");
 }
 
+static char* get_client_info_json() {
+  // Get MAC address
+  uint8_t mac[6];
+  if (!wifi_get_mac(mac)) {
+    ESP_LOGE(TAG, "Failed to get MAC address for client_info");
+    return NULL;
+  }
+
+  // Create JSON message: {
+  //   "client_info" : {
+  //     "firmware_version" : "1.25.0",
+  //     "firmware_type" : "ESP32",
+  //     "protocol_version" : 1,
+  //     "mac_address" : "xx:xx:xx:xx:xx:xx"
+  //   }
+  // }
+//     firmware_version: str | None = None
+//     firmware_type: str | None = None
+//     protocol_version: int | None = None
+//     mac_address: str | None = Field(
+  char* message = malloc(256);
+  if (message == NULL) {
+    ESP_LOGE(TAG, "Failed to allocate memory for client_info JSON");
+    return NULL;
+  }
+
+  int len = snprintf(message, 256,
+                     "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":1,\"mac_address\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}}",
+                     FIRMWARE_VERSION, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+  if (len < 0 || len >= 256) {
+    ESP_LOGE(TAG, "Failed to format client_info JSON");
+    free(message);
+    return NULL;
+  }
+
+  return message;
+}
+
+static void send_websocket_client_info() {
+  if ( !ws_handle ) {
+    // No websocket handle set, skip notification
+    return;
+  }
+
+  if (!esp_websocket_client_is_connected(ws_handle)) {
+    ESP_LOGE(TAG, "Websocket not connected, skipping client_info");
+    return;
+  }
+
+  char* message = get_client_info_json();
+  
+  if (message == NULL) {
+    return;
+  }
+
+  size_t len = strlen(message);
+
+  int sent = esp_websocket_client_send_text(ws_handle, message, len,
+                                            portMAX_DELAY);
+  if (sent < 0) {
+    ESP_LOGE(TAG, "Failed to send websocket client_info");
+  } else {
+    ESP_LOGI(TAG, "Sent websocket client_info: %s", message);
+  }
+
+  free(message);
+}
+
 static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                                     int32_t event_id, void *event_data) {
   esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
   switch (event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
+      // Send our client info json string to server
+      send_websocket_client_info();
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
@@ -389,6 +461,7 @@ void app_main(void) {
   } else {
     // normal http
     ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", image_url);
+    static bool first_http_call = true;
     for (;;) {
       uint8_t *webp;
       size_t len;
@@ -396,10 +469,24 @@ void app_main(void) {
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
 
+      // Get client info JSON for HTTP header only on first call
+      char* client_info_json = NULL;
+      if (first_http_call) {
+        client_info_json = get_client_info_json();
+        if (client_info_json == NULL) {
+          ESP_LOGE(TAG, "Failed to get client info JSON");
+          vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+          continue;
+        }
+      }
+
       // Start timing the HTTP fetch
       int64_t fetch_start_us = esp_timer_get_time();
       bool fetch_failed = !wifi_is_connected() || remote_get(image_url, &webp, &len,
-                                         &brightness_pct, &app_dwell_secs, &status_code);
+                                         &brightness_pct, &app_dwell_secs, &status_code, client_info_json);
+      if (client_info_json != NULL) {
+        free(client_info_json);  // Free after use
+      }
       int64_t fetch_duration_ms = (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
@@ -453,6 +540,7 @@ void app_main(void) {
 
         ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
         isAnimating = 1;
+        first_http_call = false;
       }
     wifi_health_check();
     }

@@ -146,7 +146,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code, const char* client_info_json) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),
@@ -177,6 +177,11 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
     ESP_LOGE(TAG, "HTTP client initialization failed for URL: %s", url);
     free(state.buf);
     return 1;
+  }
+
+  // Set client info header if provided
+  if (client_info_json != NULL) {
+    esp_http_client_set_header(http, "X-Tronbyt-Client-Info", client_info_json);
   }
 
   // Do the request
