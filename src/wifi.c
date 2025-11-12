@@ -48,7 +48,9 @@
 // Static variables
 static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t *s_sta_netif = NULL;
+#if ENABLE_AP_MODE
 static esp_netif_t *s_ap_netif = NULL;
+#endif
 static httpd_handle_t s_server = NULL;
 static void (*s_config_callback)(void) = NULL;
 
@@ -158,6 +160,10 @@ static bool has_saved_config = false;
 int wifi_initialize(const char *ssid, const char *password) {
   ESP_LOGI(TAG, "Initializing WiFi");
 
+#if !ENABLE_AP_MODE
+  ESP_LOGI(TAG, "AP mode disabled via secrets; starting without config portal");
+#endif
+
   // Initialize NVS
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -177,8 +183,11 @@ int wifi_initialize(const char *ssid, const char *password) {
 
   // Create default STA and AP network interfaces
   s_sta_netif = esp_netif_create_default_wifi_sta();
+#if ENABLE_AP_MODE
   s_ap_netif = esp_netif_create_default_wifi_ap();
+#endif
 
+#if ENABLE_AP_MODE
   // Configure AP IP address to 10.10.0.1
   esp_netif_ip_info_t ip_info;
   IP4_ADDR(&ip_info.ip, 10, 10, 0, 1);
@@ -198,6 +207,7 @@ int wifi_initialize(const char *ssid, const char *password) {
 
   // Start DHCP server with new configuration
   esp_netif_dhcps_start(s_ap_netif);
+#endif
 
   // Initialize WiFi with default config
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -274,10 +284,15 @@ int wifi_initialize(const char *ssid, const char *password) {
   // Start WiFi
   ESP_LOGI(TAG, "Starting WiFi");
 
-  // Set WiFi mode to AP+STA
+  // Set WiFi mode to AP+STA unless AP mode is disabled
+#if !ENABLE_AP_MODE
+  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+#else
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+#endif
 
-  // Configure AP with explicit settings
+  // Configure AP with explicit settings when enabled
+#if ENABLE_AP_MODE
   wifi_config_t ap_config = {0};
   strcpy((char *)ap_config.ap.ssid, DEFAULT_AP_SSID);
   // strcpy((char *)ap_config.ap.password, DEFAULT_AP_PASSWORD);
@@ -294,23 +309,31 @@ int wifi_initialize(const char *ssid, const char *password) {
 
       ESP_LOGI(TAG, "Setting AP SSID: %s on channel %d", DEFAULT_AP_SSID, random_channel);
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+#endif
 
   // Start WiFi
   ESP_ERROR_CHECK(esp_wifi_start());
 
   // Wait for AP to start
+#if ENABLE_AP_MODE
   vTaskDelay(pdMS_TO_TICKS(500));
 
   // Start the web server
   start_webserver();
+#endif
 
   // Only attempt to connect if we have valid saved credentials
   if (has_saved_config && strlen(s_wifi_ssid) > 0) {
     ESP_LOGI(TAG, "Attempting to connect with saved/hardcoded credentials");
     connect_to_ap();
   } else {
+#if !ENABLE_AP_MODE
+    ESP_LOGW(TAG,
+             "No valid WiFi credentials available and AP mode is disabled");
+#else
     ESP_LOGI(TAG,
              "No valid WiFi credentials available, starting in AP mode only");
+#endif
     // Reset any previous connection attempts
     s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
     s_connection_given_up = true;
@@ -322,6 +345,10 @@ int wifi_initialize(const char *ssid, const char *password) {
 
 // Shutdown the AP by switching wifi mode to STA
 void wifi_shutdown_ap(TimerHandle_t xTimer) {
+#if !ENABLE_AP_MODE
+  ESP_LOGI(TAG, "AP mode disabled; config portal not running");
+  return;
+#endif
   ESP_LOGI(TAG, "Shutting down config portal");
   stop_webserver();
   esp_wifi_set_mode(WIFI_MODE_STA);

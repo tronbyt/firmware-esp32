@@ -5,6 +5,10 @@
 #include <esp_err.h>
 #include <esp_http_server.h>
 
+#ifndef ENABLE_AP_MODE
+#define ENABLE_AP_MODE 1
+#endif
+
 /**
  * @brief Initialize WiFi
  *

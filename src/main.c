@@ -273,7 +273,18 @@ void app_main(void) {
 
   // Wait for WiFi connection (with a 60-second timeout)
   // This will block until either connected or timeout or short circuit if button was held during button.
-  if (button_boot || !wifi_wait_for_connection(60000)) {
+  bool sta_connected = wifi_wait_for_connection(60000);
+#if !ENABLE_AP_MODE
+  if (!sta_connected) {
+    ESP_LOGW(TAG, "WiFi didn't connect and AP mode is disabled - check secrets");
+  } else {
+    if (button_boot) {
+      ESP_LOGW(TAG, "Boot button pressed but AP mode disabled; skipping configuration portal");
+    }
+    ESP_LOGI(TAG, "WiFi connected successfully!");
+  }
+#else
+  if (button_boot || !sta_connected) {
     ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
     // Load up the config webp so that we don't just loop the boot screen over
     // and over again but show the ap config info webp
@@ -286,9 +297,13 @@ void app_main(void) {
   } else {
     ESP_LOGI(TAG, "WiFi connected successfully!");
   }
+#endif
 
   // Wait for configuration when boot button was pressed
   if (button_boot) {
+#if !ENABLE_AP_MODE
+    ESP_LOGW(TAG, "Boot button pressed but AP mode disabled; skipping configuration wait");
+#else
     ESP_LOGW(TAG,
              "Boot button pressed - waiting for configuration or timeout...");
     int config_wait_counter = 0;
@@ -303,6 +318,7 @@ void app_main(void) {
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
 
     }
+#endif
   } else if(!wifi_is_connected()) {
     ESP_LOGW(TAG,"Pausing main task until wifi connected . . . ");
     while (!wifi_is_connected()) {
@@ -314,7 +330,8 @@ void app_main(void) {
   }
 
 
-  // Create a timer to auto-shutdown the AP after 5 minutes
+  // When AP mode is enabled, auto-shutdown the AP after a short delay
+#if ENABLE_AP_MODE
   TimerHandle_t ap_shutdown_timer = xTimerCreate(
       "ap_shutdown_timer",
       pdMS_TO_TICKS(2 * 60 * 1000),  // 2 minutes in milliseconds
@@ -336,6 +353,7 @@ void app_main(void) {
   } else {
     ESP_LOGE(TAG, "Failed to create AP shutdown timer");
   }
+#endif
 
   while (true) {
     image_url = wifi_get_image_url();
