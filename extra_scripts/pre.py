@@ -41,6 +41,7 @@ def load_secrets_config():
                     "remote_url": json_config.get("REMOTE_URL", ""),
                     "refresh_interval_seconds": json_config.get("REFRESH_INTERVAL_SECONDS", 10),
                     "default_brightness": json_config.get("DEFAULT_BRIGHTNESS", 10),
+                    "enable_ap_mode": json_config.get("ENABLE_AP_MODE", True),
                     "source": "secrets.json"
                 }
         except (json.JSONDecodeError, IOError) as e:
@@ -85,6 +86,7 @@ def load_secrets_config():
                         "REFRESH_INTERVAL_SECONDS", 10
                     ),
                     "default_brightness": json_config.get("DEFAULT_BRIGHTNESS", 10),
+                    "enable_ap_mode": json_config.get("ENABLE_AP_MODE", True),
                     "source": "secrets.json",
                 }
         except (json.JSONDecodeError, IOError) as e:
@@ -115,6 +117,7 @@ def main() -> None:
             f"-DREMOTE_URL={env.StringifyMacro(config['remote_url'])}",
             f"-DREFRESH_INTERVAL_SECONDS={config['refresh_interval_seconds']}",
             f"-DDEFAULT_BRIGHTNESS={config['default_brightness']}",
+            f"-DENABLE_AP_MODE={(1 if config.get('enable_ap_mode', True) else 0)}",
         ],
     )
 
@@ -125,6 +128,7 @@ def main() -> None:
         print(f"   URL: {config['remote_url']}")
         print(f"   Refresh: {config['refresh_interval_seconds']}s")
         print(f"   Brightness: {config['default_brightness']}")
+        print(f"   AP mode enabled: {config.get('enable_ap_mode', True)}")
         if config['source'] == 'secrets.json.injected':
             print("   ℹ️  Using previously injected configuration")
     else:
