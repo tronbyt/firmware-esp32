@@ -35,6 +35,9 @@
   #define LAT 9
   #define OE 10
   #define CLK 11
+
+  #define WIDTH 128
+  #define HEIGHT 64
 #elif defined(TRONBYT_S3)
   #define R1 4
   #define G1 6
@@ -116,15 +119,23 @@
     #define BL2 23
   #endif
 
-#define CH_A 26
-#define CH_B 5
-#define CH_C 25
-#define CH_D 18
-#define CH_E -1  // assign to pin 14 if using more than two panels
+  #define CH_A 26
+  #define CH_B 5
+  #define CH_C 25
+  #define CH_D 18
+  #define CH_E -1  // assign to pin 14 if using more than two panels
 
-#define LAT 19
-#define OE 32
-#define CLK 33
+  #define LAT 19
+  #define OE 32
+  #define CLK 33
+#endif
+
+#ifndef WIDTH
+#define WIDTH 64
+#endif
+
+#ifndef HEIGHT
+#define HEIGHT 32
 #endif
 
 static MatrixPanel_I2S_DMA *_matrix;
@@ -142,9 +153,8 @@ int display_initialize() {
   bool invert_clock_phase = true;
   #endif
 
-  #ifdef TRONBYT_S3_WIDE
-  HUB75_I2S_CFG mxconfig(128,                     // width
-                         64,                      // height
+  HUB75_I2S_CFG mxconfig(WIDTH,                   // width
+                         HEIGHT,                  // height
                          1,                       // chain length
                          pins,                    // pin mapping
                          HUB75_I2S_CFG::FM6126A,  // driver chip
@@ -154,19 +164,6 @@ int display_initialize() {
                          1,                       // latch blanking
                          invert_clock_phase       // invert clock phase
   );
-  #else
-  HUB75_I2S_CFG mxconfig(64,                      // width
-                         32,                      // height
-                         1,                       // chain length
-                         pins,                    // pin mapping
-                         HUB75_I2S_CFG::FM6126A,  // driver chip
-                         HUB75_I2S_CFG::TYPE138,  // line driver
-                         true,                    // double-buffering
-                         HUB75_I2S_CFG::HZ_10M,   // clock speed
-                         1,                       // latch blanking
-                         invert_clock_phase       // invert clock phase
-  );
-  #endif
 
   _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
