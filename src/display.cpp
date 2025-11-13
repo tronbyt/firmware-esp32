@@ -148,6 +148,7 @@ int display_initialize() {
                          1,                       // chain length
                          pins,                    // pin mapping
                          HUB75_I2S_CFG::FM6126A,  // driver chip
+                         HUB75_I2S_CFG::TYPE138,  // line driver
                          true,                    // double-buffering
                          HUB75_I2S_CFG::HZ_10M,   // clock speed
                          1,                       // latch blanking
@@ -159,6 +160,7 @@ int display_initialize() {
                          1,                       // chain length
                          pins,                    // pin mapping
                          HUB75_I2S_CFG::FM6126A,  // driver chip
+                         HUB75_I2S_CFG::TYPE138,  // line driver
                          true,                    // double-buffering
                          HUB75_I2S_CFG::HZ_10M,   // clock speed
                          1,                       // latch blanking
