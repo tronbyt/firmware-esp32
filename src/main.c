@@ -58,16 +58,27 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         char mac_str[18];
         char client_info[256];
 
+        int len;
         if (wifi_get_mac(mac) == 0) {
             snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            ESP_LOGI(TAG, "MAC address obtained: %s", mac_str);
 
-            snprintf(client_info, sizeof(client_info),
+            len = snprintf(client_info, sizeof(client_info),
                      "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":%d,\"mac\":\"%s\"}}",
                      FIRMWARE_VERSION, WEBSOCKET_PROTOCOL_VERSION, mac_str);
+        } else {
+            ESP_LOGW(TAG, "Failed to get MAC address; sending client info without MAC.");
+            len = snprintf(client_info, sizeof(client_info),
+                     "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":%d}}",
+                     FIRMWARE_VERSION, WEBSOCKET_PROTOCOL_VERSION);
+        }
 
+        if (len > 0 && len < sizeof(client_info)) {
             ESP_LOGI(TAG, "Sending client info: %s", client_info);
-            esp_websocket_client_send_text(ws_handle, client_info, strlen(client_info), portMAX_DELAY);
+            esp_websocket_client_send_text(ws_handle, client_info, len, portMAX_DELAY);
+        } else {
+            ESP_LOGE(TAG, "Failed to create client info string or it was truncated. Length: %d, Buffer size: %zu", len, sizeof(client_info));
         }
       }
       break;
