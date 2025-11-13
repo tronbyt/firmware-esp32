@@ -14,6 +14,7 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "wifi.h"
+#include "version.h"
 
 #ifdef BUTTON_PIN
 #include <driver/gpio.h>
@@ -24,6 +25,7 @@
 
 // Default URL if none is provided through WiFi manager
 #define DEFAULT_URL "http://URL.NOT.SET/"
+#define WEBSOCKET_PROTOCOL_VERSION 1
 
 static const char* TAG = "main";
 int32_t isAnimating = 1;
@@ -51,6 +53,23 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
   switch (event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
+      {
+        uint8_t mac[6];
+        char mac_str[18];
+        char client_info[256];
+
+        if (wifi_get_mac(mac) == 0) {
+            snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+            snprintf(client_info, sizeof(client_info),
+                     "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":%d,\"mac\":\"%s\"}}",
+                     FIRMWARE_VERSION, WEBSOCKET_PROTOCOL_VERSION, mac_str);
+
+            ESP_LOGI(TAG, "Sending client info: %s", client_info);
+            esp_websocket_client_send_text(ws_handle, client_info, strlen(client_info), portMAX_DELAY);
+        }
+      }
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
