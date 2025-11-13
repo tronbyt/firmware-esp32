@@ -29,9 +29,9 @@ If using tronbyt_manager in docker replace the ip address to the docker host's i
 
 ```
 {
-    "WIFI_SSID": "myssiD",
+    "WIFI_SSID": "myssid",
     "WIFI_PASSWORD": "<PASSWORD>",
-    "REMOTE_URL=": "http://homeServer.local:8000/admin/tronbyt_1/next",
+    "REMOTE_URL": "http://homeServer.local:8000/admin/tronbyt_1/next",
     "REFRESH_INTERVAL_SECONDS": 10,
     "DEFAULT_BRIGHTNESS" : 30
 }
