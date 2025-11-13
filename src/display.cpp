@@ -19,6 +19,9 @@
   #define LAT 18
   #define OE 27
   #define CLK 15
+
+  #define CLOCK_SPEED HUB75_I2S_CFG::HZ_16M
+  #define LATCH_BLANKING 3
 #elif defined(TRONBYT_S3_WIDE)
   #define R1 4
   #define G1 5
@@ -38,6 +41,8 @@
 
   #define WIDTH 128
   #define HEIGHT 64
+  #define CLOCK_SPEED HUB75_I2S_CFG::HZ_16M
+  #define LATCH_BLANKING 3
 #elif defined(TRONBYT_S3)
   #define R1 4
   #define G1 6
@@ -55,6 +60,9 @@
   #define LAT 9
   #define OE 10
   #define CLK 11
+
+  #define CLOCK_SPEED HUB75_I2S_CFG::HZ_16M
+  #define LATCH_BLANKING 3
 #elif defined(PIXOTICKER)
   #define R1 2
   #define G1 4
@@ -128,6 +136,9 @@
   #define LAT 19
   #define OE 32
   #define CLK 33
+
+  #define CLOCK_SPEED HUB75_I2S_CFG::HZ_16M
+  #define LATCH_BLANKING 3
 #endif
 
 #ifndef WIDTH
@@ -136,6 +147,14 @@
 
 #ifndef HEIGHT
 #define HEIGHT 32
+#endif
+
+#ifndef CLOCK_SPEED
+#define CLOCK_SPEED HUB75_I2S_CFG::HZ_10M
+#endif
+
+#ifndef LATCH_BLANKING
+#define LATCH_BLANKING 1
 #endif
 
 static MatrixPanel_I2S_DMA *_matrix;
@@ -160,8 +179,8 @@ int display_initialize() {
                          HUB75_I2S_CFG::FM6126A,  // driver chip
                          HUB75_I2S_CFG::TYPE138,  // line driver
                          true,                    // double-buffering
-                         HUB75_I2S_CFG::HZ_10M,   // clock speed
-                         1,                       // latch blanking
+                         CLOCK_SPEED,             // clock speed
+                         LATCH_BLANKING,          // latch blanking
                          invert_clock_phase       // invert clock phase
   );
 
