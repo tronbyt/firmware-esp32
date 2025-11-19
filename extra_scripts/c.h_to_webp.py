@@ -1,8 +1,16 @@
 import re
+import argparse
+import sys
 
-# Input C file containing the array
-input_c_file = "/Users/tavis/code/tronbyt-firmware-http/lib/assets/noapps_webp.c"
-output_webp_file = "output.webp"
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description='Convert C header array to WebP binary file')
+parser.add_argument('input_file', help='Path to the input C file containing the hex array')
+parser.add_argument('-o', '--output', default='output.webp', help='Path to the output WebP file (default: output.webp)')
+
+args = parser.parse_args()
+
+input_c_file = args.input_file
+output_webp_file = args.output
 
 # Read the C file
 with open(input_c_file, "r") as f:
