@@ -87,6 +87,12 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         break;
       }
 
+      // If buffer was freed, don't process any data
+      if (state->buf == NULL) {
+        ESP_LOGD(TAG, "Discarding HTTP data due to freed buffer");
+        break;
+      }
+
       // if (event->data_len > max_data_size) {
       //   ESP_LOGW(TAG, "Discarding HTTP response due to missing state");
       //   break;
@@ -100,8 +106,15 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         if (state->size > state->max) {
           ESP_LOGE(TAG, "Response size exceeds allowed max (%d bytes)",
                    state->max);
+          // Display the oversize graphic
+          if (gfx_display_asset("oversize") != 0) {
+            ESP_LOGE(TAG, "Failed to display oversize graphic");
+          }
           free(state->buf);
+          state->buf = NULL;
+          state->oversize_detected = true;
           err = ESP_ERR_NO_MEM;
+          esp_http_client_close(event->client);  // Abort the HTTP request
           break;
         }
 
@@ -110,6 +123,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         if (new == NULL) {
           ESP_LOGE(TAG, "Resizing response buffer failed");
           free(state->buf);
+          state->buf = NULL;
           err = ESP_ERR_NO_MEM;
           break;
         }
