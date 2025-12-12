@@ -42,6 +42,7 @@ def load_secrets_config():
                     "refresh_interval_seconds": json_config.get("REFRESH_INTERVAL_SECONDS", 10),
                     "default_brightness": json_config.get("DEFAULT_BRIGHTNESS", 10),
                     "enable_ap_mode": json_config.get("ENABLE_AP_MODE", True),
+                    "enable_wifi_power_save": json_config.get("ENABLE_WIFI_POWER_SAVE", True),
                     "source": "secrets.json"
                 }
         except (json.JSONDecodeError, IOError) as e:
@@ -87,6 +88,7 @@ def load_secrets_config():
                     ),
                     "default_brightness": json_config.get("DEFAULT_BRIGHTNESS", 10),
                     "enable_ap_mode": json_config.get("ENABLE_AP_MODE", True),
+                    "enable_wifi_power_save": json_config.get("ENABLE_WIFI_POWER_SAVE", True),
                     "source": "secrets.json",
                 }
         except (json.JSONDecodeError, IOError) as e:
@@ -109,6 +111,10 @@ def main() -> None:
     # Load secrets configuration based on available files
     config = load_secrets_config()
 
+    # Get values from config
+    enable_ap_mode_value = config.get('enable_ap_mode', True)
+    enable_wifi_power_save_value = config.get('enable_wifi_power_save', True)
+
     # Apply configuration to build flags
     env.Append(
         CCFLAGS=[
@@ -117,7 +123,8 @@ def main() -> None:
             f"-DREMOTE_URL={env.StringifyMacro(config['remote_url'])}",
             f"-DREFRESH_INTERVAL_SECONDS={config['refresh_interval_seconds']}",
             f"-DDEFAULT_BRIGHTNESS={config['default_brightness']}",
-            f"-DENABLE_AP_MODE={(1 if config.get('enable_ap_mode', True) else 0)}",
+            f"-DENABLE_AP_MODE={(1 if enable_ap_mode_value else 0)}",
+            f"-DWIFI_POWER_SAVE_MODE={(1 if enable_wifi_power_save_value else 0)}",
         ],
     )
 
@@ -128,7 +135,8 @@ def main() -> None:
         print(f"   URL: {config['remote_url']}")
         print(f"   Refresh: {config['refresh_interval_seconds']}s")
         print(f"   Brightness: {config['default_brightness']}")
-        print(f"   AP mode enabled: {config.get('enable_ap_mode', True)}")
+        print(f"   AP mode enabled: {enable_ap_mode_value}")
+        print(f"   WiFi Power Save enabled: {enable_wifi_power_save_value}")
         if config['source'] == 'secrets.json.injected':
             print("   ℹ️  Using previously injected configuration")
     else:

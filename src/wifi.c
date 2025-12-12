@@ -20,6 +20,7 @@
 #include "esp_http_server.h"
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
+#include "esp_wifi_types.h"
 
 #define TAG "WIFI"
 
@@ -313,6 +314,10 @@ int wifi_initialize(const char *ssid, const char *password) {
 
   // Start WiFi
   ESP_ERROR_CHECK(esp_wifi_start());
+
+  /* Apply WiFi Power Save Mode from configuration */
+  ESP_LOGI(TAG, "Setting WiFi Power Save Mode to %d...", WIFI_POWER_SAVE_MODE);
+  esp_wifi_set_ps((wifi_ps_type_t)WIFI_POWER_SAVE_MODE);
 
   // Wait for AP to start
 #if ENABLE_AP_MODE
