@@ -21,6 +21,8 @@
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
 #include "esp_wifi_types.h"
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
 
 #define TAG "WIFI"
 
@@ -112,6 +114,25 @@ const char *s_html_page_template =
     "</div>"
     "<button type='submit'>Save and Connect</button>"
     "</form>"
+    "<hr>"
+    "<h3>Firmware Update</h3>"
+    "<div class='form-group'>"
+    "<input type='file' id='fw_file' accept='.bin'>"
+    "</div>"
+    "<button id='upd_btn' onclick='uploadFirmware()'>Update Firmware</button>"
+    "<div id='progress' style='margin-top: 10px;'></div>"
+    "<script>"
+    "function uploadFirmware() {"
+    "var f=document.getElementById('fw_file').files[0];"
+    "if(!f){alert('Select file');return;}"
+    "var b=document.getElementById('upd_btn');b.disabled=true;b.innerText='Uploading...';"
+    "var x=new XMLHttpRequest();x.open('POST','/update',true);"
+    "x.upload.onprogress=function(e){if(e.lengthComputable){document.getElementById('progress').innerText='Upload: '+((e.loaded/e.total)*100).toFixed(0)+'%%';}};"
+    "x.onload=function(){if(x.status==200){document.getElementById('progress').innerText='Success! Rebooting...';}else{document.getElementById('progress').innerText='Failed: '+x.statusText;b.disabled=false;b.innerText='Update Firmware';}};"
+    "x.onerror=function(){document.getElementById('progress').innerText='Error';b.disabled=false;b.innerText='Update Firmware';};"
+    "x.send(f);"
+    "}"
+    "</script>"
     "</div>"
     "</body>"
     "</html>";
@@ -150,6 +171,7 @@ static esp_err_t start_webserver(void);
 static esp_err_t stop_webserver(void);
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
+static esp_err_t update_handler(httpd_req_t *req);
 static esp_err_t captive_portal_handler(httpd_req_t *req);
 static void connect_to_ap(void);
 static void url_decode(char *str);
@@ -647,6 +669,14 @@ static esp_err_t start_webserver(void) {
     };
     httpd_register_uri_handler(s_server, &save_uri);
 
+    httpd_uri_t update_uri = {
+        .uri = "/update",
+        .method = HTTP_POST,
+        .handler = update_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(s_server, &update_uri);
+
     // Common captive portal detection URLs for various operating systems
     // iOS and macOS
     httpd_uri_t hotspot_detect_uri = {
@@ -810,6 +840,91 @@ static esp_err_t save_handler(httpd_req_t *req) {
     // Connect to the new AP
     connect_to_ap();
 
+    return ESP_OK;
+}
+
+#define OTA_BUFFER_SIZE 1024
+
+// Update handler for firmware update
+static esp_err_t update_handler(httpd_req_t *req) {
+    esp_ota_handle_t update_handle = 0;
+    const esp_partition_t *update_partition = NULL;
+    char *buf = malloc(OTA_BUFFER_SIZE);
+    if (buf == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Alloc failed");
+        return ESP_FAIL;
+    }
+
+    update_partition = esp_ota_get_next_update_partition(NULL);
+    if (update_partition == NULL) {
+        ESP_LOGE(TAG, "No OTA partition found");
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No partition");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%lx",
+             update_partition->subtype, update_partition->address);
+
+    esp_err_t err = esp_ota_begin(update_partition, req->content_len, &update_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA begin failed");
+        return ESP_FAIL;
+    }
+
+    int received;
+    int remaining = req->content_len;
+    
+    while (remaining > 0) {
+        received = httpd_req_recv(req, buf, (remaining < OTA_BUFFER_SIZE ? remaining : OTA_BUFFER_SIZE));
+        if (received <= 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            ESP_LOGE(TAG, "File receive failed");
+            esp_ota_end(update_handle);
+            free(buf);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Receive failed");
+            return ESP_FAIL;
+        }
+        
+        err = esp_ota_write(update_handle, buf, received);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_write failed (%s)", esp_err_to_name(err));
+            esp_ota_end(update_handle);
+            free(buf);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Write failed");
+            return ESP_FAIL;
+        }
+        
+        remaining -= received;
+    }
+    
+    free(buf);
+    
+    err = esp_ota_end(update_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_end failed (%s)", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OTA end failed");
+        return ESP_FAIL;
+    }
+    
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed (%s)", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Set boot failed");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "OTA Success! Rebooting...");
+    httpd_resp_send(req, "OK", 2);
+    
+    // Delay reboot slightly to allow response to be sent
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+    
     return ESP_OK;
 }
 
