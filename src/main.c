@@ -15,6 +15,7 @@
 #include "sdkconfig.h"
 #include "wifi.h"
 #include "version.h"
+#include "ota.h"
 
 #ifdef BUTTON_PIN
 #include <driver/gpio.h>
@@ -45,6 +46,13 @@ bool config_received = false;
 void config_saved_callback(void) {
   config_received = true;
   ESP_LOGI(TAG, "Configuration saved - signaling main task");
+}
+
+static void ota_task_entry(void *pvParameter) {
+    char *url = (char *)pvParameter;
+    run_ota(url);
+    free(url); // Free the duplicated string
+    vTaskDelete(NULL);
 }
 
 static void websocket_event_handler(void *handler_args, esp_event_base_t base,
@@ -150,6 +158,30 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
             ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
           }
         }
+      }
+      // Check if data contains "ota_url"
+      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"ota_url\"")) {
+          char *key_pos = strstr((char *)data->data_ptr, "\"ota_url\"");
+          if (key_pos) {
+              char *colon_pos = strchr(key_pos, ':');
+              if (colon_pos) {
+                  // Find start of string value
+                  char *start_quote = strchr(colon_pos, '"');
+                  if (start_quote) {
+                      char *end_quote = strchr(start_quote + 1, '"');
+                      if (end_quote) {
+                          size_t url_len = end_quote - (start_quote + 1);
+                          char *ota_url = malloc(url_len + 1);
+                          if (ota_url) {
+                              strncpy(ota_url, start_quote + 1, url_len);
+                              ota_url[url_len] = '\0';
+                              ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
+                              xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
+                          }
+                      }
+                  }
+              }
+          }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
 
@@ -444,13 +476,22 @@ void app_main(void) {
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
 
+      char* ota_url = NULL;
+
       // Start timing the HTTP fetch
       int64_t fetch_start_us = esp_timer_get_time();
       bool fetch_failed = !wifi_is_connected() || remote_get(image_url, &webp, &len,
-                                         &brightness_pct, &app_dwell_secs, &status_code);
+                                         &brightness_pct, &app_dwell_secs, &status_code, &ota_url);
       int64_t fetch_duration_ms = (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
+
+      if (ota_url != NULL) {
+          ESP_LOGI(TAG, "OTA URL received via HTTP: %s", ota_url);
+          xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
+          // Since we are rebooting (if successful) or failed, we might want to continue or pause.
+          // If OTA failed, we continue normal operation.
+      }
 
       if (fetch_failed) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",status_code);

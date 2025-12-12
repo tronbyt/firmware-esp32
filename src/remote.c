@@ -17,6 +17,7 @@ struct remote_state {
   size_t max;
   uint8_t brightness;
   int32_t dwell_secs;
+  char* ota_url;
   bool oversize_detected;
 };
 
@@ -71,6 +72,11 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
       else if (strcasecmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
         state->dwell_secs = (int)atoi(event->header_value);
         // ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
+      }
+      else if (strcasecmp(event->header_key, "Tronbyt-OTA-URL") == 0) {
+        if (state->ota_url != NULL) free(state->ota_url);
+        state->ota_url = strdup(event->header_value);
+        ESP_LOGI(TAG, "Found OTA URL: %s", state->ota_url);
       }
       break;
 
@@ -160,7 +166,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code) {
+int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code, char** ota_url) {
   // State for processing the response
   struct remote_state state = {
       .buf = malloc(HTTP_BUFFER_SIZE_DEFAULT),
@@ -169,6 +175,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
       .max = HTTP_BUFFER_SIZE_MAX,
       .brightness = -1,
       .dwell_secs = -1,
+      .ota_url = NULL,
       .oversize_detected = false,
   };
 
@@ -210,6 +217,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
     if (state.buf != NULL) {
       free(state.buf);
     }
+    if (state.ota_url != NULL) {
+      free(state.ota_url);
+    }
     esp_http_client_cleanup(http);
     *return_status_code = 413;  // HTTP 413 Payload Too Large
     return 1;  // Return error so main loop doesn't process the result
@@ -222,6 +232,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
     if (state.buf != NULL) {
       free(state.buf);
     }
+    if (state.ota_url != NULL) {
+      free(state.ota_url);
+    }
     esp_http_client_cleanup(http);
     return 1;
   }
@@ -231,6 +244,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
   *len = state.len;
   *brightness_pct = state.brightness; // Assumes API provides 0–100 as spec'd
   if (state.dwell_secs > -1 && state.dwell_secs < 300) *dwell_secs = state.dwell_secs; // 5 minute max ?
+  *ota_url = state.ota_url;
 
   esp_http_client_cleanup(http);
   // ESP_LOGI(TAG,"fetched new webp");
