@@ -7,6 +7,7 @@
 #include <esp_crt_bundle.h>
 #include <esp_timer.h>
 #include <ctype.h> // For isdigit
+#include <cJSON.h>
 
 #include "display.h"
 #include "flash.h"
@@ -107,80 +108,60 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
 
 
       // Process text messages (op_code == 1) only when complete to avoid processing fragments multiple times
-      // Check if data contains "immediate"
-      if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "{\"immediate\":")) {
-        ESP_LOGI(TAG, "Immediate command detected");
+      if (data->op_code == 1 && is_complete) {
+          // Ensure null-termination for cJSON
+          char *json_str = malloc(data->data_len + 1);
+          if (json_str) {
+              memcpy(json_str, data->data_ptr, data->data_len);
+              json_str[data->data_len] = '\0';
+              cJSON *root = cJSON_Parse(json_str);
+              free(json_str);
 
-        // Check if the value is true
-        if (strstr((char *)data->data_ptr, "true")) {
-          ESP_LOGI(TAG, "Interrupting current animation to load queued image");
-          isAnimating = -1;
-        }
-      }
-      // Check if data contains "dwell_secs"
-      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"dwell_secs\"")) {
-        // Find "dwell_secs" key and parse the value after the colon
-        char *key_pos = strstr((char *)data->data_ptr, "\"dwell_secs\"");
-        if (key_pos) {
-          // Find the colon after the key
-          char *colon_pos = strchr(key_pos, ':');
-          if (colon_pos) {
-            // Parse the integer value (atoi skips whitespace and stops at non-digits)
-            int dwell_value = atoi(colon_pos + 1);
+              if (root) {
+                  // Check for "immediate"
+                  cJSON *immediate_item = cJSON_GetObjectItem(root, "immediate");
+                  if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
+                      ESP_LOGI(TAG, "Immediate command detected");
+                      ESP_LOGI(TAG, "Interrupting current animation to load queued image");
+                      isAnimating = -1;
+                  }
 
-            // Clamp value to reasonable range (1 to 3600 seconds = 1 hour)
-            if (dwell_value < 1) dwell_value = 1;
-            if (dwell_value > 3600) dwell_value = 3600;
+                  // Check for "dwell_secs"
+                  cJSON *dwell_item = cJSON_GetObjectItem(root, "dwell_secs");
+                  if (cJSON_IsNumber(dwell_item)) {
+                      int dwell_value = dwell_item->valueint;
+                      if (dwell_value < 1) dwell_value = 1;
+                      if (dwell_value > 3600) dwell_value = 3600;
+                      app_dwell_secs = dwell_value;
+                      ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
+                  }
 
-            // Set the dwell time
-            app_dwell_secs = dwell_value;
-            ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
-          }
-        }
-      }
-      // Check if data contains "brightness"
-      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"brightness\"")) {
-        // Find "brightness" key and parse the value after the colon
-        char *key_pos = strstr((char *)data->data_ptr, "\"brightness\"");
-        if (key_pos) {
-          // Find the colon after the key
-          char *colon_pos = strchr(key_pos, ':');
-          if (colon_pos) {
-            // Parse the integer value (atoi skips whitespace and stops at non-digits)
-            int brightness_value = atoi(colon_pos + 1);
+                  // Check for "brightness"
+                  cJSON *brightness_item = cJSON_GetObjectItem(root, "brightness");
+                  if (cJSON_IsNumber(brightness_item)) {
+                      int brightness_value = brightness_item->valueint;
+                      if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
+                      if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
+                      display_set_brightness((uint8_t)brightness_value);
+                      ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
+                  }
 
-            // Clamp value between min and max
-            if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
-            if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
-
-            // Set the brightness
-            display_set_brightness((uint8_t)brightness_value);
-            ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
-          }
-        }
-      }
-      // Check if data contains "ota_url"
-      else if (data->op_code == 1 && is_complete && strstr((char *)data->data_ptr, "\"ota_url\"")) {
-          char *key_pos = strstr((char *)data->data_ptr, "\"ota_url\"");
-          if (key_pos) {
-              char *colon_pos = strchr(key_pos, ':');
-              if (colon_pos) {
-                  // Find start of string value
-                  char *start_quote = strchr(colon_pos, '"');
-                  if (start_quote) {
-                      char *end_quote = strchr(start_quote + 1, '"');
-                      if (end_quote) {
-                          size_t url_len = end_quote - (start_quote + 1);
-                          char *ota_url = malloc(url_len + 1);
-                          if (ota_url) {
-                              strncpy(ota_url, start_quote + 1, url_len);
-                              ota_url[url_len] = '\0';
-                              ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
-                              xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
-                          }
+                  // Check for "ota_url"
+                  cJSON *ota_item = cJSON_GetObjectItem(root, "ota_url");
+                  if (cJSON_IsString(ota_item) && (ota_item->valuestring != NULL)) {
+                      char *ota_url = strdup(ota_item->valuestring);
+                      if (ota_url) {
+                          ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
+                          xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
                       }
                   }
+
+                  cJSON_Delete(root);
+              } else {
+                  ESP_LOGW(TAG, "Failed to parse WebSocket text message as JSON");
               }
+          } else {
+              ESP_LOGE(TAG, "Failed to allocate memory for JSON parsing");
           }
       } else if (data->op_code == 2) {
         // Binary data (WebP image)
