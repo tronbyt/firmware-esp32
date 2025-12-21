@@ -7,6 +7,7 @@
 #include <esp_system.h>
 #include <esp_tls.h>
 #include "gfx.h"
+#include "version.h"
 
 static const char* TAG = "remote";
 
@@ -198,6 +199,11 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
     ESP_LOGE(TAG, "HTTP client initialization failed for URL: %s", url);
     free(state.buf);
     return 1;
+  }
+
+  if (esp_http_client_set_header(http, "X-Firmware-Version", FIRMWARE_VERSION) != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set firmware version header");
+    // Not a critical error; continue anyway
   }
 
   // Do the request
