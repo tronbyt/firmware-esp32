@@ -9,6 +9,10 @@
 #define ENABLE_AP_MODE 1
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Initialize WiFi
  *
@@ -54,6 +58,13 @@ bool wifi_wait_for_connection(uint32_t timeout_ms);
 const char* wifi_get_image_url();
 
 /**
+ * @brief Get the swap_colors setting
+ *
+ * @return true if colors should be swapped, false otherwise
+ */
+bool wifi_get_swap_colors(void);
+
+/**
  * @brief Check if WiFi is connected to an AP
  *
  * @return true if connected, false otherwise
@@ -83,9 +94,13 @@ void wifi_register_config_callback(void (*callback)(void));
 
 /**
  * @brief Check WiFi health and attempt reconnection if needed
- * 
+ *
  * Checks if WiFi is connected. If not, attempts to reconnect and increments
  * a counter. If the counter reaches 10 consecutive failures, the system will
  * reboot. The counter is reset whenever WiFi is connected.
  */
 void wifi_health_check(void);
+
+#ifdef __cplusplus
+}
+#endif
