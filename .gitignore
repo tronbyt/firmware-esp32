@@ -12,6 +12,7 @@ dependencies.lock
 secrets.json
 _secrets.json
 sdkconfig.matrixportal-s3
+sdkconfig.matrixportal-s3-waveshare
 secrets.json.injected*
 _secrets.json.injected
 .claude/settings.local.json
