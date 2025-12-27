@@ -33,12 +33,13 @@ void run_ota(const char* url) {
     esp_http_client_config_t config = {
         .url = url,
         .crt_bundle_attach = esp_crt_bundle_attach,
-        .timeout_ms = 10000,
+        .timeout_ms = 60000,
         .keep_alive_enable = true,
     };
 
     esp_https_ota_config_t ota_config = {
         .http_config = &config,
+        .partial_http_download = true,
     };
 
     esp_err_t ret = esp_https_ota(&ota_config);
