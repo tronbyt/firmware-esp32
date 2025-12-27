@@ -223,7 +223,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         if (is_complete) {
           // Queue the complete binary data as a WebP image
           // This will wait for the current animation to finish before loading
-          int counter = gfx_update(webp, data->payload_len, app_dwell_secs);
+          gfx_update(webp, data->payload_len, app_dwell_secs);
 
           // Do not free(webp) here; ownership is transferred to gfx
           webp = NULL;
