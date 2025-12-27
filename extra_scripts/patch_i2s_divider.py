@@ -4,7 +4,6 @@ PlatformIO script to patch ESP32 I2S parallel DMA divider calculation
 Only runs for specific patched configurations
 """
 
-import os
 import re
 from pathlib import Path
 

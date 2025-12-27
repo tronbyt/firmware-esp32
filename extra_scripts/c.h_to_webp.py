@@ -1,6 +1,5 @@
 import re
 import argparse
-import sys
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Convert C header array to WebP binary file')
