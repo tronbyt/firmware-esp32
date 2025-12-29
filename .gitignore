@@ -7,11 +7,10 @@ sdkconfig.old
 secrets.json
 .DS_Store
 build
-.DS_Store
 dependencies.lock
-secrets.json
 _secrets.json
-sdkconfig.matrixportal-s3
+secrets.cmake
 secrets.json.injected*
 _secrets.json.injected
 .claude/settings.local.json
+eim_config.toml

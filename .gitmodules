@@ -1,0 +1,6 @@
+[submodule "external/libwebp"]
+	path = external/libwebp
+	url = https://github.com/webmproject/libwebp.git
+[submodule "external/hub75"]
+	path = components/ESP32-HUB75-MatrixPanel-DMA
+	url = https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA.git
