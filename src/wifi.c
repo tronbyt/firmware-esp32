@@ -53,8 +53,8 @@ static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t *s_sta_netif = NULL;
 #if ENABLE_AP_MODE
 static esp_netif_t *s_ap_netif = NULL;
-#endif
 static httpd_handle_t s_server = NULL;
+#endif
 static void (*s_config_callback)(void) = NULL;
 
 // WiFi credentials
@@ -73,6 +73,7 @@ static int s_wifi_disconnect_counter = 0;
 static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
 
+#if ENABLE_AP_MODE
 // HTML for the configuration page
 const char *s_html_page_template =
     "<!DOCTYPE html>"
@@ -163,21 +164,25 @@ static const char *s_success_html = "<!DOCTYPE html>"
 // DNS server task handle
 static TaskHandle_t s_dns_task_handle = NULL;
 
+#endif
+
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 static esp_err_t save_wifi_config_to_nvs(void);
 static esp_err_t load_wifi_config_from_nvs(void);
+static void connect_to_ap(void);
+#if ENABLE_AP_MODE
 static esp_err_t start_webserver(void);
 static esp_err_t stop_webserver(void);
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
 static esp_err_t update_handler(httpd_req_t *req);
 static esp_err_t captive_portal_handler(httpd_req_t *req);
-static void connect_to_ap(void);
 static void url_decode(char *str);
 static void dns_server_task(void *pvParameters);
 static void start_dns_server(void);
 static void stop_dns_server(void);
+#endif
 static bool has_saved_config = false;
     // Initialize WiFi
 int wifi_initialize(const char *ssid, const char *password) {
@@ -354,12 +359,12 @@ int wifi_initialize(const char *ssid, const char *password) {
     ESP_LOGI(TAG, "Attempting to connect with saved/hardcoded credentials");
     connect_to_ap();
   } else {
-#if !ENABLE_AP_MODE
-    ESP_LOGW(TAG,
-             "No valid WiFi credentials available and AP mode is disabled");
-#else
+#if ENABLE_AP_MODE
     ESP_LOGI(TAG,
              "No valid WiFi credentials available, starting in AP mode only");
+#else
+    ESP_LOGW(TAG,
+             "No valid WiFi credentials available and AP mode is disabled");
 #endif
     // Reset any previous connection attempts
     s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
@@ -370,23 +375,23 @@ int wifi_initialize(const char *ssid, const char *password) {
   return 0;
 }
 
+#if ENABLE_AP_MODE
 // Shutdown the AP by switching wifi mode to STA
 void wifi_shutdown_ap(TimerHandle_t xTimer) {
-#if !ENABLE_AP_MODE
-  ESP_LOGI(TAG, "AP mode disabled; config portal not running");
-  return;
-#endif
   ESP_LOGI(TAG, "Shutting down config portal");
   stop_webserver();
   esp_wifi_set_mode(WIFI_MODE_STA);
 }
+#endif
 
 // Shutdown WiFi
 void wifi_shutdown() {
+#if ENABLE_AP_MODE
     // Stop the web server if it's running
     if (s_server != NULL) {
         stop_webserver();
     }
+#endif
 
     // Stop WiFi
     esp_wifi_stop();
@@ -623,6 +628,82 @@ static esp_err_t load_wifi_config_from_nvs(void) {
     return ESP_OK;
 }
 
+// Connect to the configured AP
+static void connect_to_ap(void) {
+    if (strlen(s_wifi_ssid) == 0) {
+        ESP_LOGI(TAG, "No SSID configured, not connecting");
+        return;
+    }
+
+    // Reset reconnection counter and state
+    s_reconnect_attempts = 0;
+    s_connection_given_up = false;
+
+    // Configure STA with the saved credentials
+    wifi_config_t sta_config = {0};
+    strncpy((char *)sta_config.sta.ssid, s_wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
+    strncpy((char *)sta_config.sta.password, s_wifi_password, sizeof(sta_config.sta.password) - 1);
+
+    ESP_LOGI(TAG, "Connecting to SSID: %s", s_wifi_ssid);
+
+    // Set the STA configuration
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set WiFi STA config: %s", esp_err_to_name(err));
+        return;
+    }
+
+    // Check WiFi state before connecting
+    wifi_mode_t mode;
+    if (esp_wifi_get_mode(&mode) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get WiFi mode");
+        return;
+    }
+
+    // Connect to the AP - handle errors gracefully
+    err = esp_wifi_connect();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi connect failed: %s. Will retry automatically.", esp_err_to_name(err));
+        // Don't crash on connection error - the WiFi event handler will retry
+    } else {
+        ESP_LOGI(TAG, "WiFi connect command sent successfully");
+    }
+}
+
+/**
+ * @brief Check WiFi health and attempt reconnection if needed
+ * 
+ * This function checks if WiFi is connected. If not, it attempts to reconnect
+ * and increments a counter. If the counter reaches 10 consecutive failures,
+ * the system will reboot. The counter is reset whenever WiFi is connected.
+ */
+void wifi_health_check(void) {
+    if (wifi_is_connected()) {
+        // Reset counter when WiFi is connected
+        if (s_wifi_disconnect_counter > 0) {
+            // ESP_LOGI(TAG, "WiFi reconnected successfully, resetting disconnect counter");
+            s_wifi_disconnect_counter = 0;
+        }
+        return;
+    }
+
+    // WiFi is not connected, increment counter
+    s_wifi_disconnect_counter++;
+    ESP_LOGW(TAG, "WiFi Health check. Disconnect count: %d", s_wifi_disconnect_counter);
+
+    // Try to reconnect
+    if (strlen(s_wifi_ssid) > 0) {
+        ESP_LOGI(TAG, "Reconnecting in Health check...");
+        esp_err_t err = esp_wifi_connect();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "WiFi reconnect attempt failed: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGW(TAG, "No SSID configured, cannot reconnect");
+    }
+}
+
+#if ENABLE_AP_MODE
 // Start the web server
 static esp_err_t start_webserver(void) {
     if (s_server != NULL) {
@@ -928,48 +1009,6 @@ static esp_err_t update_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-// Connect to the configured AP
-static void connect_to_ap(void) {
-    if (strlen(s_wifi_ssid) == 0) {
-        ESP_LOGI(TAG, "No SSID configured, not connecting");
-        return;
-    }
-
-    // Reset reconnection counter and state
-    s_reconnect_attempts = 0;
-    s_connection_given_up = false;
-
-    // Configure STA with the saved credentials
-    wifi_config_t sta_config = {0};
-    strncpy((char *)sta_config.sta.ssid, s_wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
-    strncpy((char *)sta_config.sta.password, s_wifi_password, sizeof(sta_config.sta.password) - 1);
-
-    ESP_LOGI(TAG, "Connecting to SSID: %s", s_wifi_ssid);
-
-    // Set the STA configuration
-    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set WiFi STA config: %s", esp_err_to_name(err));
-        return;
-    }
-
-    // Check WiFi state before connecting
-    wifi_mode_t mode;
-    if (esp_wifi_get_mode(&mode) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get WiFi mode");
-        return;
-    }
-
-    // Connect to the AP - handle errors gracefully
-    err = esp_wifi_connect();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "WiFi connect failed: %s. Will retry automatically.", esp_err_to_name(err));
-        // Don't crash on connection error - the WiFi event handler will retry
-    } else {
-        ESP_LOGI(TAG, "WiFi connect command sent successfully");
-    }
-}
-
 // Helper function to decode URL-encoded strings
 static void url_decode(char *str) {
     char *src = str;
@@ -991,47 +1030,6 @@ static void url_decode(char *str) {
         dst++;
     }
     *dst = '\0'; // Null-terminate the decoded string
-}
-
-/**
- * @brief Check WiFi health and attempt reconnection if needed
- * 
- * This function checks if WiFi is connected. If not, it attempts to reconnect
- * and increments a counter. If the counter reaches 10 consecutive failures,
- * the system will reboot. The counter is reset whenever WiFi is connected.
- */
-void wifi_health_check(void) {
-    if (wifi_is_connected()) {
-        // Reset counter when WiFi is connected
-        if (s_wifi_disconnect_counter > 0) {
-            // ESP_LOGI(TAG, "WiFi reconnected successfully, resetting disconnect counter");
-            s_wifi_disconnect_counter = 0;
-        }
-        return;
-    }
-
-    // WiFi is not connected, increment counter
-    s_wifi_disconnect_counter++;
-    ESP_LOGW(TAG, "WiFi Health check. Disconnect count: %d/*", s_wifi_disconnect_counter);
-
-    // Try to reconnect
-    if (strlen(s_wifi_ssid) > 0) {
-        ESP_LOGI(TAG, "Reconnecting in Health check...");
-        esp_err_t err = esp_wifi_connect();
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "WiFi reconnect attempt failed: %s", esp_err_to_name(err));
-        }
-    } else {
-        ESP_LOGW(TAG, "No SSID configured, cannot reconnect");
-    }
-
-    // If counter reaches threshold, reboot the system
-    // if (s_wifi_disconnect_counter >= 15) {
-    //     ESP_LOGE(TAG, "WiFi disconnected for 15 consecutive checks. Rebooting system...");
-    //     // Wait a moment before rebooting
-    //     vTaskDelay(pdMS_TO_TICKS(1000));
-    //     esp_restart();
-    // }
 }
 
 // DNS server implementation for captive portal
@@ -1202,3 +1200,5 @@ static esp_err_t captive_portal_handler(httpd_req_t *req) {
 
     return ESP_OK;
 }
+
+#endif

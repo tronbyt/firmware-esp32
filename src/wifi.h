@@ -18,11 +18,12 @@
  */
 int wifi_initialize(const char *ssid, const char *password);
 
-
+#if ENABLE_AP_MODE
 /**
  * @brief Shutdown WiFi Config Portal
  */
 void wifi_shutdown_ap(TimerHandle_t xTimer);
+#endif
 
 /**
  * @brief Shutdown WiFi
