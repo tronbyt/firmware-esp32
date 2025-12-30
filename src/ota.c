@@ -238,6 +238,7 @@ void run_ota(const char* url) {
         .crt_bundle_attach = esp_crt_bundle_attach,
         .timeout_ms = 60000,
         .keep_alive_enable = true,
+        .save_client_session = true, // Enable TLS session resumption
     };
 
     esp_https_ota_config_t ota_config = {
@@ -250,6 +251,6 @@ void run_ota(const char* url) {
         ESP_LOGI(TAG, "OTA Update successful. Rebooting...");
         esp_restart();
     } else {
-        ESP_LOGE(TAG, "OTA Update failed");
+        ESP_LOGE(TAG, "OTA Update failed: %s", esp_err_to_name(ret));
     }
 }
