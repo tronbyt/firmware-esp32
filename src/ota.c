@@ -14,13 +14,13 @@ static const char *TAG = "OTA";
 void run_ota(const char* url) {
     ESP_LOGI(TAG, "Starting OTA update from URL: %s", url);
 
-    // Sync otadata if we are running in a fallback state
     const esp_partition_t *running = esp_ota_get_running_partition();
-    const esp_partition_t *boot = esp_ota_get_boot_partition();
+    const esp_partition_t *next = esp_ota_get_next_update_partition(NULL);
 
-    if (running && (boot == NULL || running->address != boot->address)) {
-        ESP_LOGW(TAG, "Running partition (0x%lx) != Boot partition (0x%lx). Syncing otadata...", 
-                 (unsigned long)running->address, boot ? (unsigned long)boot->address : 0);
+    // If the next update partition is the same as the running partition,
+    // we must sync otadata to the current partition to enable proper toggling.
+    if (running && next && running->address == next->address) {
+        ESP_LOGW(TAG, "Running partition conflicts with next update partition. Syncing otadata...");
         esp_err_t err = esp_ota_set_boot_partition(running);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to sync otadata: %s. Aborting OTA.", esp_err_to_name(err));
