@@ -246,6 +246,8 @@ int wifi_initialize(const char *ssid, const char *password) {
                                              &wifi_event_handler, NULL));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                              &wifi_event_handler, NULL));
+  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6,
+                                             &wifi_event_handler, NULL));
 
   // Load saved configuration from NVS
   has_saved_config = (load_wifi_config_from_nvs() == ESP_OK);
@@ -400,6 +402,7 @@ void wifi_shutdown() {
     // Unregister event handlers
     esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler);
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_GOT_IP6, &wifi_event_handler);
 
     // Delete event group
     if (s_wifi_event_group != NULL) {
@@ -473,6 +476,22 @@ void wifi_register_config_callback(void (*callback)(void)) {
     s_config_callback = callback;
 }
 
+// Helper to handle successful IP acquisition
+static void handle_successful_ip_acquisition(void) {
+    // Reset reconnection counter on successful connection
+    s_reconnect_attempts = 0;
+    s_connection_given_up = false;
+
+    // Set connection bit and clear fail bit
+    xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
+    xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+    // Call connect callback if registered
+    if (s_connect_callback != NULL) {
+        s_connect_callback();
+    }
+}
+
 // WiFi event handler
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT) {
@@ -515,19 +534,11 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
-
-        // Reset reconnection counter on successful connection
-        s_reconnect_attempts = 0;
-        s_connection_given_up = false;
-
-        // Set connection bit and clear fail bit
-        xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-
-        // Call connect callback if registered
-        if (s_connect_callback != NULL) {
-            s_connect_callback();
-        }
+        handle_successful_ip_acquisition();
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_GOT_IP6) {
+        ip_event_got_ip6_t* event = (ip_event_got_ip6_t*) event_data;
+        ESP_LOGI(TAG, "Got IPv6 address: " IPV6STR, IPV62STR(event->ip6_info.ip));
+        handle_successful_ip_acquisition();
     }
 }
 
