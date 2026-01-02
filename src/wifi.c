@@ -1011,8 +1011,10 @@ static esp_err_t save_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, s_success_html, strlen(s_success_html));
 
-    // Connect to the new AP
-    connect_to_ap();
+    // Delay to allow response to be sent, then reboot
+    ESP_LOGI(TAG, "Configuration saved - rebooting in 1 second...");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
 
     return ESP_OK;
 }
