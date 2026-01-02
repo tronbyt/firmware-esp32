@@ -62,7 +62,11 @@ static void (*s_config_callback)(void) = NULL;
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
 static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
+#ifdef SWAP_COLORS_DEFAULT
+static bool s_swap_colors = true;
+#else
 static bool s_swap_colors = false;
+#endif
 
 // Reconnection counter
 static int s_reconnect_attempts = 0;
@@ -76,6 +80,21 @@ static void (*s_connect_callback)(void) = NULL;
 static void (*s_disconnect_callback)(void) = NULL;
 
 #if ENABLE_AP_MODE
+// Swap colors checkbox HTML - only for TIDBYT_GEN1
+#ifdef TIDBYT_GEN1
+#define SWAP_COLORS_HTML \
+    "<div class='form-group'>" \
+    "<label>" \
+    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' %s>" \
+    " Swap Colors (Gen1 only - requires reboot)" \
+    "</label>" \
+    "</div>"
+#define SWAP_COLORS_FORMAT_ARG , s_swap_colors ? "checked" : ""
+#else
+#define SWAP_COLORS_HTML ""
+#define SWAP_COLORS_FORMAT_ARG
+#endif
+
 // HTML for the configuration page
 const char *s_html_page_template =
     "<!DOCTYPE html>"
@@ -115,12 +134,7 @@ const char *s_html_page_template =
     "<input type='text' id='image_url' name='image_url' maxlength='128' value='%s'>"
     "( If modifying Image URL reboot Tronbyt after saving. )"
     "</div>"
-    "<div class='form-group'>"
-    "<label>"
-    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' %s>"
-    " Swap Colors (Gen1 only - requires reboot)"
-    "</label>"
-    "</div>"
+    SWAP_COLORS_HTML
     "<button type='submit'>Save and Connect</button>"
     "</form>"
     "<hr>"
@@ -594,6 +608,7 @@ static esp_err_t save_wifi_config_to_nvs(void) {
       }
     }
 
+#ifdef TIDBYT_GEN1
     // Save swap_colors setting
     err = nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
     if (err != ESP_OK) {
@@ -601,6 +616,7 @@ static esp_err_t save_wifi_config_to_nvs(void) {
         nvs_close(nvs_handle);
         return err;
     }
+#endif
 
     err = nvs_commit(nvs_handle);
     if (err != ESP_OK) {
@@ -654,20 +670,32 @@ static esp_err_t load_wifi_config_from_nvs(void) {
         memset(s_image_url, 0, sizeof(s_image_url));
     }
 
+#ifdef TIDBYT_GEN1
     // Load swap_colors setting
     uint8_t swap_colors_val = 0;
     err = nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &swap_colors_val);
     if (err != ESP_OK) {
+#ifdef SWAP_COLORS_DEFAULT
+        ESP_LOGI(TAG, "No saved swap_colors found, defaulting to true");
+        s_swap_colors = true;
+#else
         ESP_LOGI(TAG, "No saved swap_colors found, defaulting to false");
         s_swap_colors = false;
+#endif
     } else {
         s_swap_colors = (swap_colors_val != 0);
     }
+#endif
 
     nvs_close(nvs_handle);
 
+#ifdef TIDBYT_GEN1
     ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s, Swap Colors: %s",
              s_wifi_ssid, s_image_url, s_swap_colors ? "true" : "false");
+#else
+    ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s",
+             s_wifi_ssid, s_image_url);
+#endif
     return ESP_OK;
 }
 
@@ -860,10 +888,14 @@ static esp_err_t stop_webserver(void) {
 
 // Root page handler
 static esp_err_t root_handler(httpd_req_t *req) {
+#ifdef TIDBYT_GEN1
     ESP_LOGI(TAG, "Injecting image url (%s) and swap_colors (%s) to html template",
              s_image_url, s_swap_colors ? "checked" : "");
+#else
+    ESP_LOGI(TAG, "Injecting image url (%s) to html template", s_image_url);
+#endif
     snprintf(s_html_page, sizeof(s_html_page), s_html_page_template,
-             s_image_url, s_swap_colors ? "checked" : "");
+             s_image_url SWAP_COLORS_FORMAT_ARG);
     ESP_LOGI(TAG, "Serving root page");
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, s_html_page, strlen(s_html_page));
@@ -907,7 +939,9 @@ static esp_err_t save_handler(httpd_req_t *req) {
     char ssid[MAX_SSID_LEN + 1] = {0};
     char password[MAX_PASSWORD_LEN + 1] = {0};
     char image_url[MAX_URL_LEN + 1] = {0};
+#ifdef TIDBYT_GEN1
     bool swap_colors = false;
+#endif
 
     // Simple parsing of form data (format: key1=value1&key2=value2&...)
     char *saveptr;
@@ -923,9 +957,12 @@ static esp_err_t save_handler(httpd_req_t *req) {
         } else if (strncmp(token, "image_url=", 10) == 0) {
             strncpy(image_url, token + 10, MAX_URL_LEN);
             image_url[MAX_URL_LEN] = '\0';
-        } else if (strncmp(token, "swap_colors=", 12) == 0) {
+        }
+#ifdef TIDBYT_GEN1
+        else if (strncmp(token, "swap_colors=", 12) == 0) {
             swap_colors = (strncmp(token + 12, "1", 1) == 0);
         }
+#endif
         token = strtok_r(NULL, "&", &saveptr);
     }
 
@@ -946,8 +983,12 @@ static esp_err_t save_handler(httpd_req_t *req) {
     url_decode(password);
     url_decode(image_url);
 
+#ifdef TIDBYT_GEN1
     ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s, Swap Colors: %s",
              ssid, image_url, swap_colors ? "true" : "false");
+#else
+    ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s", ssid, image_url);
+#endif
 
     // Save the new configuration
     strncpy(s_wifi_ssid, ssid, MAX_SSID_LEN);
@@ -957,7 +998,9 @@ static esp_err_t save_handler(httpd_req_t *req) {
     } else {
         strncpy(s_image_url, image_url, MAX_URL_LEN);
     }
+#ifdef TIDBYT_GEN1
     s_swap_colors = swap_colors;
+#endif
     // Free the buffer as we don't need it anymore
     free(buf);
 
