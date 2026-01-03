@@ -1,6 +1,5 @@
 # Makefile for Tronbyt Firmware
 
-IDF_PATH ?= $(shell echo $$IDF_PATH)
 PROJECT_NAME := firmware
 
 .PHONY: all clean fullclean flash monitor menuconfig help tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare
@@ -45,27 +44,35 @@ monitor:
 menuconfig:
 	idf.py menuconfig
 
+# Macro for device-specific builds
+# Usage: $(call build_device,<target>,<defaults_file>)
+define build_device
+	rm -f sdkconfig
+	IDF_TARGET=$(1) idf.py set-target $(1)
+	IDF_TARGET=$(1) idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" build
+endef
+
 # Device Specific Targets
 tidbyt-gen1:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen1" build
+	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen1)
 
 tidbyt-gen1_swap:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen1_swap" build
+	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen1_swap)
 
 tidbyt-gen2:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen2" build
+	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen2)
 
 tronbyt-s3:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tronbyt-s3" build
+	$(call build_device,esp32s3,sdkconfig.defaults.tronbyt-s3)
 
 tronbyt-s3-wide:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tronbyt-s3-wide" build
+	$(call build_device,esp32s3,sdkconfig.defaults.tronbyt-s3-wide)
 
 pixoticker:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.pixoticker" build
+	$(call build_device,esp32,sdkconfig.defaults.pixoticker)
 
 matrixportal-s3:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.matrixportal-s3" build
+	$(call build_device,esp32s3,sdkconfig.defaults.matrixportal-s3)
 
 matrixportal-s3-waveshare:
-	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.matrixportal-s3-waveshare" build
+	$(call build_device,esp32s3,sdkconfig.defaults.matrixportal-s3-waveshare)
