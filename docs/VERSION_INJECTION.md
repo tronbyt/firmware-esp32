@@ -10,8 +10,8 @@ The firmware displays the version number at boot time for 1 second on the LED ma
 
 ### Local Development
 
-When building locally with `pio run`, the firmware will display:
-- **"vdev"** - Default development version (from `src/version.h`)
+When building locally with `idf.py build`, the firmware will display:
+- **"vdev"** - Default development version (from `main/version.h`)
 
 ### GitHub Actions Build
 
