@@ -31,6 +31,7 @@
 #define NVS_KEY_SSID "ssid"
 #define NVS_KEY_PASSWORD "password"
 #define NVS_KEY_IMAGE_URL "image_url"
+#define NVS_KEY_SWAP_COLORS "swap_colors"
 
 // Event group bits
 #define WIFI_CONNECTED_BIT BIT0
@@ -54,6 +55,11 @@ static void (*s_config_callback)(void) = NULL;
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
 static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
+#ifdef SWAP_COLORS_DEFAULT
+static bool s_swap_colors = true;
+#else
+static bool s_swap_colors = false;
+#endif
 
 // Reconnection counter
 static int s_reconnect_attempts = 0;
@@ -229,6 +235,12 @@ int wifi_initialize(const char *ssid, const char *password) {
   return 0;
 }
 
+#if ENABLE_AP_MODE
+void wifi_shutdown_ap(TimerHandle_t xTimer) {
+    ap_shutdown_timer_callback(xTimer);
+}
+#endif
+
 // Shutdown WiFi
 void wifi_shutdown() {
 #if ENABLE_AP_MODE
@@ -321,6 +333,11 @@ bool wifi_wait_for_ipv6(uint32_t timeout_ms) {
 // Get the current image URL
 const char* wifi_get_image_url(void) {
     return (strlen(s_image_url) > 0) ? s_image_url : NULL;
+}
+
+// Get the swap_colors setting
+bool wifi_get_swap_colors(void) {
+    return s_swap_colors;
 }
 
 // Register connect callback
@@ -479,6 +496,16 @@ static esp_err_t save_wifi_config_to_nvs(void) {
       }
     }
 
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+    // Save swap_colors setting
+    err = nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error saving swap_colors to NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+#endif
+
     err = nvs_commit(nvs_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error committing NVS: %s", esp_err_to_name(err));
@@ -531,9 +558,32 @@ static esp_err_t load_wifi_config_from_nvs(void) {
         memset(s_image_url, 0, sizeof(s_image_url));
     }
 
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+    // Load swap_colors setting
+    uint8_t swap_colors_val = 0;
+    err = nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &swap_colors_val);
+    if (err != ESP_OK) {
+#ifdef SWAP_COLORS_DEFAULT
+        ESP_LOGI(TAG, "No saved swap_colors found, defaulting to true");
+        s_swap_colors = true;
+#else
+        ESP_LOGI(TAG, "No saved swap_colors found, defaulting to false");
+        s_swap_colors = false;
+#endif
+    } else {
+        s_swap_colors = (swap_colors_val != 0);
+    }
+#endif
+
     nvs_close(nvs_handle);
 
-    ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s", s_wifi_ssid, s_image_url);
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+    ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s, Swap Colors: %s",
+             s_wifi_ssid, s_image_url, s_swap_colors ? "true" : "false");
+#else
+    ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s",
+             s_wifi_ssid, s_image_url);
+#endif
     return ESP_OK;
 }
 
@@ -570,7 +620,7 @@ void wifi_health_check(void) {
     }
 }
 
-esp_err_t wifi_save_config(const char *ssid, const char *password, const char *image_url) {
+esp_err_t wifi_save_config(const char *ssid, const char *password, const char *image_url, bool swap_colors) {
     if (ssid) {
         strncpy(s_wifi_ssid, ssid, MAX_SSID_LEN);
         s_wifi_ssid[MAX_SSID_LEN] = '\0';
@@ -583,6 +633,7 @@ esp_err_t wifi_save_config(const char *ssid, const char *password, const char *i
         strncpy(s_image_url, image_url, MAX_URL_LEN);
         s_image_url[MAX_URL_LEN] = '\0';
     }
+    s_swap_colors = swap_colors;
 
     return save_wifi_config_to_nvs();
 }
@@ -626,4 +677,3 @@ void wifi_connect(void) {
         ESP_LOGI(TAG, "WiFi connect command sent successfully");
     }
 }
-

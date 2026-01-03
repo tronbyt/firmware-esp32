@@ -24,7 +24,22 @@
 static TaskHandle_t s_dns_task_handle = NULL;
 static httpd_handle_t s_server = NULL;
 
-// HTML template (moved from wifi.c)
+// Swap colors checkbox HTML - only for TIDBYT_GEN1 or MATRIXPORTAL_S3
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+#define SWAP_COLORS_HTML \
+    "<div class='form-group'>" \
+    "<label>" \
+    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' %s>" \
+    " Swap Colors (Gen1/S3 only - requires reboot)" \
+    "</label>" \
+    "</div>"
+#define SWAP_COLORS_FORMAT_ARG , wifi_get_swap_colors() ? "checked" : ""
+#else
+#define SWAP_COLORS_HTML ""
+#define SWAP_COLORS_FORMAT_ARG
+#endif
+
+// HTML for the configuration page
 static const char *s_html_page_template =
     "<!DOCTYPE html>"
     "<html>"
@@ -63,6 +78,7 @@ static const char *s_html_page_template =
     "<input type='text' id='image_url' name='image_url' maxlength='128' value='%s'>"
     "( If modifying Image URL reboot Tronbyt after saving. )"
     "</div>"
+    SWAP_COLORS_HTML
     "<button type='submit'>Save and Connect</button>"
     "</form>"
     "<hr>"
@@ -298,7 +314,7 @@ void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
 static esp_err_t root_handler(httpd_req_t *req) {
     const char* image_url = wifi_get_image_url();
     ESP_LOGI(TAG, "Injecting image url (%s) to html template", image_url ? image_url : "");
-    snprintf(s_html_page, sizeof(s_html_page), s_html_page_template, image_url ? image_url : "");
+    snprintf(s_html_page, sizeof(s_html_page), s_html_page_template, image_url ? image_url : "" SWAP_COLORS_FORMAT_ARG);
     ESP_LOGI(TAG, "Serving root page");
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, s_html_page, strlen(s_html_page));
@@ -359,6 +375,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
     char ssid[33] = {0};
     char password[65] = {0};
     char image_url[129] = {0};
+    bool swap_colors = false;
 
     char *saveptr;
     char *token = strtok_r(buf, "&", &saveptr);
@@ -369,6 +386,8 @@ static esp_err_t save_handler(httpd_req_t *req) {
             strncpy(password, token + 9, 64);
         } else if (strncmp(token, "image_url=", 10) == 0) {
             strncpy(image_url, token + 10, 128);
+        } else if (strncmp(token, "swap_colors=", 12) == 0) {
+            swap_colors = (strncmp(token + 12, "1", 1) == 0);
         }
         token = strtok_r(NULL, "&", &saveptr);
     }
@@ -377,16 +396,20 @@ static esp_err_t save_handler(httpd_req_t *req) {
     url_decode(password);
     url_decode(image_url);
 
-    ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s", ssid, image_url);
+    ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s, Swap Colors: %s",
+             ssid, image_url, swap_colors ? "true" : "false");
 
-    wifi_save_config(ssid, password, strlen(image_url) < 6 ? NULL : image_url);
+    wifi_save_config(ssid, password, strlen(image_url) < 6 ? NULL : image_url, swap_colors);
     
     free(buf);
 
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, s_success_html, strlen(s_success_html));
 
-    wifi_connect();
+    // Delay to allow response to be sent, then reboot
+    ESP_LOGI(TAG, "Configuration saved - rebooting in 1 second...");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
 
     return ESP_OK;
 }

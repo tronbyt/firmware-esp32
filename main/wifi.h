@@ -4,9 +4,15 @@
 #include <stdbool.h>
 #include <esp_err.h>
 #include <esp_http_server.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/timers.h"
 
 #ifndef ENABLE_AP_MODE
 #define ENABLE_AP_MODE 1
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /**
@@ -17,6 +23,13 @@
  * @return 0 on success, non-zero on failure
  */
 int wifi_initialize(const char *ssid, const char *password);
+
+#if ENABLE_AP_MODE
+/**
+ * @brief Shutdown WiFi Config Portal
+ */
+void wifi_shutdown_ap(TimerHandle_t xTimer);
+#endif
 
 /**
  * @brief Shutdown WiFi
@@ -57,6 +70,13 @@ bool wifi_wait_for_ipv6(uint32_t timeout_ms);
 const char* wifi_get_image_url();
 
 /**
+ * @brief Get the swap_colors setting
+ *
+ * @return true if colors should be swapped, false otherwise
+ */
+bool wifi_get_swap_colors(void);
+
+/**
  * @brief Check if WiFi is connected to an AP
  *
  * @return true if connected, false otherwise
@@ -90,9 +110,10 @@ void wifi_register_config_callback(void (*callback)(void));
  * @param ssid WiFi SSID
  * @param password WiFi Password
  * @param image_url Image URL
+ * @param swap_colors Swap colors (Gen1/S3 only)
  * @return esp_err_t ESP_OK on success
  */
-esp_err_t wifi_save_config(const char *ssid, const char *password, const char *image_url);
+esp_err_t wifi_save_config(const char *ssid, const char *password, const char *image_url, bool swap_colors);
 
 /**
  * @brief Connect to the configured WiFi network
@@ -101,9 +122,13 @@ void wifi_connect(void);
 
 /**
  * @brief Check WiFi health and attempt reconnection if needed
- * 
+ *
  * Checks if WiFi is connected. If not, attempts to reconnect and increments
  * a counter. If the counter reaches 10 consecutive failures, the system will
  * reboot. The counter is reset whenever WiFi is connected.
  */
 void wifi_health_check(void);
+
+#ifdef __cplusplus
+}
+#endif
