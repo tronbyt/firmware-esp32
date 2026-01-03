@@ -11,8 +11,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "921600",
     "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -40,8 +40,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "921600",
     "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -69,8 +69,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "460800",
     "idfTarget": "esp32",
+    "flashBaudRate": "460800",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -96,8 +96,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "921600",
     "idfTarget": "esp32",
+    "flashBaudRate": "921600",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -126,8 +126,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "921600",
     "idfTarget": "esp32",
+    "flashBaudRate": "921600",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -156,8 +156,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
+    "idfTarget": "esp32s3",
     "flashBaudRate": "460800",
-    "idfTarget": "esp32",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -186,8 +186,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "921600",
     "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
@@ -215,8 +215,8 @@
       "sdkconfigFilePath": "sdkconfig"
     },
     "env": {},
-    "flashBaudRate": "921600",
     "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
     "monitorBaudRate": "115200",
     "openOCD": {
       "debugLevel": 2,
