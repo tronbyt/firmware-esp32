@@ -13,11 +13,9 @@ The firmware can be configured via a `secrets.json` file or via Kconfig (`idf.py
 
 ## Configuration
 
-1.  **Clone with submodules**:
+1.  **Clone the repository**:
     ```bash
-    git clone --recursive <repo-url>
-    # OR if already cloned:
-    git submodule update --init --recursive
+    git clone <repo-url>
     ```
 
 2.  **Secrets**:
@@ -71,7 +69,7 @@ idf.py flash monitor
 # Development Conventions
 
 -   The project uses native ESP-IDF for building, flashing, and monitoring.
--   Dependencies are managed via git submodules in `external/` and the `idf_component.yml` file.
+-   Dependencies are managed via the `idf_component.yml` file.
 -   Configuration is managed through `secrets.json` (overrides) and Kconfig.
 -   Different hardware configurations are managed through board-specific `sdkconfig.defaults` files.
 

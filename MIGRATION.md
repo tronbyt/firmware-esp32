@@ -14,22 +14,12 @@ This project has been migrated to use native ESP-IDF.
 
 ## Getting Started
 
-1.  **Clone with submodules**:
+1.  **Clone the repository**:
     ```bash
-    git clone --recursive <repo-url>
-    # OR if already cloned:
-    git submodule update --init --recursive
+    git clone <repo-url>
     ```
 
-2.  **Build for a specific board**:
-    To mimic PlatformIO environments, use the provided `sdkconfig.defaults.<board>` files or the convenience Makefile:
-    ```bash
-    # Using Makefile
-    make tidbyt-gen1
-    
-    # OR using idf.py directly
-    idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen1" build
-    ```
+2.  **Secrets**:
 
 ## Configuration & Secrets
 
@@ -46,7 +36,4 @@ The `secrets.json` injection is still supported. If `secrets.json` exists in the
 *   `main/`: Main application source code.
 *   `components/`: Local components:
     *   `assets`: Built-in WebP images.
-    *   `libwebp`: Wrapper for external libwebp submodule.
-    *   `ESP32-HUB75-MatrixPanel-DMA`: HUB75 submodule.
-*   `external/`: Git submodules.
 *   `sdkconfig.defaults.*`: Default configuration fragments for different hardware.
