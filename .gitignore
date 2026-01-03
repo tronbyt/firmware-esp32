@@ -2,7 +2,9 @@
 managed_components
 sdkconfig
 sdkconfig.old
-.vscode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
 .production
 secrets.json
 .DS_Store
