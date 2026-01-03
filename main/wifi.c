@@ -242,7 +242,7 @@ void wifi_shutdown_ap(TimerHandle_t xTimer) {
 #endif
 
 // Shutdown WiFi
-void wifi_shutdown() {
+void wifi_shutdown(void) {
 #if ENABLE_AP_MODE
     // Stop the web server if it's running
     ap_stop();

@@ -34,7 +34,7 @@ void wifi_shutdown_ap(TimerHandle_t xTimer);
 /**
  * @brief Shutdown WiFi
  */
-void wifi_shutdown();
+void wifi_shutdown(void);
 
 /**
  * @brief Get MAC address

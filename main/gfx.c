@@ -257,7 +257,7 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   return counter;  // Return the counter value (>= 0) so caller can wait for it to be loaded
 }
 
-int gfx_get_loaded_counter() {
+int gfx_get_loaded_counter(void) {
   if (!_state) return -1;
 
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
@@ -327,7 +327,7 @@ void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint
   display_text(text, x, y, r, g, b, scale);
 }
 
-void gfx_shutdown() { display_shutdown(); }
+void gfx_shutdown(void) { display_shutdown(); }
 
 static void gfx_loop(void *args) {
   void *webp = NULL;

@@ -1,5 +1,5 @@
 #pragma once
 
-int flash_initialize();
+int flash_initialize(void);
 
-void flash_shutdown();
+void flash_shutdown(void);

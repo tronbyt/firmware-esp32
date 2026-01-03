@@ -10,19 +10,19 @@ extern int32_t isAnimating;  // Declare the variable
 #ifdef __cplusplus
 extern "C" {
 #endif
-int display_initialize();
+int display_initialize(void);
 void display_set_brightness(uint8_t brightness_pct);
-uint8_t display_get_brightness();
-void display_shutdown();
+uint8_t display_get_brightness(void);
+void display_shutdown(void);
 
 void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB);
 
-void display_clear();
+void display_clear(void);
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
-void draw_error_indicator_pixel();
+void draw_error_indicator_pixel(void);
 void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t b, int scale);
-void display_flip();
+void display_flip(void);
 // int32_t isAnimating = 0;  // Initialize with a valid value
 
 #ifdef __cplusplus

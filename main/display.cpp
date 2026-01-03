@@ -71,7 +71,7 @@
   #define CLK 22
   #define LAT 26
   #define OE 25
-  #elif CONFIG_BOARD_MATRIXPORTAL_S3
+#elif CONFIG_BOARD_MATRIXPORTAL_S3
 //                     R1, G1, B1, R2, G2, B2
 // uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
 // uint8_t addrPins[] = {45, 36, 48, 35, 21};
@@ -112,7 +112,7 @@ static MatrixPanel_I2S_DMA *_matrix;
 static uint8_t _brightness = DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
 
-int display_initialize() {
+int display_initialize(void) {
   // Get swap_colors setting
   bool swap_colors = wifi_get_swap_colors();
 
@@ -229,9 +229,9 @@ void display_set_brightness(uint8_t brightness_pct) {
   }
 }
 
-uint8_t display_get_brightness() { return _brightness; }
+uint8_t display_get_brightness(void) { return _brightness; }
 
-void display_shutdown() {
+void display_shutdown(void) {
   _matrix->clearScreen();
   _matrix->stopDMAoutput();
   delete _matrix;
@@ -265,7 +265,7 @@ void display_draw(const uint8_t *pix, int width, int height,
   _matrix->flipDMABuffer();
 }
 
-void display_clear() { _matrix->clearScreen(); }
+void display_clear(void) { _matrix->clearScreen(); }
 
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   if (_matrix != NULL) {
@@ -274,7 +274,7 @@ void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   }
 }
 
-void draw_error_indicator_pixel() {
+void draw_error_indicator_pixel(void) {
   display_draw_pixel(0, 0, 100, 0, 0);
 }
 
@@ -333,7 +333,7 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
   // Note: Not flipping buffer here anymore - caller must call display_flip()
 }
 
-void display_flip() {
+void display_flip(void) {
   if (_matrix != NULL) {
     _matrix->flipDMABuffer();
   }
