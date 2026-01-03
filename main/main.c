@@ -61,6 +61,9 @@ static void ota_task_entry(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
+// Globals for WebSocket reassembly
+static size_t ws_accumulated_len = 0;
+
 static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                                     int32_t event_id, void *event_data) {
   esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
@@ -102,143 +105,136 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       draw_error_indicator_pixel();
       break;
     case WEBSOCKET_EVENT_DATA:
-      // ESP_LOGI(TAG, "---------------------WEBSOCKET_EVENT_DATA");
-      // ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
-      // ESP_LOGW(TAG, "Received=%.*s", data->data_len, (char *)data->data_ptr);
-      // ESP_LOGW(TAG, "Total payload length=%d, data_len=%d, current payload offset=%d\r\n",
-      //  data->payload_len, data->data_len, data->payload_offset);
-      // Check if this is a complete message or just a fragment
-      bool is_complete =
-          (data->payload_offset + data->data_len >= data->payload_len);
+      // Process text messages (op_code == 1)
+      if (data->op_code == 1 && data->data_len > 0) {
+          // Check if this is a complete message or just a fragment
+          // For text, we assume it's small enough to not be fragmented or we just take what we get for now
+          // (Improving text handling to support fragmentation is separate, but config is usually small)
+          bool is_complete = (data->payload_offset + data->data_len >= data->payload_len);
+          
+          if (is_complete) {
+              // Ensure null-termination for cJSON
+              char *json_str = malloc(data->data_len + 1);
+              if (json_str) {
+                  memcpy(json_str, data->data_ptr, data->data_len);
+                  json_str[data->data_len] = '\0';
+                  cJSON *root = cJSON_Parse(json_str);
+                  free(json_str);
 
-
-
-      // Process text messages (op_code == 1) only when complete to avoid processing fragments multiple times
-      if (data->op_code == 1 && is_complete) {
-          // Ensure null-termination for cJSON
-          char *json_str = malloc(data->data_len + 1);
-          if (json_str) {
-              memcpy(json_str, data->data_ptr, data->data_len);
-              json_str[data->data_len] = '\0';
-              cJSON *root = cJSON_Parse(json_str);
-              free(json_str);
-
-              if (root) {
-                  // Check for "immediate"
-                  cJSON *immediate_item = cJSON_GetObjectItem(root, "immediate");
-                  if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
-                      ESP_LOGI(TAG, "Immediate command detected");
-                      ESP_LOGI(TAG, "Interrupting current animation to load queued image");
-                      isAnimating = -1;
-                  }
-
-                  // Check for "dwell_secs"
-                  cJSON *dwell_item = cJSON_GetObjectItem(root, "dwell_secs");
-                  if (cJSON_IsNumber(dwell_item)) {
-                      int dwell_value = dwell_item->valueint;
-                      if (dwell_value < 1) dwell_value = 1;
-                      if (dwell_value > 3600) dwell_value = 3600;
-                      app_dwell_secs = dwell_value;
-                      ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
-                  }
-
-                  // Check for "brightness"
-                  cJSON *brightness_item = cJSON_GetObjectItem(root, "brightness");
-                  if (cJSON_IsNumber(brightness_item)) {
-                      int brightness_value = brightness_item->valueint;
-                      if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
-                      if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
-                      display_set_brightness((uint8_t)brightness_value);
-                      ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
-                  }
-
-                  // Check for "ota_url"
-                  cJSON *ota_item = cJSON_GetObjectItem(root, "ota_url");
-                  if (cJSON_IsString(ota_item) && (ota_item->valuestring != NULL)) {
-                      char *ota_url = strdup(ota_item->valuestring);
-                      if (ota_url) {
-                          ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
-                          xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
+                  if (root) {
+                      // Check for "immediate"
+                      cJSON *immediate_item = cJSON_GetObjectItem(root, "immediate");
+                      if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
+                          ESP_LOGI(TAG, "Immediate command detected");
+                          ESP_LOGI(TAG, "Interrupting current animation to load queued image");
+                          isAnimating = -1;
                       }
+
+                      // Check for "dwell_secs"
+                      cJSON *dwell_item = cJSON_GetObjectItem(root, "dwell_secs");
+                      if (cJSON_IsNumber(dwell_item)) {
+                          int dwell_value = dwell_item->valueint;
+                          if (dwell_value < 1) dwell_value = 1;
+                          if (dwell_value > 3600) dwell_value = 3600;
+                          app_dwell_secs = dwell_value;
+                          ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
+                      }
+
+                      // Check for "brightness"
+                      cJSON *brightness_item = cJSON_GetObjectItem(root, "brightness");
+                      if (cJSON_IsNumber(brightness_item)) {
+                          int brightness_value = brightness_item->valueint;
+                          if (brightness_value < DISPLAY_MIN_BRIGHTNESS) brightness_value = DISPLAY_MIN_BRIGHTNESS;
+                          if (brightness_value > DISPLAY_MAX_BRIGHTNESS) brightness_value = DISPLAY_MAX_BRIGHTNESS;
+                          display_set_brightness((uint8_t)brightness_value);
+                          ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
+                      }
+
+                      // Check for "ota_url"
+                      cJSON *ota_item = cJSON_GetObjectItem(root, "ota_url");
+                      if (cJSON_IsString(ota_item) && (ota_item->valuestring != NULL)) {
+                          char *ota_url = strdup(ota_item->valuestring);
+                          if (ota_url) {
+                              ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
+                              xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
+                          }
+                      }
+
+                      cJSON_Delete(root);
+                  } else {
+                      ESP_LOGW(TAG, "Failed to parse WebSocket text message as JSON");
                   }
-
-                  cJSON_Delete(root);
               } else {
-                  ESP_LOGW(TAG, "Failed to parse WebSocket text message as JSON");
+                  ESP_LOGE(TAG, "Failed to allocate memory for JSON parsing");
               }
-          } else {
-              ESP_LOGE(TAG, "Failed to allocate memory for JSON parsing");
           }
-      } else if (data->op_code == 2) {
-        // Binary data (WebP image)
-
-        // Check if this is a complete message or just a fragment
-        bool is_complete =
-            (data->payload_offset + data->data_len >= data->payload_len);
-
-        if (is_complete) {
-          // Reset oversize flag for next message
-          websocket_oversize_detected = false;
+      } else if (data->op_code == 2 || data->op_code == 0) {
+        // Binary data (WebP image) or Continuation
+        
+        // Start of new message: Opcode 2 at Offset 0
+        if (data->op_code == 2 && data->payload_offset == 0) {
+            if (webp != NULL) {
+                ESP_LOGW(TAG, "Discarding incomplete previous WebP buffer");
+                free(webp);
+                webp = NULL;
+            }
+            ws_accumulated_len = 0;
+            websocket_oversize_detected = false;
         }
 
-        // Check if payload size exceeds maximum buffer size (only on first fragment)
-        if (data->payload_offset == 0 && data->payload_len > CONFIG_HTTP_BUFFER_SIZE_MAX) {
-          ESP_LOGE(TAG, "WebP payload size (%d bytes) exceeds maximum buffer size (%d bytes)",
-                   data->payload_len, CONFIG_HTTP_BUFFER_SIZE_MAX);
-          // Display the oversize graphic
-          if (gfx_display_asset("oversize") != 0) {
-            ESP_LOGE(TAG, "Failed to display oversize graphic");
-          }
-          websocket_oversize_detected = true;
-          break;
-        }
+        // Skip if oversize detected
+        if (websocket_oversize_detected) break;
 
-        // Skip processing if oversize was detected for this message
-        if (websocket_oversize_detected) {
-          ESP_LOGD(TAG, "Skipping fragment due to oversize detection");
-          break;
-        }
+        // If Opcode 0 (Continuation) but no buffer, ignore (orphan or text continuation)
+        if (data->op_code == 0 && webp == NULL) break;
 
-        // First fragment or complete message - allocate memory
-        if (data->payload_offset == 0) {
-          // Free previous buffer if it exists
-          if (webp != NULL) {
-            ESP_LOGW(TAG, "Discarding incomplete previous WebP buffer");
-            free(webp);
-            webp = NULL;
-          }
-
-          // Allocate memory for the full payload
-          webp = malloc(data->payload_len);
-          if (webp == NULL) {
-            ESP_LOGE(TAG, "Failed to allocate memory for WebP image (%d bytes)", data->payload_len);
+        // Resize buffer
+        size_t new_size = ws_accumulated_len + data->data_len;
+        if (new_size > CONFIG_HTTP_BUFFER_SIZE_MAX) {
+            ESP_LOGE(TAG, "WebP size (%zu bytes) exceeds max (%d)", new_size, CONFIG_HTTP_BUFFER_SIZE_MAX);
+            websocket_oversize_detected = true;
+            if (gfx_display_asset("oversize") != 0) {
+                ESP_LOGE(TAG, "Failed to display oversize graphic");
+            }
+            if (webp) { free(webp); webp = NULL; }
+            ws_accumulated_len = 0;
             break;
-          }
         }
 
-        // Ensure we have a valid buffer
-        if (webp == NULL) {
-          ESP_LOGE(TAG, "WebP buffer is NULL, skipping fragment");
-          break;
+        uint8_t *new_buf = realloc(webp, new_size);
+        if (new_buf == NULL) {
+            ESP_LOGE(TAG, "Failed to allocate memory (%zu bytes)", new_size);
+            if (webp) { free(webp); webp = NULL; }
+            ws_accumulated_len = 0;
+            break;
         }
+        webp = new_buf;
 
-        // Copy this fragment to the appropriate position in the buffer
-        memcpy(webp + data->payload_offset, data->data_ptr, data->data_len);
+        // Append data
+        memcpy(webp + ws_accumulated_len, data->data_ptr, data->data_len);
+        ws_accumulated_len = new_size;
 
-        // If complete, process the WebP image
-        if (is_complete) {
-          // Queue the complete binary data as a WebP image
-          // This will wait for the current animation to finish before loading
-          gfx_update(webp, data->payload_len, app_dwell_secs);
+        // Check for completion
+        // Frame is complete if we received the full payload of this frame
+        bool frame_complete = (data->payload_offset + data->data_len >= data->payload_len);
+        
+        // Message is complete if this is the Final Frame (FIN) and we have all of it
+        if (data->fin && frame_complete) {
+            ESP_LOGI(TAG, "WebP download complete (%zu bytes)", ws_accumulated_len);
+            
+            // Queue the complete binary data as a WebP image
+            // This will wait for the current animation to finish before loading
+            gfx_update(webp, ws_accumulated_len, app_dwell_secs);
 
-          if (!first_ws_image_received) {
-            ESP_LOGI(TAG, "First WebSocket image received - interrupting boot animation");
-            isAnimating = -1;
-            first_ws_image_received = true;
-          }
+            if (!first_ws_image_received) {
+                ESP_LOGI(TAG, "First WebSocket image received - interrupting boot animation");
+                isAnimating = -1;
+                first_ws_image_received = true;
+            }
 
-          // Do not free(webp) here; ownership is transferred to gfx
-          webp = NULL;
+            // Do not free(webp) here; ownership is transferred to gfx
+            webp = NULL;
+            ws_accumulated_len = 0;
         }
       }
 
