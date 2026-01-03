@@ -3,7 +3,7 @@
 IDF_PATH ?= $(shell echo $$IDF_PATH)
 PROJECT_NAME := firmware
 
-.PHONY: all clean fullclean flash monitor menuconfig help submodules tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare
+.PHONY: all clean fullclean flash monitor menuconfig help tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare
 
 help:
 	@echo "Tronbyt Firmware Build System"
@@ -26,13 +26,7 @@ help:
 	@echo "  matrixportal-s3          Build for MatrixPortal S3"
 	@echo "  matrixportal-s3-waveshare Build for MatrixPortal S3 (Waveshare)"
 
-submodules:
-	@if [ ! -f external/libwebp/CMakeLists.txt ] || [ ! -f components/ESP32-HUB75-MatrixPanel-DMA/CMakeLists.txt ]; then \
-		echo "Initializing submodules..."; \
-		git submodule update --init --recursive; \
-	fi
-
-all: submodules
+all:
 	idf.py build
 
 clean:
@@ -42,36 +36,36 @@ fullclean:
 	idf.py fullclean
 	rm -f sdkconfig
 
-flash: submodules
+flash:
 	idf.py flash
 
-monitor: submodules
+monitor:
 	idf.py monitor
 
-menuconfig: submodules
+menuconfig:
 	idf.py menuconfig
 
 # Device Specific Targets
-tidbyt-gen1: submodules
+tidbyt-gen1:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen1" build
 
-tidbyt-gen1_swap: submodules
+tidbyt-gen1_swap:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen1_swap" build
 
-tidbyt-gen2: submodules
+tidbyt-gen2:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tidbyt-gen2" build
 
-tronbyt-s3: submodules
+tronbyt-s3:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tronbyt-s3" build
 
-tronbyt-s3-wide: submodules
+tronbyt-s3-wide:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.tronbyt-s3-wide" build
 
-pixoticker: submodules
+pixoticker:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.pixoticker" build
 
-matrixportal-s3: submodules
+matrixportal-s3:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.matrixportal-s3" build
 
-matrixportal-s3-waveshare: submodules
+matrixportal-s3-waveshare:
 	idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.matrixportal-s3-waveshare" build
