@@ -1,2 +1,4 @@
 dependencies:
   espressif/esp_websocket_client: "1.6.0"
+  esp32-hub75-matrixpanel-dma:
+    git: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA.git
