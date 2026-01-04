@@ -48,8 +48,9 @@ menuconfig:
 # Usage: $(call build_device,<target>,<defaults_file>)
 define build_device
 	rm -f sdkconfig
-	IDF_TARGET=$(1) idf.py set-target $(1)
-	IDF_TARGET=$(1) idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" build
+	IDF_TARGET=$(1) idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
+	IDF_TARGET=$(1) idf.py build
+	cd build && esptool.py --chip $(1) merge_bin -o merged_firmware.bin @flash_args
 endef
 
 # Device Specific Targets
