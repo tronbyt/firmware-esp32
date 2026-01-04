@@ -91,8 +91,35 @@ The easiest way to restore your Tidbyt to factory firmware is using the web flas
 ### Using the WiFi config portal
 
 The firmware has a rudimentary wifi config portal page that can be accessed by joining the TRONBYT-CONFIG network and navigating to http://10.10.0.1. 
+
 [WiFi Config Portal How-To Video](https://www.youtube.com/watch?v=OAWUCG-HRDs)
 
+
+
+## Troubleshooting
+
+
+
+### OTA Update Fails with "Validation Failed" or "Checksum Error"
+
+If you are seeing errors like `ESP_ERR_OTA_VALIDATE_FAILED` or checksum mismatches in the logs, especially on Gen 1 devices previously used with ESPHome or stock firmware:
+
+
+
+1.  **Partition Table Mismatch:** You likely have an old or incompatible partition table on your device. This happens if you flashed only the `firmware.bin` instead of the full `merged.bin` during the initial install.
+
+2.  **Solution:** You must perform a **clean install**.
+
+    *   Use the **Web Flasher** method described in "Back to Normal".
+
+    *   Ensure you select the **merged binary** (`gen1_merged.bin`).
+
+    *   Ideally, use the "Erase Flash" option in the flasher tool before programming to ensure a clean slate.
+
+
+
 [1]: https://github.com/tidbyt/pixlet
+
+
 [2]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html
 [3]: https://github.com/tronbyt/server
