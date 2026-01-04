@@ -25,11 +25,139 @@ static bool is_ip_private(const struct sockaddr *addr) {
                (ip >> 24 == 127);                // 127.0.0.0/8
     } else if (addr->sa_family == AF_INET6) {
         struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
+        // fc00::/7 (Unique Local Addresses)
         if ((sin6->sin6_addr.s6_addr[0] & 0xFE) == 0xFC) return true;
+        // fe80::/10 (Link-local)
         if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) return true;
+        // ::1 (Loopback)
         if (IN6_IS_ADDR_LOOPBACK(&sin6->sin6_addr)) return true;
     }
     return false;
+}
+
+static bool check_url_protocol(const char *url, size_t url_len, const struct http_parser_url *u, char *out_url, size_t out_len) {
+    if (u->field_set & (1 << UF_SCHEMA)) {
+        const char *schema = url + u->field_data[UF_SCHEMA].off;
+        size_t schema_len = u->field_data[UF_SCHEMA].len;
+
+        if (schema_len == 5 && strncasecmp(schema, "https", 5) == 0) {
+            if (url_len >= out_len) {
+                ESP_LOGE(TAG, "HTTPS URL is too long for buffer");
+                return false;
+            }
+            memcpy(out_url, url, url_len + 1);
+            return true; // HTTPS is allowed
+        }
+        if (schema_len != 4 || strncasecmp(schema, "http", 4) != 0) {
+            ESP_LOGE(TAG, "Unsupported protocol: %.*s", (int)schema_len, schema);
+            return false;
+        }
+    } else {
+        ESP_LOGE(TAG, "URL schema missing");
+        return false;
+    }
+    return true; // Is HTTP
+}
+
+static bool resolve_and_validate_host(const char *url, const struct http_parser_url *u, char *ip_str, size_t ip_str_len, bool *is_ipv6) {
+    if (!(u->field_set & (1 << UF_HOST))) {
+        ESP_LOGE(TAG, "URL host missing");
+        return false;
+    }
+
+    char host[256];
+    size_t host_len = u->field_data[UF_HOST].len;
+    if (host_len >= sizeof(host)) {
+        ESP_LOGE(TAG, "URL host is too long");
+        return false;
+    }
+    memcpy(host, url + u->field_data[UF_HOST].off, host_len);
+    host[host_len] = '\0';
+
+    struct addrinfo hints = { .ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM };
+    struct addrinfo *res;
+
+    if (getaddrinfo(host, NULL, &hints, &res) != 0) {
+        ESP_LOGE(TAG, "DNS resolution failed for %s", host);
+        return false;
+    }
+
+    bool private_ip = false;
+    *is_ipv6 = false;
+
+    for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
+        if (is_ip_private(p->ai_addr)) {
+            void *addr_ptr;
+            if (p->ai_family == AF_INET) {
+                addr_ptr = &((struct sockaddr_in *)p->ai_addr)->sin_addr;
+                *is_ipv6 = false;
+            } else {
+                addr_ptr = &((struct sockaddr_in6 *)p->ai_addr)->sin6_addr;
+                *is_ipv6 = true;
+            }
+            if (inet_ntop(p->ai_family, addr_ptr, ip_str, ip_str_len) != NULL) {
+                private_ip = true;
+                break;
+            }
+        }
+    }
+    freeaddrinfo(res);
+
+    if (!private_ip) {
+        ESP_LOGE(TAG, "Security violation: OTA via HTTP allowed only for private IPs. Host: %s", host);
+        return false;
+    }
+    return true;
+}
+
+static bool reconstruct_url(const char *url, const struct http_parser_url *u, const char *ip_str, bool is_ipv6, char *out_url, size_t out_len) {
+    int written = 0;
+
+#define APPEND_URL_PART(format, ...) do { \
+    size_t remaining = (written < out_len) ? out_len - written : 0; \
+    int ret = snprintf(out_url + written, remaining, format, ##__VA_ARGS__); \
+    if (ret < 0) { \
+        ESP_LOGE(TAG, "URL reconstruction failed"); \
+        return false; \
+    } \
+    written += ret; \
+} while (0)
+
+    APPEND_URL_PART("http://");
+
+    if (u->field_set & (1 << UF_USERINFO)) {
+        APPEND_URL_PART("%.*s@", (int)u->field_data[UF_USERINFO].len, url + u->field_data[UF_USERINFO].off);
+    }
+
+    if (is_ipv6) {
+        APPEND_URL_PART("[%s]", ip_str);
+    } else {
+        APPEND_URL_PART("%s", ip_str);
+    }
+
+    if (u->field_set & (1 << UF_PORT)) {
+        APPEND_URL_PART(":%.*s", (int)u->field_data[UF_PORT].len, url + u->field_data[UF_PORT].off);
+    }
+
+    if (u->field_set & (1 << UF_PATH)) {
+        APPEND_URL_PART("%.*s", (int)u->field_data[UF_PATH].len, url + u->field_data[UF_PATH].off);
+    }
+
+    if (u->field_set & (1 << UF_QUERY)) {
+        APPEND_URL_PART("?%.*s", (int)u->field_data[UF_QUERY].len, url + u->field_data[UF_QUERY].off);
+    }
+
+    if (u->field_set & (1 << UF_FRAGMENT)) {
+        APPEND_URL_PART("#%.*s", (int)u->field_data[UF_FRAGMENT].len, url + u->field_data[UF_FRAGMENT].off);
+    }
+
+#undef APPEND_URL_PART
+
+    if (written >= out_len) {
+        ESP_LOGE(TAG, "Rewritten URL is too long for buffer");
+        return false;
+    }
+    return true;
 }
 
 static bool validate_and_rewrite_url(const char *url, char *out_url, size_t out_len) {
@@ -42,64 +170,30 @@ static bool validate_and_rewrite_url(const char *url, char *out_url, size_t out_
         return false;
     }
 
-    if (!(u.field_set & (1 << UF_SCHEMA))) {
-        ESP_LOGE(TAG, "URL schema missing");
+    // Check protocol and handle HTTPS
+    if (!check_url_protocol(url, url_len, &u, out_url, out_len)) {
         return false;
     }
-
-    const char *schema = url + u.field_data[UF_SCHEMA].off;
-    size_t schema_len = u.field_data[UF_SCHEMA].len;
-
-    if (schema_len == 5 && strncasecmp(schema, "https", 5) == 0) {
-        if (url_len >= out_len) return false;
-        memcpy(out_url, url, url_len + 1);
+    
+    // If check_url_protocol returns true and out_url is filled (HTTPS case), we are done.
+    // However, the function returns true for HTTP as well, but doesn't fill out_url.
+    // We need to check if it was HTTPS.
+    if (strncmp(out_url, "https", 5) == 0) {
         return true;
     }
 
-    if (schema_len != 4 || strncasecmp(schema, "http", 4) != 0) {
-        ESP_LOGE(TAG, "Unsupported protocol: %.*s", (int)schema_len, schema);
-        return false;
-    }
-
-    if (!(u.field_set & (1 << UF_HOST))) return false;
-    char host[256];
-    size_t host_len = u.field_data[UF_HOST].len;
-    if (host_len >= sizeof(host)) return false;
-    memcpy(host, url + u.field_data[UF_HOST].off, host_len);
-    host[host_len] = '\0';
-
-    struct addrinfo hints = { .ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM };
-    struct addrinfo *res;
-    if (getaddrinfo(host, NULL, &hints, &res) != 0) return false;
-
-    bool private_ip = false;
+    // It is HTTP. Resolve and validate host.
     char ip_str[INET6_ADDRSTRLEN];
-    bool is_ipv6 = false;
-
-    for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
-        if (is_ip_private(p->ai_addr)) {
-            void *addr_ptr = (p->ai_family == AF_INET) ? (void*)&((struct sockaddr_in *)p->ai_addr)->sin_addr : (void*)&((struct sockaddr_in6 *)p->ai_addr)->sin6_addr;
-            is_ipv6 = (p->ai_family == AF_INET6);
-            inet_ntop(p->ai_family, addr_ptr, ip_str, sizeof(ip_str));
-            private_ip = true;
-            break;
-        }
-    }
-    freeaddrinfo(res);
-
-    if (!private_ip) {
-        ESP_LOGE(TAG, "Security violation: OTA via HTTP allowed only for private IPs.");
+    bool is_ipv6;
+    if (!resolve_and_validate_host(url, &u, ip_str, sizeof(ip_str), &is_ipv6)) {
         return false;
     }
 
-    int written = snprintf(out_url, out_len, "http://");
-    if (u.field_set & (1 << UF_USERINFO)) written += snprintf(out_url + written, out_len - written, "%.*s@", (int)u.field_data[UF_USERINFO].len, url + u.field_data[UF_USERINFO].off);
-    written += snprintf(out_url + written, out_len - written, is_ipv6 ? "[%s]" : "%s", ip_str);
-    if (u.field_set & (1 << UF_PORT)) written += snprintf(out_url + written, out_len - written, ":%.*s", (int)u.field_data[UF_PORT].len, url + u.field_data[UF_PORT].off);
-    if (u.field_set & (1 << UF_PATH)) written += snprintf(out_url + written, out_len - written, "%.*s", (int)u.field_data[UF_PATH].len, url + u.field_data[UF_PATH].off);
-    if (u.field_set & (1 << UF_QUERY)) written += snprintf(out_url + written, out_len - written, "?%.*s", (int)u.field_data[UF_QUERY].len, url + u.field_data[UF_QUERY].off);
-    if (u.field_set & (1 << UF_FRAGMENT)) written += snprintf(out_url + written, out_len - written, "#%.*s", (int)u.field_data[UF_FRAGMENT].len, url + u.field_data[UF_FRAGMENT].off);
-    
+    // Reconstruct URL with resolved IP
+    if (!reconstruct_url(url, &u, ip_str, is_ipv6, out_url, out_len)) {
+        return false;
+    }
+
     ESP_LOGI(TAG, "Rewritten OTA URL: %s", out_url);
     return true;
 }
@@ -117,19 +211,13 @@ void run_ota(const char* url) {
         .crt_bundle_attach = esp_crt_bundle_attach,
         .timeout_ms = 60000,
         .keep_alive_enable = true,
-        .save_client_session = true,
+        .save_client_session = true, // Enable TLS session resumption
     };
 
     esp_https_ota_config_t ota_config = {
         .http_config = &http_config,
         .partial_http_download = true,
-        // .partition.staging defaults to NULL, which correctly finds the 
-        // next partition based on the currently running one (esp_ota_get_running_partition).
     };
-
-    // We proceed without explicitly attempting to "sync" otadata (via set_boot_partition),
-    // because doing so on a running partition that fails strict validation would abort
-    // the update process. esp_https_ota will correctly identify the next slot.
 
     esp_err_t ret = esp_https_ota(&ota_config);
     if (ret == ESP_OK) {
