@@ -1,5 +1,3 @@
-# Makefile for Tronbyt Firmware
-
 PROJECT_NAME := firmware
 
 .PHONY: all clean fullclean flash monitor menuconfig help tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare
@@ -25,31 +23,34 @@ help:
 	@echo "  matrixportal-s3          Build for MatrixPortal S3"
 	@echo "  matrixportal-s3-waveshare Build for MatrixPortal S3 (Waveshare)"
 
+IDFPY := $(shell which idf.py)
+PYTHON := python3
+
 all:
-	idf.py build
+	$(PYTHON) $(IDFPY) build
 
 clean:
-	idf.py clean
+	$(PYTHON) $(IDFPY) clean
 
 fullclean:
-	idf.py fullclean
+	$(PYTHON) $(IDFPY) fullclean
 	rm -f sdkconfig
 
 flash:
-	idf.py flash
+	$(PYTHON) $(IDFPY) flash
 
 monitor:
-	idf.py monitor
+	$(PYTHON) $(IDFPY) monitor
 
 menuconfig:
-	idf.py menuconfig
+	$(PYTHON) $(IDFPY) menuconfig
 
 # Macro for device-specific builds
 # Usage: $(call build_device,<target>,<defaults_file>)
 define build_device
 	rm -f sdkconfig
-	IDF_TARGET=$(1) idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
-	IDF_TARGET=$(1) idf.py build
+	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
+	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
 	cd build && esptool.py --chip $(1) merge_bin -o merged_firmware.bin @flash_args
 endef
 
