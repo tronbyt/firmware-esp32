@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 #include "assets.h"
 #include "version.h"
+#include "nvs_settings.h"
 
 static const char *TAG = "gfx";
 
@@ -74,7 +75,8 @@ int gfx_initialize(const char *img_url) {
     return 1;
   }
 
-#if !SKIP_DISPLAY_VERSION
+  // Display version if not skipped
+  if (!nvs_get_skip_display_version()) {
   // Display version and image_url for 1 second
   display_clear();
   char version_text[32];
@@ -158,7 +160,7 @@ int gfx_initialize(const char *img_url) {
   display_flip();
 
   vTaskDelay(pdMS_TO_TICKS(2000));
-#endif
+  }
 
   // Launch the graphics loop in separate task
   BaseType_t ret =

@@ -23,25 +23,14 @@
 #include "esp_wifi_types.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "nvs_settings.h"
 
 #define TAG "WIFI"
-
-// NVS namespace and keys
-#define NVS_NAMESPACE "wifi_config"
-#define NVS_KEY_SSID "ssid"
-#define NVS_KEY_PASSWORD "password"
-#define NVS_KEY_IMAGE_URL "image_url"
-#define NVS_KEY_SWAP_COLORS "swap_colors"
 
 // Event group bits
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_CONNECTED_IPV6_BIT BIT2
-
-// Maximum string lengths
-#define MAX_SSID_LEN 32
-#define MAX_PASSWORD_LEN 64
-#define MAX_URL_LEN 128
 
 // Maximum number of reconnection attempts before giving up
 #define MAX_RECONNECT_ATTEMPTS 10
@@ -50,16 +39,6 @@
 static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t *s_sta_netif = NULL;
 static void (*s_config_callback)(void) = NULL;
-
-// WiFi credentials
-static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
-static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
-static char s_image_url[MAX_URL_LEN + 1] = {0};
-#ifdef SWAP_COLORS_DEFAULT
-static bool s_swap_colors = true;
-#else
-static bool s_swap_colors = false;
-#endif
 
 // Reconnection counter
 static int s_reconnect_attempts = 0;
@@ -76,29 +55,17 @@ static void (*s_disconnect_callback)(void) = NULL;
 
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
-static esp_err_t save_wifi_config_to_nvs(void);
-static esp_err_t load_wifi_config_from_nvs(void);
-
-static bool has_saved_config = false;
-
 
 // Initialize WiFi
 int wifi_initialize(const char *ssid, const char *password) {
   ESP_LOGI(TAG, "Initializing WiFi");
 
-#if !ENABLE_AP_MODE
-  ESP_LOGI(TAG, "AP mode disabled via secrets; starting without config portal");
-#endif
+  // Initialize NVS settings
+  ESP_ERROR_CHECK(nvs_settings_init());
 
-  // Initialize NVS
-  esp_err_t ret = nvs_flash_init();
-  if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
-      ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    ESP_LOGI(TAG, "Erasing NVS flash");
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    ret = nvs_flash_init();
+  if (!nvs_get_ap_mode()) {
+      ESP_LOGI(TAG, "AP mode disabled via settings");
   }
-  ESP_ERROR_CHECK(ret);
 
   // Create event group
   s_wifi_event_group = xEventGroupCreate();
@@ -110,7 +77,9 @@ int wifi_initialize(const char *ssid, const char *password) {
   // Create default STA and AP network interfaces
   s_sta_netif = esp_netif_create_default_wifi_sta();
 #if ENABLE_AP_MODE
-  ap_init_netif();
+  if (nvs_get_ap_mode()) {
+      ap_init_netif();
+  }
 #endif
 
   // Initialize WiFi with default config
@@ -125,103 +94,52 @@ int wifi_initialize(const char *ssid, const char *password) {
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6,
                                              &wifi_event_handler, NULL));
 
-  // Load saved configuration from NVS
-  has_saved_config = (load_wifi_config_from_nvs() == ESP_OK);
-
-  // If no saved configuration, try to use the hardcoded credentials
-  if (!has_saved_config) {
-    ESP_LOGI(TAG,
-             "No saved WiFi configuration found, using hardcoded credentials");
-
-    // Force the compiler to include these strings in the binary
-    char placeholder_ssid[MAX_SSID_LEN + 1] = WIFI_SSID;  // PATCH:SSID
-    char placeholder_password[MAX_PASSWORD_LEN + 1] = WIFI_PASSWORD;  // PATCH:PASS
-    char placeholder_url[MAX_URL_LEN + 1] = REMOTE_URL;
-
-    ESP_LOGI(TAG, "Hardcoded WIFI_SSID: %s", placeholder_ssid);
-    ESP_LOGI(TAG, "Hardcoded WIFI_PASSWORD: %s", placeholder_password);
-    ESP_LOGI(TAG, "Hardcoded REMOTE_URL: %s", placeholder_url);
-
-    // Check if SSID contains placeholder text or is empty
-
-    if (strstr(placeholder_ssid, "Xplaceholder") != NULL) {
-      ESP_LOGW(TAG,
-               "WIFI_SSID contains placeholder text or is empty, not using "
-               "hardcoded credentials");
-    } else {
-      // Save the hardcoded credentials to our internal variables
-      strncpy(s_wifi_ssid, placeholder_ssid, MAX_SSID_LEN);
-      s_wifi_ssid[MAX_SSID_LEN] = '\0';
-
-      // Check if password contains placeholder text
-      if (strstr(placeholder_password, "Xplaceholder") != NULL) {
-        ESP_LOGW(TAG, "WIFI_PASSWORD contains placeholder text, not using it");
-        s_wifi_password[0] = '\0';
-      } else {
-        strncpy(s_wifi_password, placeholder_password, MAX_PASSWORD_LEN);
-        s_wifi_password[MAX_PASSWORD_LEN] = '\0';
-      }
-
-      // Also load the hardcoded REMOTE_URL as the image URL if available
-      // Check if REMOTE_URL contains placeholder text or is empty
-      if (strstr(placeholder_url, "Xplaceholder") != NULL) {
-        ESP_LOGW(
-            TAG,
-            "REMOTE_URL contains placeholder text or is empty, not using it");
-        s_image_url[0] = '\0';
-      } else {
-        ESP_LOGI(TAG, "Using hardcoded REMOTE_URL: %s", placeholder_url);
-        strncpy(s_image_url, placeholder_url, MAX_URL_LEN);
-        s_image_url[MAX_URL_LEN] = '\0';
-      }
-
-      // Save to NVS for future use only if we have valid credentials
-      if (strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
-        save_wifi_config_to_nvs();
-        has_saved_config = true;
-        ESP_LOGI(TAG, "Saved hardcoded credentials to NVS");
-      } else {
-        ESP_LOGW(TAG, "Not saving incomplete WiFi credentials to NVS");
-        has_saved_config = false;
-      }
-    }
-  }
+  char saved_ssid[33] = {0};
+  nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+  bool has_credentials = (strlen(saved_ssid) > 0);
 
 #if ENABLE_AP_MODE
-  ap_configure();
+  if (nvs_get_ap_mode()) {
+      ap_configure();
+  } else {
+      ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+  }
 #else
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 #endif
 
   // Configure STA with credentials if available
-  if (strlen(s_wifi_ssid) > 0) {
+  if (has_credentials) {
       wifi_config_t sta_config = {0};
-      strncpy((char *)sta_config.sta.ssid, s_wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
-      strncpy((char *)sta_config.sta.password, s_wifi_password, sizeof(sta_config.sta.password) - 1);
+      nvs_get_ssid((char *)sta_config.sta.ssid, sizeof(sta_config.sta.ssid));
+      nvs_get_password((char *)sta_config.sta.password, sizeof(sta_config.sta.password));
       ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
-      ESP_LOGI(TAG, "Configured STA with SSID: %s", s_wifi_ssid);
+      ESP_LOGI(TAG, "Configured STA with SSID: %s", saved_ssid);
   }
 
   // Start WiFi
   ESP_ERROR_CHECK(esp_wifi_start());
 
   /* Apply WiFi Power Save Mode from configuration */
-  ESP_LOGI(TAG, "Setting WiFi Power Save Mode to %d...", WIFI_POWER_SAVE_MODE);
-  esp_wifi_set_ps((wifi_ps_type_t)WIFI_POWER_SAVE_MODE);
+  wifi_apply_power_save();
 
   // Wait for AP to start
 #if ENABLE_AP_MODE
-  vTaskDelay(pdMS_TO_TICKS(500));
-
-  // Start the web server
-  ap_start();
+  if (nvs_get_ap_mode()) {
+      vTaskDelay(pdMS_TO_TICKS(500));
+      // Start the web server
+      ap_start();
+  }
 #endif
 
   // Only attempt to connect if we have valid saved credentials
-  if (!(has_saved_config && strlen(s_wifi_ssid) > 0)) {
+  if (!has_credentials) {
 #if ENABLE_AP_MODE
-    ESP_LOGI(TAG,
-             "No valid WiFi credentials available, starting in AP mode only");
+    if (nvs_get_ap_mode()) {
+        ESP_LOGI(TAG, "No valid WiFi credentials available, starting in AP mode only");
+    } else {
+        ESP_LOGW(TAG, "No valid WiFi credentials available and AP mode is disabled");
+    }
 #else
     ESP_LOGW(TAG,
              "No valid WiFi credentials available and AP mode is disabled");
@@ -288,7 +206,10 @@ bool wifi_wait_for_connection(uint32_t timeout_ms) {
         ESP_LOGI(TAG, "Already connected to WiFi");
         return true;
     }
-    if (!has_saved_config) {
+    
+    char saved_ssid[33] = {0};
+    nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+    if (strlen(saved_ssid) == 0) {
         ESP_LOGI(TAG, "No saved config, won't connect.");
         return false;
     }
@@ -309,7 +230,6 @@ bool wifi_wait_for_connection(uint32_t timeout_ms) {
     return false;
 }
 
-#if PREFER_IPV6
 // Wait for IPv6 address with timeout
 bool wifi_wait_for_ipv6(uint32_t timeout_ms) {
     if (s_wifi_event_group == NULL) return false;
@@ -327,17 +247,6 @@ bool wifi_wait_for_ipv6(uint32_t timeout_ms) {
 
     ESP_LOGI(TAG, "IPv6 address wait timeout");
     return false;
-}
-#endif
-
-// Get the current image URL
-const char* wifi_get_image_url(void) {
-    return (strlen(s_image_url) > 0) ? s_image_url : NULL;
-}
-
-// Get the swap_colors setting
-bool wifi_get_swap_colors(void) {
-    return s_swap_colors;
 }
 
 // Register connect callback
@@ -457,135 +366,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-// Save WiFi configuration to NVS
-static esp_err_t save_wifi_config_to_nvs(void) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening NVS handle: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    if (s_wifi_ssid[0] != '\0') {
-      err = nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error saving SSID to NVS: %s", esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-      }
-    }
-
-    if (s_wifi_password[0] != '\0') {
-      err = nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error saving password to NVS: %s", esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-      }
-    }
-
-    if (s_image_url[0] != '\0') {
-      err = nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error saving image URL to NVS: %s",
-                 esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-      }
-    }
-
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
-    // Save swap_colors setting
-    err = nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error saving swap_colors to NVS: %s", esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-    }
-#endif
-
-    err = nvs_commit(nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error committing NVS: %s", esp_err_to_name(err));
-    }
-
-    nvs_close(nvs_handle);
-
-    // Call config callback if registered and save was successful
-    if (err == ESP_OK && s_config_callback != NULL) {
-        s_config_callback();
-    }
-
-    return err;
-}
-
-// Load WiFi configuration from NVS
-static esp_err_t load_wifi_config_from_nvs(void) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGI(TAG, "No saved WiFi configuration found");
-        return err;
-    }
-
-    size_t required_size = MAX_SSID_LEN;
-    err = nvs_get_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid, &required_size);
-    if (err != ESP_OK) {
-        ESP_LOGI(TAG, "No saved SSID found");
-        nvs_close(nvs_handle);
-        return err;
-    }
-
-    required_size = MAX_PASSWORD_LEN;
-    err = nvs_get_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password, &required_size);
-    if (err != ESP_OK) {
-        ESP_LOGI(TAG, "No saved password found");
-        // Clear SSID if password is not found
-        memset(s_wifi_ssid, 0, sizeof(s_wifi_ssid));
-        nvs_close(nvs_handle);
-        return err;
-    }
-
-    required_size = MAX_URL_LEN;
-    err = nvs_get_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url, &required_size);
-    if (err != ESP_OK) {
-        ESP_LOGI(TAG, "No saved image URL found");
-        // This is not a critical error, just set empty URL
-        memset(s_image_url, 0, sizeof(s_image_url));
-    }
-
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
-    // Load swap_colors setting
-    uint8_t swap_colors_val = 0;
-    err = nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &swap_colors_val);
-    if (err != ESP_OK) {
-#ifdef SWAP_COLORS_DEFAULT
-        ESP_LOGI(TAG, "No saved swap_colors found, defaulting to true");
-        s_swap_colors = true;
-#else
-        ESP_LOGI(TAG, "No saved swap_colors found, defaulting to false");
-        s_swap_colors = false;
-#endif
-    } else {
-        s_swap_colors = (swap_colors_val != 0);
-    }
-#endif
-
-    nvs_close(nvs_handle);
-
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
-    ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s, Swap Colors: %s",
-             s_wifi_ssid, s_image_url, s_swap_colors ? "true" : "false");
-#else
-    ESP_LOGI(TAG, "Loaded WiFi configuration - SSID: %s, Image URL: %s",
-             s_wifi_ssid, s_image_url);
-#endif
-    return ESP_OK;
-}
+// Helper to handle successful IP acquisition
 
 /**
  * @brief Check WiFi health and attempt reconnection if needed
@@ -609,7 +390,9 @@ void wifi_health_check(void) {
     ESP_LOGW(TAG, "WiFi Health check. Disconnect count: %d", s_wifi_disconnect_counter);
 
     // Try to reconnect
-    if (strlen(s_wifi_ssid) > 0) {
+    char saved_ssid[33] = {0};
+    nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+    if (strlen(saved_ssid) > 0) {
         ESP_LOGI(TAG, "Reconnecting in Health check...");
         esp_err_t err = esp_wifi_connect();
         if (err != ESP_OK) {
@@ -620,26 +403,11 @@ void wifi_health_check(void) {
     }
 }
 
-esp_err_t wifi_save_config(const char *ssid, const char *password, const char *image_url, bool swap_colors) {
-    if (ssid) {
-        strncpy(s_wifi_ssid, ssid, MAX_SSID_LEN);
-        s_wifi_ssid[MAX_SSID_LEN] = '\0';
-    }
-    if (password) {
-        strncpy(s_wifi_password, password, MAX_PASSWORD_LEN);
-        s_wifi_password[MAX_PASSWORD_LEN] = '\0';
-    }
-    if (image_url) {
-        strncpy(s_image_url, image_url, MAX_URL_LEN);
-        s_image_url[MAX_URL_LEN] = '\0';
-    }
-    s_swap_colors = swap_colors;
-
-    return save_wifi_config_to_nvs();
-}
-
 void wifi_connect(void) {
-    if (strlen(s_wifi_ssid) == 0) {
+    char saved_ssid[33] = {0};
+    nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+    
+    if (strlen(saved_ssid) == 0) {
         ESP_LOGI(TAG, "No SSID configured, not connecting");
         return;
     }
@@ -650,10 +418,10 @@ void wifi_connect(void) {
 
     // Configure STA with the saved credentials
     wifi_config_t sta_config = {0};
-    strncpy((char *)sta_config.sta.ssid, s_wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
-    strncpy((char *)sta_config.sta.password, s_wifi_password, sizeof(sta_config.sta.password) - 1);
+    nvs_get_ssid((char *)sta_config.sta.ssid, sizeof(sta_config.sta.ssid));
+    nvs_get_password((char *)sta_config.sta.password, sizeof(sta_config.sta.password));
 
-    ESP_LOGI(TAG, "Connecting to SSID: %s", s_wifi_ssid);
+    ESP_LOGI(TAG, "Connecting to SSID: %s", saved_ssid);
 
     // Set the STA configuration
     esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
@@ -676,4 +444,10 @@ void wifi_connect(void) {
     } else {
         ESP_LOGI(TAG, "WiFi connect command sent successfully");
     }
+}
+
+void wifi_apply_power_save(void) {
+    int power_save_mode = nvs_get_wifi_power_save();
+    ESP_LOGI(TAG, "Setting WiFi Power Save Mode to %d...", power_save_mode);
+    esp_wifi_set_ps((wifi_ps_type_t)power_save_mode);
 }

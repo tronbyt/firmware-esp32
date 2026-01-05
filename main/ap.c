@@ -2,6 +2,7 @@
 
 #include "ap.h"
 #include "wifi.h"
+#include "nvs_settings.h"
 
 #include <esp_log.h>
 #include <esp_wifi.h>
@@ -33,7 +34,7 @@ static httpd_handle_t s_server = NULL;
     " Swap Colors (Gen1/S3 only - requires reboot)" \
     "</label>" \
     "</div>"
-#define SWAP_COLORS_FORMAT_ARG , wifi_get_swap_colors() ? "checked" : ""
+#define SWAP_COLORS_FORMAT_ARG , nvs_get_swap_colors() ? "checked" : ""
 #else
 #define SWAP_COLORS_HTML ""
 #define SWAP_COLORS_FORMAT_ARG
@@ -310,7 +311,7 @@ void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
 }
 
 static esp_err_t root_handler(httpd_req_t *req) {
-    const char* image_url = wifi_get_image_url();
+    const char* image_url = nvs_get_image_url();
     ESP_LOGI(TAG, "Injecting image url (%s) to html template", image_url ? image_url : "");
     snprintf(s_html_page, sizeof(s_html_page), s_html_page_template, image_url ? image_url : "" SWAP_COLORS_FORMAT_ARG);
     ESP_LOGI(TAG, "Serving root page");
@@ -397,7 +398,11 @@ static esp_err_t save_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s, Swap Colors: %s",
              ssid, image_url, swap_colors ? "true" : "false");
 
-    wifi_save_config(ssid, password, strlen(image_url) < 6 ? NULL : image_url, swap_colors);
+    nvs_set_ssid(ssid);
+    nvs_set_password(password);
+    nvs_set_image_url(strlen(image_url) < 6 ? NULL : image_url);
+    nvs_set_swap_colors(swap_colors);
+    nvs_save_settings();
     
     free(buf);
 

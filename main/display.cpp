@@ -1,6 +1,6 @@
 #include "display.h"
 #include "font5x7.h"
-#include "wifi.h"
+#include "nvs_settings.h"
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #if CONFIG_BOARD_TIDBYT_GEN2
@@ -114,7 +114,7 @@ static const char *TAG = "display";
 
 int display_initialize(void) {
   // Get swap_colors setting
-  bool swap_colors = wifi_get_swap_colors();
+  bool swap_colors = nvs_get_swap_colors();
 
   // Initialize pin values based on hardware and swap_colors setting
   int8_t pin_R1, pin_G1, pin_BL1, pin_R2, pin_G2, pin_BL2;

@@ -52,7 +52,6 @@ int wifi_get_mac(uint8_t mac[6]);
  */
 bool wifi_wait_for_connection(uint32_t timeout_ms);
 
-#if PREFER_IPV6
 /**
  * @brief Wait for IPv6 address with timeout
  *
@@ -60,21 +59,6 @@ bool wifi_wait_for_connection(uint32_t timeout_ms);
  * @return true if IPv6 address acquired, false if timeout
  */
 bool wifi_wait_for_ipv6(uint32_t timeout_ms);
-#endif
-
-/**
- * @brief Get the image URL from WiFi manager
- *
- * @return Pointer to image URL string, or NULL if not set
- */
-const char* wifi_get_image_url();
-
-/**
- * @brief Get the swap_colors setting
- *
- * @return true if colors should be swapped, false otherwise
- */
-bool wifi_get_swap_colors(void);
 
 /**
  * @brief Check if WiFi is connected to an AP
@@ -105,17 +89,6 @@ void wifi_register_disconnect_callback(void (*callback)(void));
 void wifi_register_config_callback(void (*callback)(void));
 
 /**
- * @brief Save WiFi configuration
- * 
- * @param ssid WiFi SSID
- * @param password WiFi Password
- * @param image_url Image URL
- * @param swap_colors Swap colors (Gen1/S3 only)
- * @return esp_err_t ESP_OK on success
- */
-esp_err_t wifi_save_config(const char *ssid, const char *password, const char *image_url, bool swap_colors);
-
-/**
  * @brief Connect to the configured WiFi network
  */
 void wifi_connect(void);
@@ -128,6 +101,11 @@ void wifi_connect(void);
  * reboot. The counter is reset whenever WiFi is connected.
  */
 void wifi_health_check(void);
+
+/**
+ * @brief Apply WiFi Power Save Mode from NVS settings
+ */
+void wifi_apply_power_save(void);
 
 #ifdef __cplusplus
 }

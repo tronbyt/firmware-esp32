@@ -19,6 +19,7 @@
 #include "ap.h"
 #include "version.h"
 #include "ota.h"
+#include "nvs_settings.h"
 
 #if CONFIG_BUTTON_PIN >= 0
 #include <driver/gpio.h>
@@ -73,30 +74,44 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
       xEventGroupSetBits(s_ws_event_group, WS_CONNECTED_BIT);
       {
         uint8_t mac[6];
-        char mac_str[18];
-        char client_info[256];
+        char ssid[33] = {0};
+        nvs_get_ssid(ssid, sizeof(ssid));
+        const char *image_url = nvs_get_image_url();
+        if (image_url == NULL) image_url = "";
 
-        int len;
-        if (wifi_get_mac(mac) == 0) {
-            snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
-                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-            ESP_LOGI(TAG, "MAC address obtained: %s", mac_str);
+        cJSON *root = cJSON_CreateObject();
+        if (root) {
+            cJSON *ci = cJSON_AddObjectToObject(root, "client_info");
+            if (ci) {
+                cJSON_AddStringToObject(ci, "firmware_version", FIRMWARE_VERSION);
+                cJSON_AddStringToObject(ci, "firmware_type", "ESP32");
+                cJSON_AddNumberToObject(ci, "protocol_version", WEBSOCKET_PROTOCOL_VERSION);
+                
+                if (wifi_get_mac(mac) == 0) {
+                    char mac_str[18];
+                    snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+                             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                    cJSON_AddStringToObject(ci, "mac", mac_str);
+                } else {
+                    ESP_LOGW(TAG, "Failed to get MAC address; sending client info without MAC.");
+                }
 
-            len = snprintf(client_info, sizeof(client_info),
-                     "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":%d,\"mac\":\"%s\"}}",
-                     FIRMWARE_VERSION, WEBSOCKET_PROTOCOL_VERSION, mac_str);
-        } else {
-            ESP_LOGW(TAG, "Failed to get MAC address; sending client info without MAC.");
-            len = snprintf(client_info, sizeof(client_info),
-                     "{\"client_info\":{\"firmware_version\":\"%s\",\"firmware_type\":\"ESP32\",\"protocol_version\":%d}}",
-                     FIRMWARE_VERSION, WEBSOCKET_PROTOCOL_VERSION);
-        }
+                cJSON_AddStringToObject(ci, "ssid", ssid);
+                cJSON_AddStringToObject(ci, "image_url", image_url);
+                cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
+                cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
+                cJSON_AddBoolToObject(ci, "skip_display_version", nvs_get_skip_display_version());
+                cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
+                cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
 
-        if (len > 0 && len < sizeof(client_info)) {
-            ESP_LOGI(TAG, "Sending client info: %s", client_info);
-            esp_websocket_client_send_text(ws_handle, client_info, len, portMAX_DELAY);
-        } else {
-            ESP_LOGE(TAG, "Failed to create client info string or it was truncated. Length: %d, Buffer size: %zu", len, sizeof(client_info));
+                char *json_str = cJSON_PrintUnformatted(root);
+                if (json_str) {
+                    ESP_LOGI(TAG, "Sending client info: %s", json_str);
+                    esp_websocket_client_send_text(ws_handle, json_str, strlen(json_str), portMAX_DELAY);
+                    free(json_str);
+                }
+            }
+            cJSON_Delete(root);
         }
       }
       break;
@@ -158,6 +173,67 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                               ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
                               xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
                           }
+                      }
+
+                      // Check for "swap_colors"
+                      cJSON *swap_colors_item = cJSON_GetObjectItem(root, "swap_colors");
+                      if (cJSON_IsBool(swap_colors_item)) {
+                          bool val = cJSON_IsTrue(swap_colors_item);
+                          nvs_set_swap_colors(val);
+                          ESP_LOGI(TAG, "Updated swap_colors to %d", val);
+                          nvs_save_settings();
+                      }
+
+                      // Check for "wifi_power_save"
+                      cJSON *wifi_ps_item = cJSON_GetObjectItem(root, "wifi_power_save");
+                      if (cJSON_IsNumber(wifi_ps_item)) {
+                          wifi_ps_type_t val = (wifi_ps_type_t)wifi_ps_item->valueint;
+                          nvs_set_wifi_power_save(val);
+                          ESP_LOGI(TAG, "Updated wifi_power_save to %d", val);
+                          nvs_save_settings();
+                          wifi_apply_power_save();
+                      }
+
+                      // Check for "skip_display_version"
+                      cJSON *skip_ver_item = cJSON_GetObjectItem(root, "skip_display_version");
+                      if (cJSON_IsBool(skip_ver_item)) {
+                          bool val = cJSON_IsTrue(skip_ver_item);
+                          nvs_set_skip_display_version(val);
+                          ESP_LOGI(TAG, "Updated skip_display_version to %d", val);
+                          nvs_save_settings();
+                      }
+
+                      // Check for "ap_mode"
+                      cJSON *ap_mode_item = cJSON_GetObjectItem(root, "ap_mode");
+                      if (cJSON_IsBool(ap_mode_item)) {
+                          bool val = cJSON_IsTrue(ap_mode_item);
+                          nvs_set_ap_mode(val);
+                          ESP_LOGI(TAG, "Updated ap_mode to %d", val);
+                          nvs_save_settings();
+                      }
+
+                      // Check for "prefer_ipv6"
+                      cJSON *prefer_ipv6_item = cJSON_GetObjectItem(root, "prefer_ipv6");
+                      if (cJSON_IsBool(prefer_ipv6_item)) {
+                          bool val = cJSON_IsTrue(prefer_ipv6_item);
+                          nvs_set_prefer_ipv6(val);
+                          ESP_LOGI(TAG, "Updated prefer_ipv6 to %d", val);
+                          nvs_save_settings();
+                      }
+
+                      // Check for "image_url"
+                      cJSON *image_url_item = cJSON_GetObjectItem(root, "image_url");
+                      if (cJSON_IsString(image_url_item) && (image_url_item->valuestring != NULL)) {
+                          nvs_set_image_url(image_url_item->valuestring);
+                          ESP_LOGI(TAG, "Updated image_url to %s", image_url_item->valuestring);
+                          nvs_save_settings();
+                      }
+
+                      // Check for "reboot"
+                      cJSON *reboot_item = cJSON_GetObjectItem(root, "reboot");
+                      if (cJSON_IsBool(reboot_item) && cJSON_IsTrue(reboot_item)) {
+                          ESP_LOGI(TAG, "Reboot command received via WS");
+                          esp_restart();
                       }
 
                       cJSON_Delete(root);
@@ -301,7 +377,7 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
-  image_url = wifi_get_image_url();
+  image_url = nvs_get_image_url();
 
   // Setup the display.
   if (gfx_initialize(image_url)) {
@@ -329,15 +405,15 @@ void app_main(void) {
   if (sta_connected) {
     ESP_LOGI(TAG, "WiFi connected successfully!");
 
-#if PREFER_IPV6
-    ESP_LOGI(TAG, "IPv6 preference enabled, waiting for global address...");
-    // Prefer IPv6: Wait a short time for IPv6 address to be acquired
-    if (wifi_wait_for_ipv6(5000)) {
-        ESP_LOGI(TAG, "IPv6 Ready!");
-    } else {
-        ESP_LOGI(TAG, "IPv6 not available or timed out, proceeding with existing connection (IPv4)");
+    if (nvs_get_prefer_ipv6()) {
+        ESP_LOGI(TAG, "IPv6 preference enabled, waiting for global address...");
+        // Prefer IPv6: Wait a short time for IPv6 address to be acquired
+        if (wifi_wait_for_ipv6(5000)) {
+            ESP_LOGI(TAG, "IPv6 Ready!");
+        } else {
+            ESP_LOGI(TAG, "IPv6 not available or timed out, proceeding with existing connection (IPv4)");
+        }
     }
-#endif
   }
 
 #if ENABLE_AP_MODE
@@ -398,7 +474,7 @@ void app_main(void) {
 #endif
 
   while (true) {
-    image_url = wifi_get_image_url();
+    image_url = nvs_get_image_url();
 
     if (image_url != NULL && strlen(image_url) > 0 ) {
       // It's not blank now
