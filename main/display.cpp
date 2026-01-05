@@ -313,11 +313,7 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
               int py = cursor_y + (row * scale) + sy;
 
               // Check bounds
-              #if CONFIG_BOARD_TRONBYT_S3_WIDE
-              if (px >= 0 && px < 128 && py >= 0 && py < 64) {
-              #else
-              if (px >= 0 && px < 64 && py >= 0 && py < 32) {
-              #endif
+              if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
                 _matrix->drawPixelRGB888(px, py, r, g, b);
               }
             }
