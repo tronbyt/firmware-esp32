@@ -1,4 +1,3 @@
-.pio
 managed_components
 sdkconfig
 sdkconfig.old
@@ -9,7 +8,6 @@ sdkconfig.old
 secrets.json
 .DS_Store
 build
-dependencies.lock
 _secrets.json
 secrets.cmake
 secrets.json.injected*
