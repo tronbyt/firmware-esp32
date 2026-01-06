@@ -229,8 +229,6 @@ void display_set_brightness(uint8_t brightness_pct) {
   }
 }
 
-uint8_t display_get_brightness(void) { return _brightness; }
-
 void display_shutdown(void) {
   _matrix->clearScreen();
   _matrix->stopDMAoutput();

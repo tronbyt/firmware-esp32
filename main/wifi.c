@@ -49,10 +49,6 @@ static int s_wifi_disconnect_counter = 0;
 
 #include "ap.h"
 
-// Callback functions
-static void (*s_connect_callback)(void) = NULL;
-static void (*s_disconnect_callback)(void) = NULL;
-
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 
@@ -153,12 +149,6 @@ int wifi_initialize(const char *ssid, const char *password) {
   return 0;
 }
 
-#if ENABLE_AP_MODE
-void wifi_shutdown_ap(TimerHandle_t xTimer) {
-    ap_shutdown_timer_callback(xTimer);
-}
-#endif
-
 // Shutdown WiFi
 void wifi_shutdown(void) {
 #if ENABLE_AP_MODE
@@ -249,16 +239,6 @@ bool wifi_wait_for_ipv6(uint32_t timeout_ms) {
     return false;
 }
 
-// Register connect callback
-void wifi_register_connect_callback(void (*callback)(void)) {
-    s_connect_callback = callback;
-}
-
-// Register disconnect callback
-void wifi_register_disconnect_callback(void (*callback)(void)) {
-    s_disconnect_callback = callback;
-}
-
 // Add new function to register config callback
 void wifi_register_config_callback(void (*callback)(void)) {
     s_config_callback = callback;
@@ -273,11 +253,6 @@ static void handle_successful_ip_acquisition(void) {
     // Set connection bit and clear fail bit
     xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-
-    // Call connect callback if registered
-    if (s_connect_callback != NULL) {
-        s_connect_callback();
-    }
 }
 
 // WiFi event handler
@@ -301,11 +276,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 // Clear connection bit and set fail bit
                 xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_CONNECTED_IPV6_BIT);
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-
-                // Call disconnect callback if registered
-                if (s_disconnect_callback != NULL) {
-                    s_disconnect_callback();
-                }
 
                 // Check if we've reached the maximum number of reconnection attempts
                 if (s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS && !s_connection_given_up) {
@@ -400,49 +370,6 @@ void wifi_health_check(void) {
         }
     } else {
         ESP_LOGW(TAG, "No SSID configured, cannot reconnect");
-    }
-}
-
-void wifi_connect(void) {
-    char saved_ssid[33] = {0};
-    nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
-    
-    if (strlen(saved_ssid) == 0) {
-        ESP_LOGI(TAG, "No SSID configured, not connecting");
-        return;
-    }
-
-    // Reset reconnection counter and state
-    s_reconnect_attempts = 0;
-    s_connection_given_up = false;
-
-    // Configure STA with the saved credentials
-    wifi_config_t sta_config = {0};
-    nvs_get_ssid((char *)sta_config.sta.ssid, sizeof(sta_config.sta.ssid));
-    nvs_get_password((char *)sta_config.sta.password, sizeof(sta_config.sta.password));
-
-    ESP_LOGI(TAG, "Connecting to SSID: %s", saved_ssid);
-
-    // Set the STA configuration
-    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set WiFi STA config: %s", esp_err_to_name(err));
-        return;
-    }
-
-    // Check WiFi state before connecting
-    wifi_mode_t mode;
-    if (esp_wifi_get_mode(&mode) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get WiFi mode");
-        return;
-    }
-
-    // Connect to the AP - handle errors gracefully
-    err = esp_wifi_connect();
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "WiFi connect failed: %s. Will retry automatically.", esp_err_to_name(err));
-    } else {
-        ESP_LOGI(TAG, "WiFi connect command sent successfully");
     }
 }
 

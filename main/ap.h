@@ -24,13 +24,6 @@ esp_err_t ap_start(void);
 esp_err_t ap_stop(void);
 
 /**
- * @brief Shutdown WiFi Config Portal (Timer callback)
- * 
- * @param xTimer Timer handle
- */
-void ap_shutdown_timer_callback(TimerHandle_t xTimer);
-
-/**
  * @brief Initialize the AP network interface
  */
 void ap_init_netif(void);

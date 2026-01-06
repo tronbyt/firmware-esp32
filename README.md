@@ -105,7 +105,6 @@ If you are seeing errors like `ESP_ERR_OTA_VALIDATE_FAILED` or checksum mismatch
 2.  **Solution:** You must perform a **clean install**.
 
     *   Use the **Web Flasher** method described in "Back to Normal.
-
     *   Ensure you select the **merged binary** (`gen1_merged.bin`).
     *   Ideally, use the "Erase Flash" option in the flasher tool before programming to ensure a clean slate.
 

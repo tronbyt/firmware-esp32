@@ -24,6 +24,7 @@
 // DNS server task handle
 static TaskHandle_t s_dns_task_handle = NULL;
 static httpd_handle_t s_server = NULL;
+static TimerHandle_t s_ap_shutdown_timer = NULL;
 
 // Swap colors checkbox HTML - only for TIDBYT_GEN1 or MATRIXPORTAL_S3
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
@@ -304,7 +305,7 @@ esp_err_t ap_stop(void) {
     return err;
 }
 
-void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
+static void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
     ESP_LOGI(TAG, "Shutting down config portal");
     ap_stop();
     esp_wifi_set_mode(WIFI_MODE_STA);
@@ -584,7 +585,12 @@ void ap_configure(void) {
 }
 
 void ap_start_shutdown_timer(void) {
-    TimerHandle_t ap_shutdown_timer = xTimerCreate(
+    if (s_ap_shutdown_timer != NULL) {
+        xTimerDelete(s_ap_shutdown_timer, 0);
+        s_ap_shutdown_timer = NULL;
+    }
+
+    s_ap_shutdown_timer = xTimerCreate(
         "ap_shutdown_timer",
         pdMS_TO_TICKS(2 * 60 * 1000),  // 2 minutes in milliseconds
         pdFALSE,                       // One-shot timer
@@ -592,12 +598,13 @@ void ap_start_shutdown_timer(void) {
         ap_shutdown_timer_callback     // Callback function
     );
 
-    if (ap_shutdown_timer != NULL) {
-        if (xTimerStart(ap_shutdown_timer, 0) == pdPASS) {
+    if (s_ap_shutdown_timer != NULL) {
+        if (xTimerStart(s_ap_shutdown_timer, 0) == pdPASS) {
             ESP_LOGI(TAG, "AP will automatically shut down in 2 minutes");
         } else {
             ESP_LOGE(TAG, "Failed to start AP shutdown timer");
-            xTimerDelete(ap_shutdown_timer, 0);
+            xTimerDelete(s_ap_shutdown_timer, 0);
+            s_ap_shutdown_timer = NULL;
         }
     } else {
         ESP_LOGE(TAG, "Failed to create AP shutdown timer");

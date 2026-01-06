@@ -34,23 +34,22 @@
 
 static const char* TAG = "main";
 int32_t isAnimating = 1;
-int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
-uint8_t *webp; // main buffer downloaded webp data
+static int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
+static uint8_t *webp; // main buffer downloaded webp data
 static bool websocket_oversize_detected = false; // Flag to track oversize websocket messages
 
-bool use_websocket = false;
-esp_websocket_client_handle_t ws_handle;
+static bool use_websocket = false;
+static esp_websocket_client_handle_t ws_handle;
 static EventGroupHandle_t s_ws_event_group;
 #define WS_CONNECTED_BIT BIT0
 
-bool button_boot = false;
+static bool button_boot = false;
 static bool first_ws_image_received = false;
-
-bool config_received = false;
-
+static bool config_received = false;
 
 
-void config_saved_callback(void) {
+
+static void config_saved_callback(void) {
   config_received = true;
   ESP_LOGI(TAG, "Configuration saved - signaling main task");
 }
