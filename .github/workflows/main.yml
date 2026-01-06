@@ -74,6 +74,16 @@ jobs:
           echo "Building target: $target"
           echo "--------------------------------------"
           
+          # Determine chip type based on target
+          case "$target" in
+            tronbyt-s3*|matrixportal-s3*)
+              chip="esp32s3"
+              ;;
+            *)
+              chip="esp32"
+              ;;
+          esac
+
           BUILD_DIR="build_$target"
 
           idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" build
@@ -83,15 +93,22 @@ jobs:
             exit 1
           fi
 
-          # Rename for artifact upload or consistency
+          # Generate merged binary
+          echo "Generating merged binary for $chip..."
+          python -m esptool --chip "$chip" merge_bin -o "$BUILD_DIR/merged_firmware.bin" @$BUILD_DIR/flash_args
+
+          # Rename for artifact upload
           mv "$BUILD_DIR/firmware.bin" "${target}_firmware.bin"
+          mv "$BUILD_DIR/merged_firmware.bin" "${target}_merged.bin"
 
       - name: Upload Artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}_firmware
-          path: ${{ matrix.target }}_firmware.bin
+          path: |
+            ${{ matrix.target }}_firmware.bin
+            ${{ matrix.target }}_merged.bin
           if-no-files-found: error
 
   release:
