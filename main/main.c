@@ -64,6 +64,52 @@ static void ota_task_entry(void *pvParameter) {
 // Globals for WebSocket reassembly
 static size_t ws_accumulated_len = 0;
 
+static void send_client_info(void) {
+  uint8_t mac[6];
+  char ssid[33] = {0};
+  nvs_get_ssid(ssid, sizeof(ssid));
+  const char *image_url = nvs_get_image_url();
+  if (image_url == NULL) image_url = "";
+
+  cJSON *root = cJSON_CreateObject();
+  if (root) {
+      cJSON *ci = cJSON_AddObjectToObject(root, "client_info");
+      if (ci) {
+          cJSON_AddStringToObject(ci, "firmware_version", FIRMWARE_VERSION);
+          cJSON_AddStringToObject(ci, "firmware_type", "ESP32");
+          cJSON_AddNumberToObject(ci, "protocol_version", WEBSOCKET_PROTOCOL_VERSION);
+          
+          if (wifi_get_mac(mac) == 0) {
+              char mac_str[18];
+              snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+                       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+              cJSON_AddStringToObject(ci, "mac", mac_str);
+          } else {
+              ESP_LOGW(TAG, "Failed to get MAC address; sending client info without MAC.");
+          }
+
+          cJSON_AddStringToObject(ci, "ssid", ssid);
+          cJSON_AddStringToObject(ci, "image_url", image_url);
+          cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
+          cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
+          cJSON_AddBoolToObject(ci, "skip_display_version", nvs_get_skip_display_version());
+          cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
+          cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
+
+          char *json_str = cJSON_PrintUnformatted(root);
+          if (json_str) {
+              ESP_LOGI(TAG, "Sending client info: %s", json_str);
+              esp_err_t err = esp_websocket_client_send_text(ws_handle, json_str, strlen(json_str), portMAX_DELAY);
+              if (err != ESP_OK) {
+                  ESP_LOGE(TAG, "Failed to send client info: %s", esp_err_to_name(err));
+              }
+              free(json_str);
+          }
+      }
+      cJSON_Delete(root);
+  }
+}
+
 static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                                     int32_t event_id, void *event_data) {
   esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
@@ -71,48 +117,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
     case WEBSOCKET_EVENT_CONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
       xEventGroupSetBits(s_ws_event_group, WS_CONNECTED_BIT);
-      {
-        uint8_t mac[6];
-        char ssid[33] = {0};
-        nvs_get_ssid(ssid, sizeof(ssid));
-        const char *image_url = nvs_get_image_url();
-        if (image_url == NULL) image_url = "";
-
-        cJSON *root = cJSON_CreateObject();
-        if (root) {
-            cJSON *ci = cJSON_AddObjectToObject(root, "client_info");
-            if (ci) {
-                cJSON_AddStringToObject(ci, "firmware_version", FIRMWARE_VERSION);
-                cJSON_AddStringToObject(ci, "firmware_type", "ESP32");
-                cJSON_AddNumberToObject(ci, "protocol_version", WEBSOCKET_PROTOCOL_VERSION);
-                
-                if (wifi_get_mac(mac) == 0) {
-                    char mac_str[18];
-                    snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
-                             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-                    cJSON_AddStringToObject(ci, "mac", mac_str);
-                } else {
-                    ESP_LOGW(TAG, "Failed to get MAC address; sending client info without MAC.");
-                }
-
-                cJSON_AddStringToObject(ci, "ssid", ssid);
-                cJSON_AddStringToObject(ci, "image_url", image_url);
-                cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
-                cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
-                cJSON_AddBoolToObject(ci, "skip_display_version", nvs_get_skip_display_version());
-                cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
-                cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
-
-                char *json_str = cJSON_PrintUnformatted(root);
-                if (json_str) {
-                    ESP_LOGI(TAG, "Sending client info: %s", json_str);
-                    esp_websocket_client_send_text(ws_handle, json_str, strlen(json_str), portMAX_DELAY);
-                    free(json_str);
-                }
-            }
-            cJSON_Delete(root);
-        }
-      }
+      send_client_info();
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
       ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
@@ -136,6 +141,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                   free(json_str);
 
                   if (root) {
+                      bool settings_changed = false;
+
                       // Check for "immediate"
                       cJSON *immediate_item = cJSON_GetObjectItem(root, "immediate");
                       if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
@@ -180,7 +187,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           bool val = cJSON_IsTrue(swap_colors_item);
                           nvs_set_swap_colors(val);
                           ESP_LOGI(TAG, "Updated swap_colors to %d", val);
-                          nvs_save_settings();
+                          settings_changed = true;
                       }
 
                       // Check for "wifi_power_save"
@@ -189,7 +196,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           wifi_ps_type_t val = (wifi_ps_type_t)wifi_ps_item->valueint;
                           nvs_set_wifi_power_save(val);
                           ESP_LOGI(TAG, "Updated wifi_power_save to %d", val);
-                          nvs_save_settings();
+                          settings_changed = true;
                           wifi_apply_power_save();
                       }
 
@@ -199,7 +206,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           bool val = cJSON_IsTrue(skip_ver_item);
                           nvs_set_skip_display_version(val);
                           ESP_LOGI(TAG, "Updated skip_display_version to %d", val);
-                          nvs_save_settings();
+                          settings_changed = true;
                       }
 
                       // Check for "ap_mode"
@@ -208,7 +215,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           bool val = cJSON_IsTrue(ap_mode_item);
                           nvs_set_ap_mode(val);
                           ESP_LOGI(TAG, "Updated ap_mode to %d", val);
-                          nvs_save_settings();
+                          settings_changed = true;
                       }
 
                       // Check for "prefer_ipv6"
@@ -217,7 +224,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           bool val = cJSON_IsTrue(prefer_ipv6_item);
                           nvs_set_prefer_ipv6(val);
                           ESP_LOGI(TAG, "Updated prefer_ipv6 to %d", val);
-                          nvs_save_settings();
+                          settings_changed = true;
                       }
 
                       // Check for "image_url"
@@ -225,7 +232,16 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                       if (cJSON_IsString(image_url_item) && (image_url_item->valuestring != NULL)) {
                           nvs_set_image_url(image_url_item->valuestring);
                           ESP_LOGI(TAG, "Updated image_url to %s", image_url_item->valuestring);
-                          nvs_save_settings();
+                          settings_changed = true;
+                      }
+
+                      if (settings_changed) {
+                          esp_err_t err = nvs_save_settings();
+                          if (err == ESP_OK) {
+                              send_client_info();
+                          } else {
+                              ESP_LOGE(TAG, "Failed to save settings: %s", esp_err_to_name(err));
+                          }
                       }
 
                       // Check for "reboot"

@@ -270,7 +270,7 @@ esp_err_t nvs_save_settings(void) {
     if (strlen(s_image_url) > 0) {
         nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
     }
-    
+
     nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
     nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);
     nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION, s_skip_display_version ? 1 : 0);
