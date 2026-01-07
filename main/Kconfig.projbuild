@@ -1,0 +1,78 @@
+menu "Application Configuration"
+
+    config NO_FAST_FUNCTIONS
+        bool "Disable Fast Functions"
+        default n
+        help
+            Disable fast function optimizations.
+
+    config SWAP_COLORS
+        bool "Swap Colors"
+        default n
+        help
+            Swap RGB colors.
+
+    config NO_INVERT_CLOCK_PHASE
+        bool "No Invert Clock Phase"
+        default n
+        help
+            Do not invert clock phase.
+
+    config HTTP_BUFFER_SIZE_MAX
+        int "Max HTTP Buffer Size"
+        default 460000
+        help
+            Maximum size of the HTTP buffer.
+
+    config HTTP_BUFFER_SIZE_DEFAULT
+        int "Default HTTP Buffer Size"
+        default 100000
+        help
+            Default size of the HTTP buffer.
+
+    choice BOOT_ANIMATION
+        prompt "Boot Animation"
+        default BOOT_WEBP_TRONBYT
+
+        config BOOT_WEBP_TRONBYT
+            bool "Tronbyt"
+        
+        config BOOT_WEBP_WINDYTRON
+            bool "Windytron"
+        
+        config BOOT_WEBP_PARROT
+            bool "Parrot"
+    endchoice
+
+    choice BOARD_TYPE
+        prompt "Board Type"
+        default BOARD_TIDBYT_GEN1
+        help
+            Select the hardware board type.
+
+        config BOARD_TIDBYT_GEN1
+            bool "Tidbyt Gen 1"
+            
+        config BOARD_TIDBYT_GEN2
+            bool "Tidbyt Gen 2"
+            
+        config BOARD_TRONBYT_S3
+            bool "Tronbyt S3"
+
+        config BOARD_TRONBYT_S3_WIDE
+            bool "Tronbyt S3 Wide"
+            
+        config BOARD_PIXOTICKER
+            bool "Pixoticker"
+            
+        config BOARD_MATRIXPORTAL_S3
+            bool "MatrixPortal S3"
+    endchoice
+
+    config BUTTON_PIN
+        int "Button Pin"
+        default -1
+        help
+            GPIO pin for the button.
+
+endmenu

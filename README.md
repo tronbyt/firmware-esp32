@@ -1,6 +1,6 @@
 # Tronbyt Firmware
 
-[![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)]([https://discord.gg/r45MXG4kZc](https://discord.gg/nKDErHGmU7))
+[![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)](https://discord.gg/nKDErHGmU7)
 
 This repository contains a community supported firmware for the Tidbyt hardware 🤓.
 
@@ -12,22 +12,25 @@ derivatives voids your warranty and comes without support.
 
 ## Getting Started
 
-Follow the setup instructions for [tronbyt-server][3] unless you want to build yourself with platformio.
+Follow the setup instructions for [tronbyt-server][3] unless you want to build yourself with ESP-IDF.
 
-## Building yourself with PlatformIO
+## Building yourself with ESP-IDF
 
 Only follow these instructions if you want to build the firmware yourself. Otherwise let the [tronbyt-server][3] generate the firmware file for you.
-This project uses PlatformIO to build, flash, and monitor firmware on the Tidbyt.
-To get started, you will need to download [PlatformIO Core][2] on your computer.
+This project uses the native [ESP-IDF][2] framework to build, flash, and monitor firmware.
 
 Additionally, this firmware is designed to work with https://github.com/tronbyt/server or
 you can point this firmware at any URL that hosts a WebP image that is optimized for the Tidbyt display.
 
-To flash the custom firmware on your device, run the following after replacing
-the variables in secrets.json.example with your desired own information and renaming it to `secrets.json`
-If using tronbyt_manager in docker replace the ip address to the docker host's ip address.
+### Configuration
 
-```
+To flash the custom firmware on your device, follow these steps:
+
+1. Copy `secrets.json.example` to `secrets.json`.
+2. Edit `secrets.json` with your information. If using tronbyt_manager in docker, use the docker host's IP address.
+
+Example `secrets.json`:
+```json
 {
     "WIFI_SSID": "myssid",
     "WIFI_PASSWORD": "<PASSWORD>",
@@ -37,34 +40,34 @@ If using tronbyt_manager in docker replace the ip address to the docker host's i
 }
 ```
 
-Then run the following command:
+### Build and Flash
 
-```
-pio run --environment tidbyt-gen1 --target erase --target upload
+Use the provided `Makefile` for convenience to build for specific hardware:
+
+```bash
+# For Tidbyt Gen 1
+make tidbyt-gen1
+
+# For Tidbyt Gen 2
+make tidbyt-gen2
+
+# For Tronbyt S3
+make tronbyt-s3
 ```
 
-If you're flashing to a Tidbyt Gen2, just change to the above to use
-the `--environment tidbyt-gen2` flag.
+To flash the built firmware to your device:
+
+```bash
+idf.py flash
+```
 
 ## Monitoring Logs
 
 To check the output of your running firmware, run the following:
 
+```bash
+idf.py monitor
 ```
-pio device monitor
-```
-
-## 8Hz Displays
-
-There have been minor issues with certain displays showing red artifacts and slightly off color-pallettes. This seems most likely related to manufacturing tolerances.
-
-In these cases you can use the following environments to try the display at 8Hz instead of 10Hz for the coresponding environments:
-
-- `tidbyt-gen1-patched`
-- `tidbyt-gen1_swap-patched`
-- `tidbyt-gen2-patched`
-
-This [patches](extra_scripts/patch_i2s_divider.py) the HUB75 matrix library to use the legacy clock division calculation that the [OS Tidbyt library](https://github.com/tidbyt/ESP32-HUB75-MatrixPanel-I2S-DMA/blob/8f284afe7ba4ff369a4427121338e1673026320e/esp32_i2s_parallel_dma.c#L163) uses before build.
 
 ## Back to Normal
 
@@ -85,26 +88,27 @@ The easiest way to restore your Tidbyt to factory firmware is using the web flas
 
 4. Click "Program" to flash the factory firmware
 
-### Using PlatformIO
-
-Alternatively, you can use PlatformIO to restore the factory firmware.
-
-To get your Tidbyt back to normal, you can run the following to flash the
-production firmware onto your Tidbyt:
-
-```
-pio run --target reset --environment tidbyt-gen1
-```
-
-And if you're working with a Tidbyt Gen 2:
-
-```
-pio run --target reset --environment tidbyt-gen2
-```
 ### Using the WiFi config portal
-The firmware has a rudimentary wifi config portal page that can be accessed by joining the TRONBYT-CONFIG network and navigating to http://10.10.0.1  . 
+
+The firmware has a rudimentary wifi config portal page that can be accessed by joining the TRONBYT-CONFIG network and navigating to http://10.10.0.1. 
+
 [WiFi Config Portal How-To Video](https://www.youtube.com/watch?v=OAWUCG-HRDs)
 
+## Troubleshooting
+
+### OTA Update Fails with "Validation Failed" or "Checksum Error"
+
+If you are seeing errors like `ESP_ERR_OTA_VALIDATE_FAILED` or checksum mismatches in the logs, especially on Gen 1 devices previously used with ESPHome or stock firmware:
+
+1.  **Partition Table Mismatch:** You likely have an old or incompatible partition table on your device. This happens if you flashed only the `firmware.bin` instead of the full `merged.bin` during the initial install.
+
+2.  **Solution:** You must perform a **clean install**.
+
+    *   Use the **Web Flasher** method described in "Back to Normal.
+    *   Ensure you select the **merged binary** (`gen1_merged.bin`).
+    *   Ideally, use the "Erase Flash" option in the flasher tool before programming to ensure a clean slate.
+
+
 [1]: https://github.com/tidbyt/pixlet
-[2]: https://docs.platformio.org/en/latest/core/installation/index.html
+[2]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html
 [3]: https://github.com/tronbyt/server

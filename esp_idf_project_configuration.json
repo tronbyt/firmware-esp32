@@ -1,0 +1,235 @@
+{
+  "matrixportal-s3": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.matrixportal-s3"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "board/esp32s3-builtin.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "matrixportal-s3-waveshare": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.matrixportal-s3-waveshare"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "board/esp32s3-builtin.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "pixoticker": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.pixoticker"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32",
+    "flashBaudRate": "460800",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "tidbyt-gen1": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.tidbyt-gen1"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "tidbyt-gen1_swap": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.tidbyt-gen1_swap"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "tidbyt-gen2": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.tidbyt-gen2"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32",
+    "flashBaudRate": "460800",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "tronbyt-s3": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.tronbyt-s3"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "board/esp32s3-builtin.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
+  "tronbyt-s3-wide": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.tronbyt-s3-wide"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "board/esp32s3-builtin.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  }
+}
