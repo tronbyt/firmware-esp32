@@ -42,7 +42,10 @@ idf_component_register(SRCS "main.c"
                             "wifi.c"
                             "ap.c"
                             "nvs_settings.c"
+                            "dns_wrapper.c"
                        INCLUDE_DIRS ".")
+
+idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE 
     WIFI_SSID="${VAL_WIFI_SSID}"
