@@ -1,8 +1,9 @@
 #include "display.h"
 #include "font5x7.h"
 #include "nvs_settings.h"
+#include "esp_log.h"
 
-#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <hub75.h>
 #if CONFIG_BOARD_TIDBYT_GEN2
   #define R1 5
   #define G1 23
@@ -108,9 +109,13 @@
 #define HEIGHT 32
 #endif
 
-static MatrixPanel_I2S_DMA *_matrix;
+static Hub75Driver *_matrix;
 static uint8_t _brightness = DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
+
+#if WIDTH == 128 && HEIGHT == 64
+static uint32_t _scaled_buffer[128 * 64];
+#endif
 
 int display_initialize(void) {
   // Get swap_colors setting
@@ -166,8 +171,12 @@ int display_initialize(void) {
   ESP_LOGI(TAG, "Initializing display with swap_colors=%s", swap_colors ? "true" : "false");
 
   // Initialize the panel.
-  HUB75_I2S_CFG::i2s_pins pins = {pin_R1, pin_G1, pin_BL1, pin_R2, pin_G2, pin_BL2, CH_A,
-                                  CH_B, CH_C, CH_D, CH_E, LAT, OE, CLK};
+  Hub75Pins pins = {
+    .r1 = pin_R1, .g1 = pin_G1, .b1 = pin_BL1,
+    .r2 = pin_R2, .g2 = pin_G2, .b2 = pin_BL2,
+    .a = CH_A, .b = CH_B, .c = CH_C, .d = CH_D, .e = CH_E,
+    .lat = LAT, .oe = OE, .clk = CLK
+  };
 
   #if CONFIG_NO_INVERT_CLOCK_PHASE
   bool invert_clock_phase = false;
@@ -175,27 +184,27 @@ int display_initialize(void) {
   bool invert_clock_phase = true;
   #endif
 
-  HUB75_I2S_CFG mxconfig(WIDTH,                   // width
-                         HEIGHT,                  // height
-                         1,                       // chain length
-                         pins,                    // pin mapping
-                         HUB75_I2S_CFG::FM6126A,  // driver chip
-                         HUB75_I2S_CFG::TYPE138,  // line driver
-                         true,                    // double-buffering
-                         HUB75_I2S_CFG::HZ_10M,   // clock speed
-                         1,                       // latch blanking
-                         invert_clock_phase       // invert clock phase
-  );
+  Hub75Config mxconfig;
+  mxconfig.panel_width = WIDTH;
+  mxconfig.panel_height = HEIGHT;
+  mxconfig.scan_pattern = (HEIGHT == 64) ? Hub75ScanPattern::SCAN_1_32 : Hub75ScanPattern::SCAN_1_16;
+  mxconfig.pins = pins;
+  mxconfig.shift_driver = Hub75ShiftDriver::FM6126A;
+  mxconfig.double_buffer = true;
+  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_10M;
+  mxconfig.latch_blanking = 1;
+  mxconfig.clk_phase_inverted = invert_clock_phase;
+  mxconfig.brightness = DEFAULT_BRIGHTNESS;
 
-  _matrix = new MatrixPanel_I2S_DMA(mxconfig);
+  _matrix = new Hub75Driver(mxconfig);
 
-  if (_matrix == NULL) { // Should not happen with new if it throws std::bad_alloc
-    ESP_LOGE(TAG, "Failed to allocate MatrixPanel_I2S_DMA object");
+  if (_matrix == NULL) {
+    ESP_LOGE(TAG, "Failed to allocate Hub75Driver object");
     return 1;
   }
 
   if (!_matrix->begin()) {
-    ESP_LOGE(TAG, "MatrixPanel_I2S_DMA begin() failed");
+    ESP_LOGE(TAG, "Hub75Driver begin() failed");
     delete _matrix;
     _matrix = NULL;
     return 1;
@@ -223,52 +232,54 @@ void display_set_brightness(uint8_t brightness_pct) {
 #endif
 
     ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct, brightness_8bit);
-    _matrix->setBrightness8(brightness_8bit);
-    _matrix->clearScreen();
+    _matrix->set_brightness(brightness_8bit);
+    _matrix->clear();
     _brightness = brightness_pct;
   }
 }
 
 void display_shutdown(void) {
-  _matrix->clearScreen();
-  _matrix->stopDMAoutput();
+  _matrix->clear();
+  _matrix->end();
   delete _matrix;
   _matrix = NULL;
 }
 
-void display_draw(const uint8_t *pix, int width, int height,
-                 int channels, int ixR, int ixG, int ixB) {
-  int scale = 1;
-  #if CONFIG_BOARD_TRONBYT_S3_WIDE
+void display_draw(const uint8_t *pix, int width, int height) {
+#if WIDTH == 128 && HEIGHT == 64
   if (width == 64 && height == 32) {
-    scale = 2; // Scale up to 128x64
-  }
-  #endif
-
-  for (unsigned int i = 0; i < height; i++) {
-    for (unsigned int j = 0; j < width; j++) {
-      const uint8_t *p = &pix[(i * width + j) * channels];
-      uint8_t r = p[ixR];
-      uint8_t g = p[ixG];
-      uint8_t b = p[ixB];
-
-      // Draw each pixel scaled up (2x2 pixels for each original pixel)
-      for (int sy = 0; sy < scale; sy++) {
-        for (int sx = 0; sx < scale; sx++) {
-          _matrix->drawPixelRGB888(j * scale + sx, i * scale + sy, r, g, b);
-        }
+    // Optimize scale-by-2 drawing (specifically for 64x32 -> 128x64)
+    const uint32_t *src32 = (const uint32_t *)pix;
+    for (int y = 0; y < height; y++) {
+      uint32_t *dst_row1 = &_scaled_buffer[(y * 2) * 128];
+      uint32_t *dst_row2 = &_scaled_buffer[(y * 2 + 1) * 128];
+      for (int x = 0; x < width; x++) {
+        uint32_t pixel = src32[y * width + x];
+        // Fill 2x2 block
+        dst_row1[x * 2] = pixel;
+        dst_row1[x * 2 + 1] = pixel;
+        dst_row2[x * 2] = pixel;
+        dst_row2[x * 2 + 1] = pixel;
       }
     }
+
+    _matrix->draw_pixels(0, 0, 128, 64, (uint8_t*)_scaled_buffer, Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
+    _matrix->flip_buffer();
+    return;
   }
-  _matrix->flipDMABuffer();
+#endif
+
+  // Default path: bulk transfer for native resolution
+  _matrix->draw_pixels(0, 0, width, height, pix, Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
+  _matrix->flip_buffer();
 }
 
-void display_clear(void) { _matrix->clearScreen(); }
+void display_clear(void) { _matrix->clear(); }
 
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   if (_matrix != NULL) {
-    _matrix->drawPixelRGB888(x, y, r, g, b);
-    _matrix->flipDMABuffer();
+    _matrix->set_pixel(x, y, r, g, b);
+    _matrix->flip_buffer();
   }
 }
 
@@ -304,17 +315,18 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
       // Draw each row in the column
       for (int row = 0; row < FONT5X7_CHAR_HEIGHT; row++) {
         if (column_data & (1 << row)) {
-          // Draw pixel(s) based on scale
-          for (int sy = 0; sy < scale; sy++) {
-            for (int sx = 0; sx < scale; sx++) {
-              int px = cursor_x + (col * scale) + sx;
-              int py = cursor_y + (row * scale) + sy;
+          int px = cursor_x + (col * scale);
+          int py = cursor_y + (row * scale);
 
-              // Check bounds
-              if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
-                _matrix->drawPixelRGB888(px, py, r, g, b);
-              }
-            }
+          if (scale > 1) {
+             // Optimize scaled text using fill
+             _matrix->fill(px, py, scale, scale, r, g, b);
+          } else {
+             // Draw pixel(s) based on scale
+             // Check bounds
+             if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
+               _matrix->set_pixel(px, py, r, g, b);
+             }
           }
         }
       }
@@ -329,6 +341,6 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
 
 void display_flip(void) {
   if (_matrix != NULL) {
-    _matrix->flipDMABuffer();
+    _matrix->flip_buffer();
   }
 }

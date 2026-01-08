@@ -1,7 +1,8 @@
 dependencies:
   espressif/esp_websocket_client: "1.6.0"
-  esp32-hub75-matrixpanel-dma:
-    git: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA.git
-    version: "3.0.13"
+  esp-hub75:
+    git: https://github.com/esphome-libs/esp-hub75.git
+    version: "v0.2.2"
+    path: components/hub75
   libwebp:
     git: https://github.com/tronbyt/libwebp.git
