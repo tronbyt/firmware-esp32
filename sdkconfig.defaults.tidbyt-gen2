@@ -1,4 +1,1 @@
 CONFIG_BOARD_TIDBYT_GEN2=y
-
-# Display configuration
-CONFIG_HUB75_SCAN_1_16=y

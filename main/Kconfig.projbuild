@@ -30,10 +30,10 @@ menu "Application Configuration"
 
         config BOOT_WEBP_TRONBYT
             bool "Tronbyt"
-        
+
         config BOOT_WEBP_WINDYTRON
             bool "Windytron"
-        
+
         config BOOT_WEBP_PARROT
             bool "Parrot"
     endchoice
@@ -46,19 +46,19 @@ menu "Application Configuration"
 
         config BOARD_TIDBYT_GEN1
             bool "Tidbyt Gen 1"
-            
+
         config BOARD_TIDBYT_GEN2
             bool "Tidbyt Gen 2"
-            
+
         config BOARD_TRONBYT_S3
             bool "Tronbyt S3"
 
         config BOARD_TRONBYT_S3_WIDE
             bool "Tronbyt S3 Wide"
-            
+
         config BOARD_PIXOTICKER
             bool "Pixoticker"
-            
+
         config BOARD_MATRIXPORTAL_S3
             bool "MatrixPortal S3"
     endchoice
