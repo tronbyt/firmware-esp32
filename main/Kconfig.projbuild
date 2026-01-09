@@ -12,12 +12,6 @@ menu "Application Configuration"
         help
             Swap RGB colors.
 
-    config NO_INVERT_CLOCK_PHASE
-        bool "No Invert Clock Phase"
-        default n
-        help
-            Do not invert clock phase.
-
     config HTTP_BUFFER_SIZE_MAX
         int "Max HTTP Buffer Size"
         default 460000
