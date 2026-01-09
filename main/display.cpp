@@ -101,19 +101,11 @@
   #define CLK 33
 #endif
 
-#ifndef WIDTH
-#define WIDTH 64
-#endif
-
-#ifndef HEIGHT
-#define HEIGHT 32
-#endif
-
 static Hub75Driver *_matrix;
 static uint8_t _brightness = DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
 
-#if WIDTH == 128 && HEIGHT == 64
+#if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
 static uint32_t _scaled_buffer[128 * 64];
 #endif
 
@@ -178,22 +170,59 @@ int display_initialize(void) {
     .lat = LAT, .oe = OE, .clk = CLK
   };
 
-  #if CONFIG_NO_INVERT_CLOCK_PHASE
-  bool invert_clock_phase = false;
-  #else
-  bool invert_clock_phase = true;
-  #endif
-
   Hub75Config mxconfig;
-  mxconfig.panel_width = WIDTH;
-  mxconfig.panel_height = HEIGHT;
-  mxconfig.scan_pattern = (HEIGHT == 64) ? Hub75ScanPattern::SCAN_1_32 : Hub75ScanPattern::SCAN_1_16;
+  mxconfig.panel_width = CONFIG_HUB75_PANEL_WIDTH;
+  mxconfig.panel_height = CONFIG_HUB75_PANEL_HEIGHT;
   mxconfig.pins = pins;
+
+  // Scan Pattern
+#if defined(CONFIG_HUB75_SCAN_1_32)
+  mxconfig.scan_pattern = Hub75ScanPattern::SCAN_1_32;
+#elif defined(CONFIG_HUB75_SCAN_1_16)
+  mxconfig.scan_pattern = Hub75ScanPattern::SCAN_1_16;
+#elif defined(CONFIG_HUB75_SCAN_1_8)
+  mxconfig.scan_pattern = Hub75ScanPattern::SCAN_1_8;
+#else
+  mxconfig.scan_pattern = (CONFIG_HUB75_PANEL_HEIGHT == 64) ? Hub75ScanPattern::SCAN_1_32 : Hub75ScanPattern::SCAN_1_16;
+#endif
+
+  // Shift Driver
+#if defined(CONFIG_HUB75_DRIVER_FM6126A)
   mxconfig.shift_driver = Hub75ShiftDriver::FM6126A;
+#elif defined(CONFIG_HUB75_DRIVER_FM6124)
+  mxconfig.shift_driver = Hub75ShiftDriver::FM6124;
+#elif defined(CONFIG_HUB75_DRIVER_MBI5124)
+  mxconfig.shift_driver = Hub75ShiftDriver::MBI5124;
+#elif defined(CONFIG_HUB75_DRIVER_DP3246)
+  mxconfig.shift_driver = Hub75ShiftDriver::DP3246;
+#else
+  mxconfig.shift_driver = Hub75ShiftDriver::NORMAL;
+#endif
+
   mxconfig.double_buffer = true;
+
+  // Clock Speed
+#if defined(CONFIG_HUB75_CLK_20MHZ)
+  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_20M;
+#elif defined(CONFIG_HUB75_CLK_16MHZ)
+  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_16M;
+#elif defined(CONFIG_HUB75_CLK_10MHZ)
   mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_10M;
-  mxconfig.latch_blanking = 1;
-  mxconfig.clk_phase_inverted = invert_clock_phase;
+#elif defined(CONFIG_HUB75_CLK_8MHZ)
+  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_8M;
+#else
+  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_8M;
+#endif
+
+  mxconfig.latch_blanking = CONFIG_HUB75_LATCH_BLANKING;
+
+  // Clock Phase
+#ifdef CONFIG_HUB75_CLK_PHASE_INVERTED
+  mxconfig.clk_phase_inverted = true;
+#else
+  mxconfig.clk_phase_inverted = false;
+#endif
+
   mxconfig.brightness = DEFAULT_BRIGHTNESS;
 
   _matrix = new Hub75Driver(mxconfig);
@@ -246,7 +275,7 @@ void display_shutdown(void) {
 }
 
 void display_draw(const uint8_t *pix, int width, int height) {
-#if WIDTH == 128 && HEIGHT == 64
+#if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
   if (width == 64 && height == 32) {
     // Optimize scale-by-2 drawing (specifically for 64x32 -> 128x64)
     const uint32_t *src32 = (const uint32_t *)pix;
@@ -324,7 +353,7 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
           } else {
              // Draw pixel(s) based on scale
              // Check bounds
-             if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
+             if (px >= 0 && px < CONFIG_HUB75_PANEL_WIDTH && py >= 0 && py < CONFIG_HUB75_PANEL_HEIGHT) {
                _matrix->set_pixel(px, py, r, g, b);
              }
           }
