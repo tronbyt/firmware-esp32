@@ -33,7 +33,7 @@ CONFIG_ESP_WIFI_11R_SUPPORT=y
 
 # Place additional frequently called Wi-Fi library functions in IRAM.
 # Costs 5 KB of IRAM but increases WiFi throughput.
-CONFIG_ESP_WIFI_EXTRA_IRAM_OPT
+CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=y
 
 # Use static allocation for WiFi TX buffers (increases stability).
 # If PSRAM is enabled, "Static" should be selected to guarantee enough WiFi TX buffers.
@@ -70,10 +70,9 @@ CONFIG_HUB75_CLK_8MHZ=y
 # Target SoC architecture.
 CONFIG_IDF_TARGET="esp32"
 
-# Enable colored output in the serial monitor.
-CONFIG_LOG_COLORS=y
-
-# Use newer logging format.
+# Logging
+CONFIG_LOG_COLORS=n
+CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM_FULL=y
 CONFIG_LOG_VERSION_2=y
 
 # Max number of IP addresses returned per DNS query.
@@ -111,3 +110,10 @@ CONFIG_SPIRAM=y
 
 # Errata fix for CAN/TWAI (disabled).
 CONFIG_TWAI_ERRATA_FIX_LISTEN_ONLY_DOM=n
+
+# Application Defaults
+CONFIG_REFRESH_INTERVAL_SECONDS=10
+CONFIG_ENABLE_AP_MODE=y
+CONFIG_ENABLE_WIFI_POWER_SAVE=y
+CONFIG_SKIP_DISPLAY_VERSION=n
+CONFIG_PREFER_IPV6=n

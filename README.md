@@ -27,16 +27,14 @@ you can point this firmware at any URL that hosts a WebP image that is optimized
 To flash the custom firmware on your device, follow these steps:
 
 1. Copy `secrets.json.example` to `secrets.json`.
-2. Edit `secrets.json` with your information. If using tronbyt_manager in docker, use the docker host's IP address.
+2. Edit `secrets.json` with your information. If using tronbyt_manager in Docker, use the Docker host's IP address.
 
 Example `secrets.json`:
 ```json
 {
     "WIFI_SSID": "myssid",
     "WIFI_PASSWORD": "<PASSWORD>",
-    "REMOTE_URL": "http://homeServer.local:8000/admin/tronbyt_1/next",
-    "REFRESH_INTERVAL_SECONDS": 10,
-    "DEFAULT_BRIGHTNESS" : 30
+    "REMOTE_URL": "http://homeServer.local:8000/tronbyt_1/next",
 }
 ```
 

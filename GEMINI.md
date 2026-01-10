@@ -26,8 +26,6 @@ The firmware can be configured via a `secrets.json` file or via Kconfig (`idf.py
     "WIFI_SSID": "myssiD",
     "WIFI_PASSWORD": "<PASSWORD>",
     "REMOTE_URL": "http://homeServer.local:8000/admin/tronbyt_1/next",
-    "REFRESH_INTERVAL_SECONDS": 10,
-    "DEFAULT_BRIGHTNESS" : 30
 }
 ```
 

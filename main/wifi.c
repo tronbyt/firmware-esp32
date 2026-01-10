@@ -72,11 +72,9 @@ int wifi_initialize(const char *ssid, const char *password) {
 
   // Create default STA and AP network interfaces
   s_sta_netif = esp_netif_create_default_wifi_sta();
-#if ENABLE_AP_MODE
   if (nvs_get_ap_mode()) {
       ap_init_netif();
   }
-#endif
 
   // Initialize WiFi with default config
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -107,15 +105,11 @@ int wifi_initialize(const char *ssid, const char *password) {
   nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
   bool has_credentials = (strlen(saved_ssid) > 0);
 
-#if ENABLE_AP_MODE
   if (nvs_get_ap_mode()) {
       ap_configure();
   } else {
       ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   }
-#else
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-#endif
 
   // Configure STA with credentials if available
   if (has_credentials) {
@@ -133,26 +127,19 @@ int wifi_initialize(const char *ssid, const char *password) {
   wifi_apply_power_save();
 
   // Wait for AP to start
-#if ENABLE_AP_MODE
   if (nvs_get_ap_mode()) {
       vTaskDelay(pdMS_TO_TICKS(500));
       // Start the web server
       ap_start();
   }
-#endif
 
   // Only attempt to connect if we have valid saved credentials
   if (!has_credentials) {
-#if ENABLE_AP_MODE
     if (nvs_get_ap_mode()) {
         ESP_LOGI(TAG, "No valid WiFi credentials available, starting in AP mode only");
     } else {
         ESP_LOGW(TAG, "No valid WiFi credentials available and AP mode is disabled");
     }
-#else
-    ESP_LOGW(TAG,
-             "No valid WiFi credentials available and AP mode is disabled");
-#endif
     // Reset any previous connection attempts
     s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
     s_connection_given_up = true;
@@ -164,10 +151,8 @@ int wifi_initialize(const char *ssid, const char *password) {
 
 // Shutdown WiFi
 void wifi_shutdown(void) {
-#if ENABLE_AP_MODE
     // Stop the web server if it's running
     ap_stop();
-#endif
 
     // Stop WiFi
     esp_wifi_stop();
@@ -317,7 +302,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                     esp_wifi_connect();
                 }
                 break;
-#if ENABLE_AP_MODE
             case WIFI_EVENT_AP_STACONNECTED:
                 {
                     wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
@@ -330,7 +314,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                     ESP_LOGI(TAG, "Station left, AID=%d", event->aid);
                 }
                 break;
-#endif
             default:
                 break;
         }

@@ -1,13 +1,15 @@
 #pragma once
 
-#if ENABLE_AP_MODE
-
 #include "wifi.h"
 
 #include <esp_err.h>
 #include <esp_http_server.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief Initialize the Access Point and start services
@@ -34,8 +36,19 @@ void ap_init_netif(void);
 void ap_configure(void);
 
 /**
+
  * @brief Start the AP auto-shutdown timer
+
  */
+
 void ap_start_shutdown_timer(void);
 
-#endif // ENABLE_AP_MODE
+
+
+#ifdef __cplusplus
+
+}
+
+#endif
+
+

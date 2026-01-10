@@ -7,10 +7,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 
-#ifndef ENABLE_AP_MODE
-#define ENABLE_AP_MODE 1
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif

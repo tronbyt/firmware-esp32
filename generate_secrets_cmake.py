@@ -32,24 +32,6 @@ def generate_cmake_secrets(output_path):
         cmake_content += f'set(VAL_WIFI_PASSWORD "{str(config["WIFI_PASSWORD"]).replace("\\", "\\\\").replace('"', '\\"')}")\n'
     if "REMOTE_URL" in config:
         cmake_content += f'set(VAL_REMOTE_URL "{str(config["REMOTE_URL"]).replace("\\", "\\\\").replace('"', '\\"')}")\n'
-    if "REFRESH_INTERVAL_SECONDS" in config:
-        cmake_content += (
-            f"set(VAL_REFRESH_INTERVAL_SECONDS {config['REFRESH_INTERVAL_SECONDS']})\n"
-        )
-    if "DEFAULT_BRIGHTNESS" in config:
-        cmake_content += f"set(VAL_DEFAULT_BRIGHTNESS {config['DEFAULT_BRIGHTNESS']})\n"
-    if "ENABLE_AP_MODE" in config:
-        val = 1 if config["ENABLE_AP_MODE"] else 0
-        cmake_content += f"set(VAL_ENABLE_AP_MODE {val})\n"
-    if "ENABLE_WIFI_POWER_SAVE" in config:
-        val = 1 if config["ENABLE_WIFI_POWER_SAVE"] else 0
-        cmake_content += f"set(VAL_WIFI_POWER_SAVE_MODE {val})\n"
-    if "SKIP_DISPLAY_VERSION" in config:
-        val = 1 if config["SKIP_DISPLAY_VERSION"] else 0
-        cmake_content += f"set(VAL_SKIP_DISPLAY_VERSION {val})\n"
-    if "PREFER_IPV6" in config:
-        val = 1 if config["PREFER_IPV6"] else 0
-        cmake_content += f"set(VAL_PREFER_IPV6 {val})\n"
 
     with open(output_path, "w") as f:
         f.write(cmake_content)

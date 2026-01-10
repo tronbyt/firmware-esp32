@@ -20,21 +20,23 @@
 #include "version.h"
 #include "ota.h"
 #include "nvs_settings.h"
+#include "syslog.h"
 
 #if CONFIG_BUTTON_PIN >= 0
 #include <driver/gpio.h>
 #endif
 
-#define BLUE "\033[1;34m"
-#define RESET "\033[0m"  // Reset to default color
-
 // Default URL if none is provided through WiFi manager
 #define DEFAULT_URL "http://URL.NOT.SET/"
 #define WEBSOCKET_PROTOCOL_VERSION 1
 
+#ifndef CONFIG_REFRESH_INTERVAL_SECONDS
+#define CONFIG_REFRESH_INTERVAL_SECONDS 10
+#endif
+
 static const char* TAG = "main";
 int32_t isAnimating = 1;
-static int32_t app_dwell_secs = REFRESH_INTERVAL_SECONDS;
+static int32_t app_dwell_secs = CONFIG_REFRESH_INTERVAL_SECONDS;
 static uint8_t *webp; // main buffer downloaded webp data
 static bool websocket_oversize_detected = false; // Flag to track oversize websocket messages
 
@@ -68,8 +70,12 @@ static void send_client_info(void) {
   uint8_t mac[6];
   char ssid[33] = {0};
   char hostname[33] = {0};
+  char syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
+  char sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
   nvs_get_ssid(ssid, sizeof(ssid));
   nvs_get_hostname(hostname, sizeof(hostname));
+  nvs_get_syslog_addr(syslog_addr, sizeof(syslog_addr));
+  nvs_get_sntp_server(sntp_server, sizeof(sntp_server));
   const char *image_url = nvs_get_image_url();
   if (image_url == NULL) image_url = "";
 
@@ -92,6 +98,8 @@ static void send_client_info(void) {
 
           cJSON_AddStringToObject(ci, "ssid", ssid);
           cJSON_AddStringToObject(ci, "hostname", hostname);
+          cJSON_AddStringToObject(ci, "syslog_addr", syslog_addr);
+          cJSON_AddStringToObject(ci, "sntp_server", sntp_server);
           cJSON_AddStringToObject(ci, "image_url", image_url);
           cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
           cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
@@ -149,8 +157,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                       // Check for "immediate"
                       cJSON *immediate_item = cJSON_GetObjectItem(root, "immediate");
                       if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
-                          ESP_LOGI(TAG, "Immediate command detected");
-                          ESP_LOGI(TAG, "Interrupting current animation to load queued image");
+                          ESP_LOGD(TAG, "Interrupting current animation to load queued image");
                           isAnimating = -1;
                       }
 
@@ -161,7 +168,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           if (dwell_value < 1) dwell_value = 1;
                           if (dwell_value > 3600) dwell_value = 3600;
                           app_dwell_secs = dwell_value;
-                          ESP_LOGI(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
+                          ESP_LOGD(TAG, "Updated dwell_secs to %" PRId32 " seconds", app_dwell_secs);
                       }
 
                       // Check for "brightness"
@@ -242,6 +249,27 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           } else {
                               ESP_LOGW(TAG, "Invalid hostname received: %s", new_hostname);
                           }
+                      }
+
+                      // Check for "syslog_addr"
+                      cJSON *syslog_addr_item = cJSON_GetObjectItem(root, "syslog_addr");
+                      if (cJSON_IsString(syslog_addr_item) && (syslog_addr_item->valuestring != NULL)) {
+                          const char *new_addr = syslog_addr_item->valuestring;
+                          nvs_set_syslog_addr(new_addr);
+                          syslog_update_config(new_addr);
+                          ESP_LOGI(TAG, "Updated syslog_addr to %s", new_addr);
+                          settings_changed = true;
+                      }
+
+                      // Check for "sntp_server"
+                      cJSON *sntp_server_item = cJSON_GetObjectItem(root, "sntp_server");
+                      if (cJSON_IsString(sntp_server_item) && (sntp_server_item->valuestring != NULL)) {
+                          const char *new_server = sntp_server_item->valuestring;
+                          nvs_set_sntp_server(new_server);
+                          // Note: SNTP reconfiguration usually requires restart or re-init logic which we don't have exposed.
+                          // But settings are saved.
+                          ESP_LOGI(TAG, "Updated sntp_server to %s", new_server);
+                          settings_changed = true;
                       }
 
                       // Check for "image_url"
@@ -328,7 +356,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
         
         // Message is complete if this is the Final Frame (FIN) and we have all of it
         if (data->fin && frame_complete) {
-            ESP_LOGI(TAG, "WebP download complete (%zu bytes)", ws_accumulated_len);
+            ESP_LOGD(TAG, "WebP download complete (%zu bytes)", ws_accumulated_len);
             
             // Queue the complete binary data as a WebP image
             // This will wait for the current animation to finish before loading
@@ -392,7 +420,6 @@ void app_main(void) {
 
   ESP_LOGI(TAG, "Check for button press");
   
-
   // Setup the device flash storage.
   if (flash_initialize()) {
     ESP_LOGE(TAG, "failed to initialize flash");
@@ -446,49 +473,55 @@ void app_main(void) {
             ESP_LOGI(TAG, "IPv6 not available or timed out, proceeding with existing connection (IPv4)");
         }
     }
-  }
 
-#if ENABLE_AP_MODE
-  if (button_boot || !sta_connected) {
-    ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
-    // Load up the config webp so that we don't just loop the boot screen over
-    // and over again but show the ap config info webp
-    ESP_LOGI(TAG, "Loading Config WEBP");
-
-    if (gfx_display_asset("config")) {
-      ESP_LOGE(TAG, "Failed to display config screen - continuing without it");
-      // Don't crash, just continue - the AP is still running
+    // Initialize Syslog
+    char syslog_addr[MAX_SYSLOG_ADDR_LEN + 1];
+    if (nvs_get_syslog_addr(syslog_addr, sizeof(syslog_addr)) == ESP_OK && strlen(syslog_addr) > 0) {
+        syslog_init(syslog_addr);
     }
   }
-#else
-  if (!sta_connected) {
-    ESP_LOGW(TAG, "WiFi didn't connect and AP mode is disabled - check secrets");
+
+  if (nvs_get_ap_mode()) {
+      if (button_boot || !sta_connected) {
+        ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
+        // Load up the config webp so that we don't just loop the boot screen over
+        // and over again but show the ap config info webp
+        ESP_LOGI(TAG, "Loading Config WEBP");
+
+        if (gfx_display_asset("config")) {
+          ESP_LOGE(TAG, "Failed to display config screen - continuing without it");
+          // Don't crash, just continue - the AP is still running
+        }
+      }
   } else {
-    if (button_boot) {
-      ESP_LOGW(TAG, "Boot button pressed but AP mode disabled; skipping configuration portal");
-    }
+      if (!sta_connected) {
+        ESP_LOGW(TAG, "WiFi didn't connect and AP mode is disabled - check secrets");
+      } else {
+        if (button_boot) {
+          ESP_LOGW(TAG, "Boot button pressed but AP mode disabled; skipping configuration portal");
+        }
+      }
   }
-#endif
 
   // Wait for configuration when boot button was pressed
   if (button_boot) {
-#if !ENABLE_AP_MODE
-    ESP_LOGW(TAG, "Boot button pressed but AP mode disabled; skipping configuration wait");
-#else
-    ESP_LOGW(TAG,
-             "Boot button pressed - waiting for configuration or timeout...");
-    int config_wait_counter = 0;
-    while (config_wait_counter < 120) {  // Wait up xx seconds
-      // Check if configuration was received
-      if (config_received) {
-        ESP_LOGI(TAG, "Configuration received - proceeding");
-        break;
-      }
+    if (!nvs_get_ap_mode()) {
+        ESP_LOGW(TAG, "Boot button pressed but AP mode disabled; skipping configuration wait");
+    } else {
+        ESP_LOGW(TAG,
+                 "Boot button pressed - waiting for configuration or timeout...");
+        int config_wait_counter = 0;
+        while (config_wait_counter < 120) {  // Wait up xx seconds
+          // Check if configuration was received
+          if (config_received) {
+            ESP_LOGI(TAG, "Configuration received - proceeding");
+            break;
+          }
 
-      config_wait_counter++;
-      vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+          config_wait_counter++;
+          vTaskDelay(pdMS_TO_TICKS(1 * 1000));
+        }
     }
-#endif
   } else if (!wifi_is_connected()) {
     ESP_LOGW(TAG, "Pausing main task until wifi connected...");
     while (!wifi_is_connected()) {
@@ -501,9 +534,9 @@ void app_main(void) {
 
 
   // When AP mode is enabled, auto-shutdown the AP after a short delay
-#if ENABLE_AP_MODE
-  ap_start_shutdown_timer();
-#endif
+  if (nvs_get_ap_mode()) {
+      ap_start_shutdown_timer();
+  }
 
   while (true) {
     image_url = nvs_get_image_url();
@@ -569,13 +602,12 @@ void app_main(void) {
   } else {
     // normal http
     ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", image_url);
-    for (;;) {
-      uint8_t *webp;
-      size_t len;
-      static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
-      int status_code = 0;
-      ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
-
+        for (;;) {
+          uint8_t *webp;
+          size_t len;
+          static uint8_t brightness_pct = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
+          int status_code = 0;
+          ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
 
       // Start timing the HTTP fetch
@@ -612,7 +644,7 @@ void app_main(void) {
       } else {
         // Successful remote_get
         display_set_brightness(brightness_pct);
-        ESP_LOGI(TAG, BLUE "Queuing new webp (%d bytes)" RESET, len);
+        ESP_LOGI(TAG, "Queuing new webp (%d bytes)", len);
 
         int queued_counter = gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx
@@ -620,7 +652,7 @@ void app_main(void) {
 
         // Wait for the current animation to finish (isAnimating will be 0)
         if (isAnimating > 0) {
-          ESP_LOGI(TAG, BLUE "Waiting for current webp to finish" RESET);
+          ESP_LOGI(TAG, "Waiting for current webp to finish");
           while (isAnimating > 0) {
             vTaskDelay(pdMS_TO_TICKS(1));
           }
@@ -640,7 +672,7 @@ void app_main(void) {
           ESP_LOGI(TAG, "Gfx task loaded image after %d ms", timeout);
         }
 
-        ESP_LOGI(TAG, BLUE "Setting isAnimating to 1" RESET);
+        ESP_LOGI(TAG, "Setting isAnimating to 1");
         isAnimating = 1;
       }
     wifi_health_check();

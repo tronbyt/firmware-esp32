@@ -12,6 +12,36 @@ menu "Application Configuration"
         help
             Swap RGB colors.
 
+    config REFRESH_INTERVAL_SECONDS
+        int "Default Refresh Interval (seconds)"
+        default 10
+        help
+            Default time to show an app/image before refreshing.
+
+    config ENABLE_AP_MODE
+        bool "Enable AP Mode"
+        default y
+        help
+            Enable WiFi Access Point mode for configuration when connection fails.
+
+    config ENABLE_WIFI_POWER_SAVE
+        bool "Enable WiFi Power Save"
+        default n
+        help
+            Enable WiFi minimum modem power saving mode.
+
+    config SKIP_DISPLAY_VERSION
+        bool "Skip Display Version"
+        default n
+        help
+            Skip displaying the firmware version on boot.
+
+    config PREFER_IPV6
+        bool "Prefer IPv6"
+        default n
+        help
+            Prefer IPv6 for connections.
+
     config HTTP_BUFFER_SIZE_MAX
         int "Max HTTP Buffer Size"
         default 460000
