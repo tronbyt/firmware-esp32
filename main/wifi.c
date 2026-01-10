@@ -82,6 +82,19 @@ int wifi_initialize(const char *ssid, const char *password) {
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+  // Configure Hostname
+  char hostname[MAX_HOSTNAME_LEN + 1];
+  nvs_get_hostname(hostname, sizeof(hostname));
+  if (strlen(hostname) == 0) {
+      uint8_t mac[6];
+      esp_wifi_get_mac(WIFI_IF_STA, mac);
+      snprintf(hostname, sizeof(hostname), "tronbyt-%02x%02x%02x", mac[3], mac[4], mac[5]);
+      ESP_LOGI(TAG, "Generated default hostname: %s", hostname);
+      nvs_set_hostname(hostname);
+      nvs_save_settings();
+  }
+  wifi_set_hostname(hostname);
+
   // Register event handlers
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                              &wifi_event_handler, NULL));
@@ -180,6 +193,21 @@ int wifi_get_mac(uint8_t mac[6]) {
         return 1;
     }
     return 0;
+}
+
+// Set Hostname
+int wifi_set_hostname(const char *hostname) {
+    if (s_sta_netif) {
+        esp_err_t err = esp_netif_set_hostname(s_sta_netif, hostname);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Hostname set to: %s", hostname);
+            return 0;
+        } else {
+             ESP_LOGE(TAG, "Failed to set hostname: %s", esp_err_to_name(err));
+             return 1;
+        }
+    }
+    return 1;
 }
 
 // Check if WiFi is connected

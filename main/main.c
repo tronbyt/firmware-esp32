@@ -67,7 +67,9 @@ static size_t ws_accumulated_len = 0;
 static void send_client_info(void) {
   uint8_t mac[6];
   char ssid[33] = {0};
+  char hostname[33] = {0};
   nvs_get_ssid(ssid, sizeof(ssid));
+  nvs_get_hostname(hostname, sizeof(hostname));
   const char *image_url = nvs_get_image_url();
   if (image_url == NULL) image_url = "";
 
@@ -89,6 +91,7 @@ static void send_client_info(void) {
           }
 
           cJSON_AddStringToObject(ci, "ssid", ssid);
+          cJSON_AddStringToObject(ci, "hostname", hostname);
           cJSON_AddStringToObject(ci, "image_url", image_url);
           cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
           cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
@@ -225,6 +228,20 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base,
                           nvs_set_prefer_ipv6(val);
                           ESP_LOGI(TAG, "Updated prefer_ipv6 to %d", val);
                           settings_changed = true;
+                      }
+
+                      // Check for "hostname"
+                      cJSON *hostname_item = cJSON_GetObjectItem(root, "hostname");
+                      if (cJSON_IsString(hostname_item) && (hostname_item->valuestring != NULL)) {
+                          const char *new_hostname = hostname_item->valuestring;
+                          if (strlen(new_hostname) > 0 && strlen(new_hostname) <= 32) {
+                              nvs_set_hostname(new_hostname);
+                              wifi_set_hostname(new_hostname);
+                              ESP_LOGI(TAG, "Updated hostname to %s", new_hostname);
+                              settings_changed = true;
+                          } else {
+                              ESP_LOGW(TAG, "Invalid hostname received: %s", new_hostname);
+                          }
                       }
 
                       // Check for "image_url"
