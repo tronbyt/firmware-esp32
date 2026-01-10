@@ -7,7 +7,7 @@
 #include <hub75.h>
 
 static Hub75Driver *_matrix;
-static uint8_t _brightness = DEFAULT_BRIGHTNESS;
+static uint8_t _brightness = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
 static const char *TAG = "display";
 
 #if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
@@ -227,7 +227,7 @@ int display_initialize(void) {
     _matrix = NULL;
     return 1;
   }
-  display_set_brightness(DEFAULT_BRIGHTNESS);
+  display_set_brightness((CONFIG_HUB75_BRIGHTNESS * 100) / 255);
 
   return 0;
 }

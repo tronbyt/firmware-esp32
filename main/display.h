@@ -1,11 +1,12 @@
 #pragma once
 
+#include "sdkconfig.h"
 #include <stddef.h>
 #include <stdint.h>
 
 #define DISPLAY_MAX_BRIGHTNESS 100
 #define DISPLAY_MIN_BRIGHTNESS 0
-#define DISPLAY_DEFAULT_BRIGHTNESS 30
+
 extern int32_t isAnimating;  // Declare the variable
 #ifdef __cplusplus
 extern "C" {

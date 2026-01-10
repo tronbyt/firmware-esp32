@@ -15,6 +15,8 @@
 #define NVS_KEY_SSID "ssid"
 #define NVS_KEY_PASSWORD "password"
 #define NVS_KEY_HOSTNAME "hostname"
+#define NVS_KEY_SYSLOG_ADDR "syslog_addr"
+#define NVS_KEY_SNTP_SERVER "sntp_server"
 #define NVS_KEY_IMAGE_URL "image_url"
 #define NVS_KEY_SWAP_COLORS "swap_colors"
 #define NVS_KEY_WIFI_POWER_SAVE "wifi_ps"
@@ -26,6 +28,8 @@
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
 static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
 static char s_hostname[MAX_HOSTNAME_LEN + 1] = {0};
+static char s_syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
+static char s_sntp_server[MAX_SNTP_SERVER_LEN + 1] = "pool.ntp.org";
 static char s_image_url[MAX_URL_LEN + 1] = {0};
 static bool s_swap_colors = false;
 static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
@@ -43,21 +47,6 @@ static bool s_prefer_ipv6 = false;
 #ifndef REMOTE_URL
 #define REMOTE_URL ""
 #endif
-#ifndef SWAP_COLORS_DEFAULT
-#define SWAP_COLORS_DEFAULT 0
-#endif
-#ifndef WIFI_POWER_SAVE_MODE
-#define WIFI_POWER_SAVE_MODE WIFI_PS_MIN_MODEM
-#endif
-#ifndef AP_MODE_DEFAULT
-#define AP_MODE_DEFAULT 1
-#endif
-#ifndef ENABLE_AP_MODE
-#define ENABLE_AP_MODE 1
-#endif
-#ifndef PREFER_IPV6
-#define PREFER_IPV6 0
-#endif
 
 esp_err_t nvs_settings_init(void) {
     esp_err_t ret = nvs_flash_init();
@@ -71,15 +60,35 @@ esp_err_t nvs_settings_init(void) {
     ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
     
     // Set defaults first
-    #ifdef SWAP_COLORS_DEFAULT
+#ifdef CONFIG_SWAP_COLORS
     s_swap_colors = true;
-    #else
+#else
     s_swap_colors = false;
-    #endif
-    s_wifi_power_save = WIFI_POWER_SAVE_MODE;
-    s_skip_display_version = SKIP_DISPLAY_VERSION;
-    s_ap_mode = AP_MODE_DEFAULT;
-    s_prefer_ipv6 = PREFER_IPV6;
+#endif
+
+#ifdef CONFIG_ENABLE_WIFI_POWER_SAVE
+    s_wifi_power_save = WIFI_PS_MIN_MODEM;
+#else
+    s_wifi_power_save = WIFI_PS_NONE;
+#endif
+
+#ifdef CONFIG_SKIP_DISPLAY_VERSION
+    s_skip_display_version = true;
+#else
+    s_skip_display_version = false;
+#endif
+
+#ifdef CONFIG_ENABLE_AP_MODE
+    s_ap_mode = true;
+#else
+    s_ap_mode = false;
+#endif
+
+#ifdef CONFIG_PREFER_IPV6
+    s_prefer_ipv6 = true;
+#else
+    s_prefer_ipv6 = false;
+#endif
 
     if (ret == ESP_OK) {
         // Load from NVS
@@ -96,6 +105,16 @@ esp_err_t nvs_settings_init(void) {
         required_size = sizeof(s_hostname);
         if (nvs_get_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname, &required_size) != ESP_OK) {
             s_hostname[0] = '\0';
+        }
+
+        required_size = sizeof(s_syslog_addr);
+        if (nvs_get_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr, &required_size) != ESP_OK) {
+            s_syslog_addr[0] = '\0';
+        }
+
+        required_size = sizeof(s_sntp_server);
+        if (nvs_get_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server, &required_size) != ESP_OK) {
+            strcpy(s_sntp_server, "pool.ntp.org");
         }
 
         required_size = sizeof(s_image_url);
@@ -188,6 +207,20 @@ esp_err_t nvs_get_hostname(char *hostname, size_t max_len) {
     return ESP_OK;
 }
 
+esp_err_t nvs_get_syslog_addr(char *addr, size_t max_len) {
+    if (!addr) return ESP_ERR_INVALID_ARG;
+    strncpy(addr, s_syslog_addr, max_len);
+    addr[max_len - 1] = '\0';
+    return ESP_OK;
+}
+
+esp_err_t nvs_get_sntp_server(char *server, size_t max_len) {
+    if (!server) return ESP_ERR_INVALID_ARG;
+    strncpy(server, s_sntp_server, max_len);
+    server[max_len - 1] = '\0';
+    return ESP_OK;
+}
+
 const char* nvs_get_image_url(void) {
     return (strlen(s_image_url) > 0) ? s_image_url : NULL;
 }
@@ -233,6 +266,25 @@ esp_err_t nvs_set_hostname(const char *hostname) {
     if (strlen(hostname) > MAX_HOSTNAME_LEN) return ESP_ERR_INVALID_SIZE;
     strncpy(s_hostname, hostname, MAX_HOSTNAME_LEN);
     s_hostname[MAX_HOSTNAME_LEN] = '\0';
+    return ESP_OK;
+}
+
+esp_err_t nvs_set_syslog_addr(const char *addr) {
+    if (!addr) {
+        s_syslog_addr[0] = '\0';
+        return ESP_OK;
+    }
+    if (strlen(addr) > MAX_SYSLOG_ADDR_LEN) return ESP_ERR_INVALID_SIZE;
+    strncpy(s_syslog_addr, addr, MAX_SYSLOG_ADDR_LEN);
+    s_syslog_addr[MAX_SYSLOG_ADDR_LEN] = '\0';
+    return ESP_OK;
+}
+
+esp_err_t nvs_set_sntp_server(const char *server) {
+    if (!server) return ESP_ERR_INVALID_ARG;
+    if (strlen(server) > MAX_SNTP_SERVER_LEN) return ESP_ERR_INVALID_SIZE;
+    strncpy(s_sntp_server, server, MAX_SNTP_SERVER_LEN);
+    s_sntp_server[MAX_SNTP_SERVER_LEN] = '\0';
     return ESP_OK;
 }
 
@@ -288,6 +340,11 @@ esp_err_t nvs_save_settings(void) {
     if (strlen(s_hostname) > 0) {
         nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname);
     }
+    if (strlen(s_syslog_addr) > 0) {
+        nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr);
+    }
+    nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server);
+
     if (strlen(s_image_url) > 0) {
         nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
     }
