@@ -14,6 +14,7 @@
 #define NVS_NAMESPACE "wifi_config"
 #define NVS_KEY_SSID "ssid"
 #define NVS_KEY_PASSWORD "password"
+#define NVS_KEY_HOSTNAME "hostname"
 #define NVS_KEY_IMAGE_URL "image_url"
 #define NVS_KEY_SWAP_COLORS "swap_colors"
 #define NVS_KEY_WIFI_POWER_SAVE "wifi_ps"
@@ -21,14 +22,10 @@
 #define NVS_KEY_AP_MODE "ap_mode"
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
 
-// Maximum string lengths
-#define MAX_SSID_LEN 32
-#define MAX_PASSWORD_LEN 64
-#define MAX_URL_LEN 128
-
 // Internal storage
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
 static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
+static char s_hostname[MAX_HOSTNAME_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
 static bool s_swap_colors = false;
 static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
@@ -96,12 +93,18 @@ esp_err_t nvs_settings_init(void) {
             s_wifi_password[0] = '\0';
         }
 
+        required_size = sizeof(s_hostname);
+        if (nvs_get_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname, &required_size) != ESP_OK) {
+            s_hostname[0] = '\0';
+        }
+
         required_size = sizeof(s_image_url);
         if (nvs_get_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url, &required_size) != ESP_OK) {
             s_image_url[0] = '\0';
         }
 
         uint8_t val_u8;
+
         if (nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &val_u8) == ESP_OK) {
             s_swap_colors = (val_u8 != 0);
         }
@@ -178,6 +181,13 @@ esp_err_t nvs_get_password(char *password, size_t max_len) {
     return ESP_OK;
 }
 
+esp_err_t nvs_get_hostname(char *hostname, size_t max_len) {
+    if (!hostname) return ESP_ERR_INVALID_ARG;
+    strncpy(hostname, s_hostname, max_len);
+    hostname[max_len - 1] = '\0';
+    return ESP_OK;
+}
+
 const char* nvs_get_image_url(void) {
     return (strlen(s_image_url) > 0) ? s_image_url : NULL;
 }
@@ -215,6 +225,14 @@ esp_err_t nvs_set_password(const char *password) {
     if (strlen(password) > MAX_PASSWORD_LEN) return ESP_ERR_INVALID_SIZE;
     strncpy(s_wifi_password, password, MAX_PASSWORD_LEN);
     s_wifi_password[MAX_PASSWORD_LEN] = '\0';
+    return ESP_OK;
+}
+
+esp_err_t nvs_set_hostname(const char *hostname) {
+    if (!hostname) return ESP_ERR_INVALID_ARG;
+    if (strlen(hostname) > MAX_HOSTNAME_LEN) return ESP_ERR_INVALID_SIZE;
+    strncpy(s_hostname, hostname, MAX_HOSTNAME_LEN);
+    s_hostname[MAX_HOSTNAME_LEN] = '\0';
     return ESP_OK;
 }
 
@@ -266,6 +284,9 @@ esp_err_t nvs_save_settings(void) {
     }
     if (strlen(s_wifi_password) > 0) {
         nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
+    }
+    if (strlen(s_hostname) > 0) {
+        nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname);
     }
     if (strlen(s_image_url) > 0) {
         nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);

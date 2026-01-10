@@ -38,6 +38,14 @@ void wifi_shutdown(void);
 int wifi_get_mac(uint8_t mac[6]);
 
 /**
+ * @brief Set Hostname
+ *
+ * @param hostname Hostname to set
+ * @return 0 on success, non-zero on failure
+ */
+int wifi_set_hostname(const char *hostname);
+
+/**
  * @brief Wait for WiFi connection with timeout
  *
  * @param timeout_ms Timeout in milliseconds
