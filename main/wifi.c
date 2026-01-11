@@ -24,6 +24,7 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "nvs_settings.h"
+#include "sntp.h"
 
 #define TAG "WIFI"
 
@@ -69,6 +70,9 @@ int wifi_initialize(const char *ssid, const char *password) {
   // Initialize TCP/IP adapter
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+  // Configure SNTP before WiFi/DHCP starts to ensure DHCP NTP options are captured
+  app_sntp_config();
 
   // Create default STA and AP network interfaces
   s_sta_netif = esp_netif_create_default_wifi_sta();

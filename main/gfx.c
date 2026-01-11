@@ -482,7 +482,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
   }
   WebPAnimDecoderDelete(decoder);
 
-  ESP_LOGI(TAG, "Setting isAnimating to 0");
+  ESP_LOGD(TAG, "Setting isAnimating to 0");
   *isAnimating = 0;
   return 0;
 }

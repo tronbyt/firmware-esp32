@@ -29,7 +29,7 @@ static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
 static char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
 static char s_hostname[MAX_HOSTNAME_LEN + 1] = {0};
 static char s_syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
-static char s_sntp_server[MAX_SNTP_SERVER_LEN + 1] = "pool.ntp.org";
+static char s_sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
 static bool s_swap_colors = false;
 static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
@@ -114,7 +114,7 @@ esp_err_t nvs_settings_init(void) {
 
         required_size = sizeof(s_sntp_server);
         if (nvs_get_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server, &required_size) != ESP_OK) {
-            strcpy(s_sntp_server, "pool.ntp.org");
+            s_sntp_server[0] = '\0';
         }
 
         required_size = sizeof(s_image_url);
@@ -331,23 +331,12 @@ esp_err_t nvs_save_settings(void) {
     err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) return err;
 
-    if (strlen(s_wifi_ssid) > 0) {
-        nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
-    }
-    if (strlen(s_wifi_password) > 0) {
-        nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
-    }
-    if (strlen(s_hostname) > 0) {
-        nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname);
-    }
-    if (strlen(s_syslog_addr) > 0) {
-        nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr);
-    }
+    nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
+    nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
+    nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname);
+    nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr);
     nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server);
-
-    if (strlen(s_image_url) > 0) {
-        nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
-    }
+    nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
 
     nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
     nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);

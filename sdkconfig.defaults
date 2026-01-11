@@ -78,6 +78,10 @@ CONFIG_LOG_VERSION_2=y
 # Max number of IP addresses returned per DNS query.
 CONFIG_LWIP_DNS_MAX_HOST_IP=4
 
+# Enable NTP server acquisition via DHCP Option 42
+CONFIG_LWIP_DHCP_GET_NTP_SRV=y
+CONFIG_LWIP_SNTP_MAX_SERVERS=3
+
 # Enable IPv6 Stateless Address Autoconfiguration (SLAAC).
 CONFIG_LWIP_IPV6_AUTOCONFIG=y
 
