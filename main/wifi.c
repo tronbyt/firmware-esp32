@@ -24,6 +24,7 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "nvs_settings.h"
+#include "sntp.h"
 
 #define TAG "WIFI"
 
@@ -70,17 +71,31 @@ int wifi_initialize(const char *ssid, const char *password) {
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+  // Configure SNTP before WiFi/DHCP starts to ensure DHCP NTP options are captured
+  app_sntp_config();
+
   // Create default STA and AP network interfaces
   s_sta_netif = esp_netif_create_default_wifi_sta();
-#if ENABLE_AP_MODE
   if (nvs_get_ap_mode()) {
       ap_init_netif();
   }
-#endif
 
   // Initialize WiFi with default config
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+  // Configure Hostname
+  char hostname[MAX_HOSTNAME_LEN + 1];
+  nvs_get_hostname(hostname, sizeof(hostname));
+  if (strlen(hostname) == 0) {
+      uint8_t mac[6];
+      esp_wifi_get_mac(WIFI_IF_STA, mac);
+      snprintf(hostname, sizeof(hostname), "tronbyt-%02x%02x%02x", mac[3], mac[4], mac[5]);
+      ESP_LOGI(TAG, "Generated default hostname: %s", hostname);
+      nvs_set_hostname(hostname);
+      nvs_save_settings();
+  }
+  wifi_set_hostname(hostname);
 
   // Register event handlers
   ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
@@ -94,15 +109,11 @@ int wifi_initialize(const char *ssid, const char *password) {
   nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
   bool has_credentials = (strlen(saved_ssid) > 0);
 
-#if ENABLE_AP_MODE
   if (nvs_get_ap_mode()) {
       ap_configure();
   } else {
       ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   }
-#else
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-#endif
 
   // Configure STA with credentials if available
   if (has_credentials) {
@@ -120,26 +131,19 @@ int wifi_initialize(const char *ssid, const char *password) {
   wifi_apply_power_save();
 
   // Wait for AP to start
-#if ENABLE_AP_MODE
   if (nvs_get_ap_mode()) {
       vTaskDelay(pdMS_TO_TICKS(500));
       // Start the web server
       ap_start();
   }
-#endif
 
   // Only attempt to connect if we have valid saved credentials
   if (!has_credentials) {
-#if ENABLE_AP_MODE
     if (nvs_get_ap_mode()) {
         ESP_LOGI(TAG, "No valid WiFi credentials available, starting in AP mode only");
     } else {
         ESP_LOGW(TAG, "No valid WiFi credentials available and AP mode is disabled");
     }
-#else
-    ESP_LOGW(TAG,
-             "No valid WiFi credentials available and AP mode is disabled");
-#endif
     // Reset any previous connection attempts
     s_reconnect_attempts = MAX_RECONNECT_ATTEMPTS;
     s_connection_given_up = true;
@@ -151,10 +155,8 @@ int wifi_initialize(const char *ssid, const char *password) {
 
 // Shutdown WiFi
 void wifi_shutdown(void) {
-#if ENABLE_AP_MODE
     // Stop the web server if it's running
     ap_stop();
-#endif
 
     // Stop WiFi
     esp_wifi_stop();
@@ -180,6 +182,21 @@ int wifi_get_mac(uint8_t mac[6]) {
         return 1;
     }
     return 0;
+}
+
+// Set Hostname
+int wifi_set_hostname(const char *hostname) {
+    if (s_sta_netif) {
+        esp_err_t err = esp_netif_set_hostname(s_sta_netif, hostname);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Hostname set to: %s", hostname);
+            return 0;
+        } else {
+             ESP_LOGE(TAG, "Failed to set hostname: %s", esp_err_to_name(err));
+             return 1;
+        }
+    }
+    return 1;
 }
 
 // Check if WiFi is connected
@@ -289,7 +306,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                     esp_wifi_connect();
                 }
                 break;
-#if ENABLE_AP_MODE
             case WIFI_EVENT_AP_STACONNECTED:
                 {
                     wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
@@ -302,7 +318,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                     ESP_LOGI(TAG, "Station left, AID=%d", event->aid);
                 }
                 break;
-#endif
             default:
                 break;
         }

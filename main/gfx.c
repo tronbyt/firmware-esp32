@@ -215,7 +215,7 @@ static void send_websocket_notification(int counter) {
   if (sent < 0) {
     ESP_LOGE(TAG, "Failed to send websocket notification");
   } else {
-    ESP_LOGI(TAG, "Sent websocket notification: %s", message);
+    ESP_LOGD(TAG, "Sent websocket notification: %s", message);
   }
 }
 
@@ -252,7 +252,7 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
     int msg_len = snprintf(message, sizeof(message), "{\"queued\":%d}", counter);
     if (msg_len > 0 && msg_len < sizeof(message)) {
       esp_websocket_client_send_text(_state->ws_handle, message, msg_len, portMAX_DELAY);
-      ESP_LOGI(TAG, "Sent queued notification: %s", message);
+      ESP_LOGD(TAG, "Sent queued notification: %s", message);
     }
   }
 
@@ -351,7 +351,7 @@ static void gfx_loop(void *args) {
 
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
-      ESP_LOGI(TAG, "Loaded new webp");
+      ESP_LOGD(TAG, "Loaded new webp");
       if (webp) free(webp);
       webp = _state->buf;
       len = _state->len;
@@ -393,14 +393,13 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
 
-  
   int64_t dwell_us;
   
-  if (app_dwell_secs <= 0 ) {
+  if (app_dwell_secs <= 0) {
     ESP_LOGW(TAG,"dwell_secs is 0. Looping one more time while we wait.");
     dwell_us = 1 * 1000000; // default to 1s if it's zero so we loop again or show the image for 1 more second.
   } else {
-    ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
+    ESP_LOGD(TAG, "dwell_secs: %d", app_dwell_secs);
     dwell_us = app_dwell_secs * 1000000;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
@@ -434,21 +433,25 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
   while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1) {
     int lastTimestamp = 0;
     int delay = 0;
-    TickType_t drawStartTick = xTaskGetTickCount();
+    TickType_t lastWakeTime = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
     while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
+
       if (delay > 0) {
-        xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+        // Wait for the previous frame's duration to expire.
+        // Since we decoded *during* this time, we only sleep for the remainder.
+        xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
       } else {
-        vTaskDelay(10); // small delay for yield.
+        // First frame or no delay: yield briefly to let other tasks run
+        vTaskDelay(pdMS_TO_TICKS(1));
+        lastWakeTime = xTaskGetTickCount();
       }
-      drawStartTick = xTaskGetTickCount();
-      display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0,
-                   1, 2);
+
+      display_draw(pix, animation.canvas_width, animation.canvas_height);
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
@@ -457,7 +460,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
     WebPAnimDecoderReset(decoder);
     
     if (delay > 0) {
-      xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+      xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
     } else {
       vTaskDelay(pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
     }
@@ -479,7 +482,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
   }
   WebPAnimDecoderDelete(decoder);
 
-  ESP_LOGI(TAG, "Setting isAnimating to 0");
+  ESP_LOGD(TAG, "Setting isAnimating to 0");
   *isAnimating = 0;
   return 0;
 }

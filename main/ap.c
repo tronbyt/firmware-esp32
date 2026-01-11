@@ -1,5 +1,3 @@
-#if ENABLE_AP_MODE
-
 #include "ap.h"
 #include "wifi.h"
 #include "nvs_settings.h"
@@ -610,5 +608,3 @@ void ap_start_shutdown_timer(void) {
         ESP_LOGE(TAG, "Failed to create AP shutdown timer");
     }
 }
-
-#endif // ENABLE_AP_MODE

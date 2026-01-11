@@ -7,10 +7,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 
-#ifndef ENABLE_AP_MODE
-#define ENABLE_AP_MODE 1
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,6 +32,14 @@ void wifi_shutdown(void);
  * @return 0 on success, non-zero on failure
  */
 int wifi_get_mac(uint8_t mac[6]);
+
+/**
+ * @brief Set Hostname
+ *
+ * @param hostname Hostname to set
+ * @return 0 on success, non-zero on failure
+ */
+int wifi_set_hostname(const char *hostname);
 
 /**
  * @brief Wait for WiFi connection with timeout
