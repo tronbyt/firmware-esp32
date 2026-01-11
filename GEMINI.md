@@ -32,16 +32,6 @@ The firmware can be configured via a `secrets.json` file or via Kconfig (`idf.py
 3.  **Kconfig**:
     Use `idf.py menuconfig` to configure hardware types, boot animations, and other system settings under the "Tronbyt Configuration" menu.
 
-## Workflow Mapping (Migration from PlatformIO)
-
-| Task | PlatformIO Command | Native ESP-IDF Command |
-| :--- | :--- | :--- |
-| **Build** | `pio run` | `idf.py build` |
-| **Flash** | `pio run -t upload` | `idf.py flash` |
-| **Monitor** | `pio monitor` | `idf.py monitor` |
-| **Config** | Edit `secrets.json` | `idf.py menuconfig` |
-| **Clean** | `pio run -t clean` | `idf.py fullclean` |
-
 ## Building for Specific Hardware
 
 To build for a specific board, use the provided `sdkconfig.defaults.<board>` files or the convenience Makefile:
@@ -98,4 +88,5 @@ Used for:
 **Best Practice:**
 - Use **Kconfig** for structural changes that affect the binary code or memory layout.
 - Use **secrets.json** for parameters that vary between deployments or need to be user-configurable without recompiling (via NVS fallback).
--   The firmware is written in C/C++.
+- The firmware is written in C/C++.
+- The code is formatted using the rules in .clang-fornat.
