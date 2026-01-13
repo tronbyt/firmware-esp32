@@ -105,7 +105,6 @@ jobs:
           mv "$BUILD_DIR/merged_firmware.bin" "${target}_merged.bin"
 
       - name: Upload Artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}_firmware
