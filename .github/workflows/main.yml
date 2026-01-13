@@ -86,9 +86,9 @@ jobs:
 
           BUILD_DIR="build_$target"
 
-          # Set the target explicitly before building
-          idf.py -B "$BUILD_DIR" set-target "$chip"
-          idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" build
+          # Set the target and apply sdkconfig defaults
+          idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" set-target "$chip"
+          idf.py -B "$BUILD_DIR" build
 
           if [ ! -f "$BUILD_DIR/firmware.bin" ]; then
             echo "❌ Failed to generate firmware for $target"
