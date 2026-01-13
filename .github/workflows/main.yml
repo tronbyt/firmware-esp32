@@ -86,6 +86,8 @@ jobs:
 
           BUILD_DIR="build_$target"
 
+          # Set the target explicitly before building
+          idf.py -B "$BUILD_DIR" set-target "$chip"
           idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" build
 
           if [ ! -f "$BUILD_DIR/firmware.bin" ]; then
