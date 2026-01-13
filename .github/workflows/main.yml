@@ -86,7 +86,9 @@ jobs:
 
           BUILD_DIR="build_$target"
 
-          idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" build
+          # Set the target and apply sdkconfig defaults
+          idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" set-target "$chip"
+          idf.py -B "$BUILD_DIR" build
 
           if [ ! -f "$BUILD_DIR/firmware.bin" ]; then
             echo "❌ Failed to generate firmware for $target"
@@ -103,7 +105,6 @@ jobs:
           mv "$BUILD_DIR/merged_firmware.bin" "${target}_merged.bin"
 
       - name: Upload Artifact
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}_firmware
