@@ -67,6 +67,20 @@ To check the output of your running firmware, run the following:
 idf.py monitor
 ```
 
+## Advanced Settings
+
+The firmware supports several advanced settings stored in Non-Volatile Storage (NVS). These can be configured via the WebSocket connection or by using `idf.py menuconfig` (which sets the build-time defaults).
+
+| Setting | NVS Key | Description |
+| :--- | :--- | :--- |
+| **Hostname** | `hostname` | The network hostname of the device. Defaults to `tronbyt-<mac>`. |
+| **Syslog Address** | `syslog_addr` | Remote Syslog (RFC 5424) server in `host:port` format (e.g., `192.168.1.10:1517`). |
+| **SNTP Server** | `sntp_server` | Custom NTP server for time synchronization. Defaults to DHCP provided servers or `pool.ntp.org`. |
+| **Swap Colors** | `swap_colors` | Boolean (0/1) to swap RGB color order. Useful for specific panel variants. |
+| **AP Mode** | `ap_mode` | Boolean (0/1) to enable/disable the fallback WiFi configuration portal. |
+| **WiFi Power Save**| `wifi_ps` | WiFi power management mode (0: None, 1: Min, 2: Max). |
+| **Prefer IPv6** | `prefer_ipv6` | Boolean (0/1) to prefer IPv6 connectivity over IPv4. |
+
 ## Back to Normal
 
 ### Using Web Flasher (Recommended)
