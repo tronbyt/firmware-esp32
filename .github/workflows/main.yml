@@ -131,8 +131,13 @@ jobs:
         run: ls -R release-artifacts/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-artifacts/*.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+        run: |
+          # Collect all artifacts and pass them to gh release create as positional arguments
+          gh release create "$tag" \
+              --repo="${GITHUB_REPOSITORY}" \
+              --title="${GITHUB_REPOSITORY#*/} ${tag#v}" \
+              --generate-notes \
+              $(find release-artifacts -type f -print0 | xargs -0)
