@@ -57,9 +57,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
 int wifi_initialize(const char *ssid, const char *password) {
   ESP_LOGI(TAG, "Initializing WiFi");
 
-  // Initialize NVS settings
-  ESP_ERROR_CHECK(nvs_settings_init());
-
   if (!nvs_get_ap_mode()) {
       ESP_LOGI(TAG, "AP mode disabled via settings");
   }

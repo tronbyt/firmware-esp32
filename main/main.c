@@ -474,6 +474,9 @@ void app_main(void) {
   ESP_LOGI(TAG, "finished flash init");
   esp_register_shutdown_handler(&flash_shutdown);
 
+  // Initialize NVS settings
+  ESP_ERROR_CHECK(nvs_settings_init());
+
   // Setup WiFi.
   ESP_LOGI(TAG, "Initializing WiFi manager...");
   // Pass empty strings to force AP mode
