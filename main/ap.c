@@ -103,8 +103,6 @@ static const char *s_html_page_template =
     "</body>"
     "</html>";
 
-static char s_html_page[4096];
-
 // Success page HTML
 static const char *s_success_html = "<!DOCTYPE html>"
 "<html>"
@@ -233,7 +231,7 @@ static void start_dns_server(void) {
         ESP_LOGW(TAG, "DNS server already running");
         return;
     }
-    xTaskCreate(dns_server_task, "dns_server", 4096, NULL, 5, &s_dns_task_handle);
+    xTaskCreate(dns_server_task, "dns_server", 2048, NULL, 5, &s_dns_task_handle);
 }
 
 static void stop_dns_server(void) {
@@ -251,12 +249,12 @@ esp_err_t ap_start(void) {
     }
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
+    config.stack_size = 4096;
     config.max_uri_handlers = 8;
     config.max_resp_headers = 16;
     config.recv_wait_timeout = 10;
     config.send_wait_timeout = 10;
-    config.max_open_sockets = 7;
+    config.max_open_sockets = 4;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.lru_purge_enable = true;
 
@@ -312,10 +310,20 @@ static void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
 static esp_err_t root_handler(httpd_req_t *req) {
     const char* image_url = nvs_get_image_url();
     ESP_LOGI(TAG, "Injecting image url (%s) to html template", image_url ? image_url : "");
-    snprintf(s_html_page, sizeof(s_html_page), s_html_page_template, image_url ? image_url : "" SWAP_COLORS_FORMAT_ARG);
+    
+    char *response_buf = malloc(3072);
+    if (response_buf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for root page");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Memory Allocation Failed");
+        return ESP_FAIL;
+    }
+
+    snprintf(response_buf, 3072, s_html_page_template, image_url ? image_url : "" SWAP_COLORS_FORMAT_ARG);
     ESP_LOGI(TAG, "Serving root page");
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, s_html_page, strlen(s_html_page));
+    httpd_resp_send(req, response_buf, strlen(response_buf));
+    
+    free(response_buf);
     return ESP_OK;
 }
 
