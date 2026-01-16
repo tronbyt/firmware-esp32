@@ -127,13 +127,6 @@ int wifi_initialize(const char *ssid, const char *password) {
   /* Apply WiFi Power Save Mode from configuration */
   wifi_apply_power_save();
 
-  // Wait for AP to start
-  if (nvs_get_ap_mode()) {
-      vTaskDelay(pdMS_TO_TICKS(500));
-      // Start the web server
-      ap_start();
-  }
-
   // Only attempt to connect if we have valid saved credentials
   if (!has_credentials) {
     if (nvs_get_ap_mode()) {

@@ -24,23 +24,8 @@ static TaskHandle_t s_dns_task_handle = NULL;
 static httpd_handle_t s_server = NULL;
 static TimerHandle_t s_ap_shutdown_timer = NULL;
 
-// Swap colors checkbox HTML - only for TIDBYT_GEN1 or MATRIXPORTAL_S3
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
-#define SWAP_COLORS_HTML \
-    "<div class='form-group'>" \
-    "<label>" \
-    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' %s>" \
-    " Swap Colors (Gen1/S3 only - requires reboot)" \
-    "</label>" \
-    "</div>"
-#define SWAP_COLORS_FORMAT_ARG , nvs_get_swap_colors() ? "checked" : ""
-#else
-#define SWAP_COLORS_HTML ""
-#define SWAP_COLORS_FORMAT_ARG
-#endif
-
-// HTML for the configuration page
-static const char *s_html_page_template =
+// HTML Parts for chunked response
+static const char *s_html_part1 =
     "<!DOCTYPE html>"
     "<html>"
     "<head>"
@@ -75,9 +60,26 @@ static const char *s_html_page_template =
     "</div>"
     "<div class='form-group'>"
     "<label for='image_url'>Image URL:</label>"
-    "<input type='text' id='image_url' name='image_url' maxlength='128' value='%s'>"
-    "</div>"
-    SWAP_COLORS_HTML
+    "<input type='text' id='image_url' name='image_url' maxlength='128' value='";
+
+static const char *s_html_part2 =
+    "'>"
+    "</div>";
+
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+static const char *s_html_part3_start =
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' ";
+
+static const char *s_html_part3_end =
+    ">"
+    " Swap Colors (Gen1/S3 only - requires reboot)"
+    "</label>"
+    "</div>";
+#endif
+
+static const char *s_html_part4 =
     "<button type='submit'>Save and Connect</button>"
     "</form>"
     "<hr>"
@@ -102,8 +104,6 @@ static const char *s_html_page_template =
     "</div>"
     "</body>"
     "</html>";
-
-static char s_html_page[4096];
 
 // Success page HTML
 static const char *s_success_html = "<!DOCTYPE html>"
@@ -251,12 +251,9 @@ esp_err_t ap_start(void) {
     }
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
-    config.max_uri_handlers = 8;
     config.max_resp_headers = 16;
     config.recv_wait_timeout = 10;
     config.send_wait_timeout = 10;
-    config.max_open_sockets = 7;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.lru_purge_enable = true;
 
@@ -311,12 +308,42 @@ static void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
 
 static esp_err_t root_handler(httpd_req_t *req) {
     const char* image_url = nvs_get_image_url();
-    ESP_LOGI(TAG, "Injecting image url (%s) to html template", image_url ? image_url : "");
-    snprintf(s_html_page, sizeof(s_html_page), s_html_page_template, image_url ? image_url : "" SWAP_COLORS_FORMAT_ARG);
-    ESP_LOGI(TAG, "Serving root page");
+    ESP_LOGI(TAG, "Serving root page (chunked)");
+
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, s_html_page, strlen(s_html_page));
-    return ESP_OK;
+
+    esp_err_t ret = ESP_OK;
+
+    do {
+        // Send Part 1
+        if ((ret = httpd_resp_send_chunk(req, s_html_part1, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+
+        // Send Image URL (Dynamic)
+        if ((ret = httpd_resp_send_chunk(req, image_url ? image_url : "", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+
+        // Send Part 2
+        if ((ret = httpd_resp_send_chunk(req, s_html_part2, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+        // Send Swap Colors Checkbox (Conditional)
+        if ((ret = httpd_resp_send_chunk(req, s_html_part3_start, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        if ((ret = httpd_resp_send_chunk(req, nvs_get_swap_colors() ? "checked" : "", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        if ((ret = httpd_resp_send_chunk(req, s_html_part3_end, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+#endif
+
+        // Send Part 4 (End)
+        if ((ret = httpd_resp_send_chunk(req, s_html_part4, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+
+        // Finish response
+        ret = httpd_resp_send_chunk(req, NULL, 0);
+    } while (0);
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send response chunk: %s", esp_err_to_name(ret));
+        // On failure, response is likely broken and connection will be closed by httpd.
+    }
+    
+    return ret;
 }
 
 static void url_decode(char *str) {

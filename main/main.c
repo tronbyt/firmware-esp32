@@ -494,6 +494,12 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&display_shutdown);
 
+  // Start the AP web server now that display memory is allocated
+  if (nvs_get_ap_mode()) {
+    ESP_LOGI(TAG, "Starting AP Web Server...");
+    ap_start();
+  }
+
   // Register callback to detect configuration events
   wifi_register_config_callback(config_saved_callback);
 
