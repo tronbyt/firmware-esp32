@@ -192,7 +192,9 @@ int display_initialize(void) {
 #endif
 
   // Clock Speed
-#if defined(CONFIG_HUB75_CLK_20MHZ)
+#if defined(CONFIG_HUB75_CLK_32MHZ)
+  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_32M;
+#elif defined(CONFIG_HUB75_CLK_20MHZ)
   mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_20M;
 #elif defined(CONFIG_HUB75_CLK_16MHZ)
   mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_16M;
