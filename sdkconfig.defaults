@@ -31,6 +31,9 @@ CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS=y
 # Enable 802.11R (Fast Transition) Support.
 CONFIG_ESP_WIFI_11R_SUPPORT=y
 
+# Wifi sleep optimize when beacon lost
+CONFIG_ESP_WIFI_SLP_BEACON_LOST_OPT=y
+
 # Place additional frequently called Wi-Fi library functions in IRAM.
 # Costs 5 KB of IRAM but increases WiFi throughput.
 CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=y
@@ -111,6 +114,18 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="boards/default_8mb.csv"
 
 # Enable support for external SPI RAM (PSRAM).
 CONFIG_SPIRAM=y
+
+# Try to allocate memories of WiFi and LWIP in SPIRAM firstly. If failed, allocate internal memory
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# Allow .bss segment placed in external memory
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+
+# Allow .noinit segment placed in external memory
+CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=y
+
+# Maximum malloc() size, in bytes, to always put in internal memory
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=128
 
 # Errata fix for CAN/TWAI (disabled).
 CONFIG_TWAI_ERRATA_FIX_LISTEN_ONLY_DOM=n

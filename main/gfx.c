@@ -7,6 +7,7 @@
 #include <webp/demux.h>
 #include <esp_websocket_client.h>
 #include <http_parser.h>
+#include <esp_heap_caps.h>
 
 #include "display.h"
 #include "esp_timer.h"
@@ -37,6 +38,15 @@ static void gfx_loop(void *arg);
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t *isAnimating);
 static void send_websocket_notification(int counter);
 
+static bool is_static_asset(const void *ptr) {
+  if (ptr == ASSET_BOOT_WEBP) return true;
+  if (ptr == ASSET_CONFIG_WEBP) return true;
+  if (ptr == ASSET_404_WEBP) return true;
+  if (ptr == ASSET_OVERSIZE_WEBP) return true;
+  if (ptr == ASSET_NOCONNECT_WEBP) return true;
+  return false;
+}
+
 int gfx_initialize(const char *img_url) {
   // Only initialize once
   if (_state) {
@@ -49,19 +59,12 @@ int gfx_initialize(const char *img_url) {
   ESP_LOGI(TAG, "largest heap %d", heapl);
   // ESP_LOGI(TAG, "calling calloc");
   // Initialize state
-  ESP_LOGI(TAG, "Allocating buffer of size: %d", ASSET_BOOT_WEBP_LEN);
+  ESP_LOGI(TAG, "Using static buffer for boot animation");
 
   _state = calloc(1, sizeof(struct gfx_state));
   _state->len = ASSET_BOOT_WEBP_LEN;
-  ESP_LOGI(TAG,"calloc buff");
-  _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
-  ESP_LOGI(TAG, "done calloc, copying");
-  if (_state->buf == NULL) {
-    ESP_LOGE("gfx", "Memory allocation failed!");
-    return 1;
-  }
-  memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
-  ESP_LOGI(TAG, "done, copying");
+  // Use static asset directly, no allocation or copy needed
+  _state->buf = (void *)ASSET_BOOT_WEBP;
   
   _state->mutex = xSemaphoreCreateMutex();
   if (_state->mutex == NULL) {
@@ -228,8 +231,12 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   // If a new frame arrives before the previous one is consumed by the gfx task,
   // free the old buffer here to prevent a memory leak (frame-dropping strategy).
   if (_state->buf) {
-    ESP_LOGW(TAG, "Dropping queued image (counter %d) - new image arrived before it was displayed", _state->counter);
-    free(_state->buf);
+    if (!is_static_asset(_state->buf)) {
+      ESP_LOGW(TAG, "Dropping queued image (counter %d) - new image arrived before it was displayed", _state->counter);
+      free(_state->buf);
+    } else {
+      ESP_LOGD(TAG, "Dropping queued static image (counter %d)", _state->counter);
+    }
     _state->buf = NULL;
   }
 
@@ -301,27 +308,22 @@ int gfx_display_asset(const char* asset_type) {
   }
 
   // Allocate heap memory and copy asset data
-  uint8_t *asset_heap_copy = (uint8_t *)malloc(asset_len);
-  if (asset_heap_copy == NULL) {
-    ESP_LOGE(TAG, "Failed to allocate memory for %s asset copy", asset_type);
-    return 1;
-  }
-
-  memcpy(asset_heap_copy, asset_data, asset_len);
+  // Optimization: pass static pointer directly to gfx_update
+  // logic in gfx_update/gfx_loop ensures it is not freed.
 
   // Interrupt current animation to display asset immediately
   isAnimating = -1;
 
   // Display the asset with no dwell time (static display)
-  int result = gfx_update(asset_heap_copy, asset_len, 0);
+  // We cast const away because gfx_update takes void*, but we know we won't write to it.
+  int result = gfx_update((void*)asset_data, asset_len, 0);
   if (result < 0) {
     // Only free if gfx_update failed to take ownership (returned negative error)
     ESP_LOGE(TAG, "Failed to update graphics with %s asset", asset_type);
-    free(asset_heap_copy);
     return 1;
   }
 
-  // gfx_update now owns the asset_heap_copy buffer (returns counter >= 0 on success)
+  // gfx_update now owns the asset buffer (returns counter >= 0 on success)
   return 0;
 }
 
@@ -342,7 +344,7 @@ static void gfx_loop(void *args) {
   for (;;) {
     if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
       ESP_LOGE(TAG, "Could not take gfx mutex");
-      if (webp) {
+      if (webp && !is_static_asset(webp)) {
         free(webp);
         webp = NULL;
       }
@@ -352,7 +354,7 @@ static void gfx_loop(void *args) {
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
       ESP_LOGD(TAG, "Loaded new webp");
-      if (webp) free(webp);
+      if (webp && !is_static_asset(webp)) free(webp);
       webp = _state->buf;
       len = _state->len;
       dwell_secs = _state->dwell_secs;
@@ -377,7 +379,9 @@ static void gfx_loop(void *args) {
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         *isAnimating = 0;
         // Free the invalid buffer to prevent re-drawing it
-        free(webp);
+        if (webp && !is_static_asset(webp)) {
+            free(webp);
+        }
         webp = NULL;
         len = 0;
       }

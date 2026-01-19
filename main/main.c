@@ -9,6 +9,7 @@
 #include <freertos/task.h>
 #include <freertos/timers.h>
 #include <webp/demux.h>
+#include <esp_heap_caps.h>
 
 #include "ap.h"
 #include "display.h"
@@ -377,7 +378,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
           break;
         }
 
-        uint8_t* new_buf = realloc(webp, new_size);
+        uint8_t* new_buf = heap_caps_realloc(webp, new_size, MALLOC_CAP_SPIRAM);
         if (new_buf == NULL) {
           ESP_LOGE(TAG, "Failed to allocate memory (%zu bytes)", new_size);
           if (webp) {
@@ -624,6 +625,10 @@ void app_main(void) {
   // image_url is now valid and usable here
   ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
 
+  ESP_LOGI(TAG, "Free heap: %" PRIu32, esp_get_free_heap_size());
+  ESP_LOGI(TAG, "Free PSRAM: %" PRIu32, heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+  ESP_LOGI(TAG, "Free internal RAM: %" PRIu32, heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+
   // Check for ws:// or wss:// in the URL
   if (strncmp(image_url, "ws://", 5) == 0 ||
       strncmp(image_url, "wss://", 6) == 0) {
@@ -633,7 +638,7 @@ void app_main(void) {
     const esp_websocket_client_config_t ws_cfg = {
         .uri = image_url,
         .task_stack = 8192,
-        .buffer_size = 10000,
+        .buffer_size = 8192,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .reconnect_timeout_ms = 10000,
         .network_timeout_ms = 10000,
@@ -649,7 +654,10 @@ void app_main(void) {
     s_ws_event_group = xEventGroupCreate();
 
     // Start the client immediately
-    esp_websocket_client_start(ws_handle);
+    esp_err_t err = esp_websocket_client_start(ws_handle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to start WebSocket client: %d", err);
+    }
 
     // Wait for connection with a timeout (e.g., 5 seconds)
     // If it fails to connect in time, the loop below will handle reconnection
