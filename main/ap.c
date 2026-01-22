@@ -414,21 +414,24 @@ static esp_err_t save_handler(httpd_req_t *req) {
     char ssid[100] = {0};
     char password[200] = {0};
     char image_url[400] = {0};
+    char swap_val[2] = {0};
     bool swap_colors = false;
 
-    char *saveptr;
-    char *token = strtok_r(buf, "&", &saveptr);
-    while (token != NULL) {
-        if (strncmp(token, "ssid=", 5) == 0) {
-            strncpy(ssid, token + 5, sizeof(ssid) - 1);
-        } else if (strncmp(token, "password=", 9) == 0) {
-            strncpy(password, token + 9, sizeof(password) - 1);
-        } else if (strncmp(token, "image_url=", 10) == 0) {
-            strncpy(image_url, token + 10, sizeof(image_url) - 1);
-        } else if (strncmp(token, "swap_colors=", 12) == 0) {
-            swap_colors = (strncmp(token + 12, "1", 1) == 0);
-        }
-        token = strtok_r(NULL, "&", &saveptr);
+    // Use httpd_query_key_value to parse form data
+    if (httpd_query_key_value(buf, "ssid", ssid, sizeof(ssid)) != ESP_OK) {
+        ESP_LOGD(TAG, "SSID param missing");
+    }
+
+    if (httpd_query_key_value(buf, "password", password, sizeof(password)) != ESP_OK) {
+        ESP_LOGD(TAG, "Password param missing");
+    }
+
+    if (httpd_query_key_value(buf, "image_url", image_url, sizeof(image_url)) != ESP_OK) {
+        ESP_LOGD(TAG, "Image URL param missing");
+    }
+
+    if (httpd_query_key_value(buf, "swap_colors", swap_val, sizeof(swap_val)) == ESP_OK) {
+        swap_colors = (strcmp(swap_val, "1") == 0);
     }
 
     url_decode(ssid);
