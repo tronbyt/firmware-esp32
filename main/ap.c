@@ -320,7 +320,9 @@ static esp_err_t root_handler(httpd_req_t *req) {
         if ((ret = httpd_resp_send_chunk(req, s_html_part1, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
 
         // Send Image URL (Dynamic)
-        if ((ret = httpd_resp_send_chunk(req, image_url ? image_url : "", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        if (image_url && image_url[0]) {
+            if ((ret = httpd_resp_send_chunk(req, image_url, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        }
 
         // Send Part 2
         if ((ret = httpd_resp_send_chunk(req, s_html_part2, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
@@ -328,7 +330,9 @@ static esp_err_t root_handler(httpd_req_t *req) {
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
         // Send Swap Colors Checkbox (Conditional)
         if ((ret = httpd_resp_send_chunk(req, s_html_part3_start, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
-        if ((ret = httpd_resp_send_chunk(req, nvs_get_swap_colors() ? "checked" : "", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        if (nvs_get_swap_colors()) {
+            if ((ret = httpd_resp_send_chunk(req, "checked", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        }
         if ((ret = httpd_resp_send_chunk(req, s_html_part3_end, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
 #endif
 
