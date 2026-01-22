@@ -303,6 +303,13 @@ void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   }
 }
 
+void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b) {
+  if (_matrix != NULL) {
+    _matrix->fill(x, y, w, h, r, g, b);
+    // Note: No flip here, caller must flip
+  }
+}
+
 void draw_error_indicator_pixel(void) {
   display_draw_pixel(0, 0, 100, 0, 0);
 }

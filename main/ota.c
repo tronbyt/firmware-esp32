@@ -1,4 +1,6 @@
 #include "ota.h"
+#include "display.h"
+#include "gfx.h"
 #include <esp_log.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
@@ -174,7 +176,7 @@ static bool validate_and_rewrite_url(const char *url, char *out_url, size_t out_
     if (!check_url_protocol(url, url_len, &u, out_url, out_len)) {
         return false;
     }
-    
+
     // If check_url_protocol returns true and out_url is filled (HTTPS case), we are done.
     // However, the function returns true for HTTP as well, but doesn't fill out_url.
     // We need to check if it was HTTPS.
@@ -219,11 +221,94 @@ void run_ota(const char* url) {
         .partial_http_download = true,
     };
 
-    esp_err_t ret = esp_https_ota(&ota_config);
-    if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "OTA Update successful. Rebooting...");
-        esp_restart();
+    // Stop animation and graphics loop
+    gfx_stop();
+    vTaskDelay(pdMS_TO_TICKS(100)); // Short grace period
+
+    // Initialize display for OTA progress
+    // We need to initialize BOTH buffers to ensure no "bleed through" of previous content
+    // when flipping buffers during the OTA process.
+
+    // Frame 1 (Back Buffer -> Front)
+    display_clear();
+    display_text("OTA Update", 2, 10, 0, 0, 255, 1);
+    display_flip();
+
+    // Frame 2 (Current Back Buffer)
+    display_clear();
+    display_text("OTA Update", 2, 10, 0, 0, 255, 1);
+    // Don't flip here, we want to draw the progress bar on top of this background in the loop
+
+    esp_https_ota_handle_t https_ota_handle = NULL;
+    esp_err_t err = esp_https_ota_begin(&ota_config, &https_ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ESP HTTPS OTA Begin failed: %s", esp_err_to_name(err));
+        display_clear();
+        display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
+        display_flip();
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        gfx_start();
+        return;
+    }
+
+    int bar_x = 2;
+    int bar_y = 20;
+    int bar_w = 60;
+    int bar_h = 4;
+    int last_progress_width = -1;
+
+    while (1) {
+        err = esp_https_ota_perform(https_ota_handle);
+        if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+            break;
+        }
+
+        int cur_len = esp_https_ota_get_image_len_read(https_ota_handle);
+        int total_len = esp_https_ota_get_image_size(https_ota_handle);
+
+        if (total_len > 0) {
+            int progress_width = (cur_len * bar_w) / total_len;
+
+            if (progress_width != last_progress_width) {
+                // Draw background (dim)
+                display_fill_rect(bar_x, bar_y, bar_w, bar_h, 10, 10, 10);
+                // Draw progress (green)
+                if (progress_width > 0) {
+                    display_fill_rect(bar_x, bar_y, progress_width, bar_h, 0, 255, 0);
+                }
+                display_flip();
+                last_progress_width = progress_width;
+            }
+        }
+
+        // Yield to keep watchdog happy
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA Update failed: %s", esp_err_to_name(err));
+        esp_https_ota_finish(https_ota_handle);
+        display_clear();
+        display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
+        display_flip();
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        gfx_start();
     } else {
-        ESP_LOGE(TAG, "OTA Update failed: %s", esp_err_to_name(ret));
+        err = esp_https_ota_finish(https_ota_handle);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "OTA Update successful. Rebooting...");
+            display_clear();
+            display_text("Rebooting", 2, 10, 0, 255, 0, 1);
+            display_flip();
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        } else {
+            ESP_LOGE(TAG, "OTA Finish failed: %s", esp_err_to_name(err));
+            display_clear();
+            display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
+            display_flip();
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            gfx_start();
+        }
     }
 }

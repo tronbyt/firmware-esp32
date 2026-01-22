@@ -30,6 +30,7 @@ struct gfx_state {
   int counter;
   int loaded_counter;  // Counter that tracks which image has been loaded by gfx task
   esp_websocket_client_handle_t ws_handle;  // Websocket handle for sending notifications
+  volatile bool paused;
 };
 
 static struct gfx_state *_state = NULL;
@@ -65,6 +66,7 @@ int gfx_initialize(const char *img_url) {
   _state->len = ASSET_BOOT_WEBP_LEN;
   // Use static asset directly, no allocation or copy needed
   _state->buf = (void *)ASSET_BOOT_WEBP;
+  _state->paused = false;
   
   _state->mutex = xSemaphoreCreateMutex();
   if (_state->mutex == NULL) {
@@ -331,6 +333,22 @@ void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint
   display_text(text, x, y, r, g, b, scale);
 }
 
+void gfx_stop(void) {
+  if (_state) {
+    isAnimating = -1; // Signal current draw to stop
+    _state->paused = true;
+    ESP_LOGI(TAG, "Graphics loop paused");
+  }
+}
+
+void gfx_start(void) {
+  if (_state) {
+    isAnimating = 0;
+    _state->paused = false;
+    ESP_LOGI(TAG, "Graphics loop resumed");
+  }
+}
+
 void gfx_shutdown(void) { display_shutdown(); }
 
 static void gfx_loop(void *args) {
@@ -342,6 +360,11 @@ static void gfx_loop(void *args) {
   ESP_LOGI(TAG, "Graphics loop running on core %d", xPortGetCoreID());
 
   for (;;) {
+    if (_state->paused) {
+      vTaskDelay(pdMS_TO_TICKS(100));
+      continue;
+    }
+
     if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
       ESP_LOGE(TAG, "Could not take gfx mutex");
       if (webp && !is_static_asset(webp)) {
@@ -361,7 +384,7 @@ static void gfx_loop(void *args) {
       _state->buf = NULL; // gfx_loop now owns the buffer
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
-      if (*isAnimating == -1) *isAnimating = 1;
+      if (*isAnimating == -1 && !_state->paused) *isAnimating = 1;
 
       // Send websocket notification that we're now displaying this image
       send_websocket_notification(counter);
@@ -434,13 +457,13 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
 
-  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1) {
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 && !_state->paused) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
-    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1) {
+    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 && !_state->paused) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
@@ -475,7 +498,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs, int32_t
       // Break the dwell time into 100ms chunks so we can respond to immediate commands
       int64_t static_start_us = esp_timer_get_time();
       while (esp_timer_get_time() - static_start_us < dwell_us) {
-        if (*isAnimating == -1) {
+        if (*isAnimating == -1 || _state->paused) {
           // Immediate command received, break out of dwell time
           break;
         }

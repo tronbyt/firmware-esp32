@@ -38,7 +38,7 @@
 #endif
 
 static const char* TAG = "main";
-int32_t isAnimating = 1;
+volatile int32_t isAnimating = 1;
 static int32_t app_dwell_secs = CONFIG_REFRESH_INTERVAL_SECONDS;
 // main buffer downloaded webp data
 static uint8_t* webp;
@@ -486,6 +486,7 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
+
   image_url = nvs_get_image_url();
 
   // Setup the display.
