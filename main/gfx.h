@@ -9,4 +9,6 @@ int gfx_update(void* webp, size_t len, int32_t dwell_secs);
 int gfx_get_loaded_counter(void);
 int gfx_display_asset(const char* asset_type);
 void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t b, int scale);
+void gfx_stop(void);
+void gfx_start(void);
 void gfx_shutdown(void);
