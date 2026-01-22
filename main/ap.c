@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/param.h>
+#include <esp_heap_caps.h>
 
 #define TAG "AP"
 
@@ -319,7 +320,9 @@ static esp_err_t root_handler(httpd_req_t *req) {
         if ((ret = httpd_resp_send_chunk(req, s_html_part1, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
 
         // Send Image URL (Dynamic)
-        if ((ret = httpd_resp_send_chunk(req, image_url ? image_url : "", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        if (image_url && image_url[0]) {
+            if ((ret = httpd_resp_send_chunk(req, image_url, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        }
 
         // Send Part 2
         if ((ret = httpd_resp_send_chunk(req, s_html_part2, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
@@ -327,7 +330,9 @@ static esp_err_t root_handler(httpd_req_t *req) {
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
         // Send Swap Colors Checkbox (Conditional)
         if ((ret = httpd_resp_send_chunk(req, s_html_part3_start, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
-        if ((ret = httpd_resp_send_chunk(req, nvs_get_swap_colors() ? "checked" : "", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        if (nvs_get_swap_colors()) {
+            if ((ret = httpd_resp_send_chunk(req, "checked", HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
+        }
         if ((ret = httpd_resp_send_chunk(req, s_html_part3_end, HTTPD_RESP_USE_STRLEN)) != ESP_OK) break;
 #endif
 
@@ -370,7 +375,7 @@ static void url_decode(char *str) {
 static esp_err_t save_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Processing form submission");
 
-    char *buf = malloc(4096);
+    char *buf = heap_caps_malloc(4096, MALLOC_CAP_SPIRAM);
     if (buf == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for form data");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server Error");
@@ -378,6 +383,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
     }
 
     int ret, remaining = req->content_len;
+    int received = 0;
 
     if (remaining > 4095) {
         ESP_LOGE(TAG, "Form data too large: %d bytes", remaining);
@@ -386,31 +392,39 @@ static esp_err_t save_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-    ret = httpd_req_recv(req, buf, remaining);
-    if (ret <= 0) {
-        ESP_LOGE(TAG, "Failed to receive form data");
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to receive form data");
-        free(buf);
-        return ESP_FAIL;
+    while (remaining > 0) {
+        ret = httpd_req_recv(req, buf + received, remaining);
+        if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            ESP_LOGE(TAG, "Failed to receive form data");
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to receive form data");
+            free(buf);
+            return ESP_FAIL;
+        }
+        received += ret;
+        remaining -= ret;
     }
 
-    buf[ret] = '\0';
-    ESP_LOGI(TAG, "Received form data (%d bytes)", ret);
+    buf[received] = '\0';
+    ESP_LOGI(TAG, "Received form data (%d bytes)", received);
 
-    char ssid[33] = {0};
-    char password[65] = {0};
-    char image_url[129] = {0};
+    // Buffers need to be large enough to hold URL-encoded data (roughly 3x size)
+    char ssid[100] = {0};
+    char password[200] = {0};
+    char image_url[400] = {0};
     bool swap_colors = false;
 
     char *saveptr;
     char *token = strtok_r(buf, "&", &saveptr);
     while (token != NULL) {
         if (strncmp(token, "ssid=", 5) == 0) {
-            strncpy(ssid, token + 5, 32);
+            strncpy(ssid, token + 5, sizeof(ssid) - 1);
         } else if (strncmp(token, "password=", 9) == 0) {
-            strncpy(password, token + 9, 64);
+            strncpy(password, token + 9, sizeof(password) - 1);
         } else if (strncmp(token, "image_url=", 10) == 0) {
-            strncpy(image_url, token + 10, 128);
+            strncpy(image_url, token + 10, sizeof(image_url) - 1);
         } else if (strncmp(token, "swap_colors=", 12) == 0) {
             swap_colors = (strncmp(token + 12, "1", 1) == 0);
         }
@@ -448,7 +462,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
 static esp_err_t update_handler(httpd_req_t *req) {
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = NULL;
-    char *buf = malloc(OTA_BUFFER_SIZE);
+    char *buf = heap_caps_malloc(OTA_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
     if (buf == NULL) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Alloc failed");
         return ESP_FAIL;

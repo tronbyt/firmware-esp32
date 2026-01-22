@@ -6,6 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "ap.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -47,8 +48,6 @@ static bool s_connection_given_up = false;
 
 // Counter for tracking consecutive WiFi disconnections
 static int s_wifi_disconnect_counter = 0;
-
-#include "ap.h"
 
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
@@ -126,6 +125,17 @@ int wifi_initialize(const char *ssid, const char *password) {
 
   /* Apply WiFi Power Save Mode from configuration */
   wifi_apply_power_save();
+
+  int8_t tx_power;
+  ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&tx_power));
+  ESP_LOGI(TAG, "Max TX Power (Current): %.2f dBm", tx_power * 0.25f);
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+  // Set max TX power to 11dBm (44 units) for S3
+  ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(44));
+  ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&tx_power));
+  ESP_LOGI(TAG, "Max TX Power (S3 limit applied): %.2f dBm", tx_power * 0.25f);
+#endif
 
   // Only attempt to connect if we have valid saved credentials
   if (!has_credentials) {
@@ -285,14 +295,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
 
                 // Check if we've reached the maximum number of reconnection attempts
-                if (s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS && !s_connection_given_up) {
+                if (nvs_get_ap_mode() && s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS && !s_connection_given_up) {
                     ESP_LOGW(TAG, "Maximum reconnection attempts (%d) reached, giving up", MAX_RECONNECT_ATTEMPTS);
                     s_connection_given_up = true;
                     // We'll continue in AP mode only at this point
                 } else if (!s_connection_given_up) {
                     // Only try to reconnect if we haven't given up yet
-                    ESP_LOGI(TAG, "WiFi disconnected, trying to reconnect... (attempt %d/%d)",
-                             s_reconnect_attempts, MAX_RECONNECT_ATTEMPTS);
+                    ESP_LOGI(TAG, "WiFi disconnected, trying to reconnect... (attempt %d)",
+                            s_reconnect_attempts);
                     esp_wifi_connect();
                 }
                 break;

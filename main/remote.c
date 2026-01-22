@@ -6,6 +6,7 @@
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_tls.h>
+#include <esp_heap_caps.h>
 #include "sdkconfig.h"
 #include "gfx.h"
 #include "version.h"
@@ -127,7 +128,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         }
 
         // And reallocate
-        void* new = realloc(state->buf, state->size);
+        void* new = heap_caps_realloc(state->buf, state->size, MALLOC_CAP_SPIRAM);
         if (new == NULL) {
           ESP_LOGE(TAG, "Resizing response buffer failed");
           free(state->buf);
@@ -171,7 +172,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code, char** ota_url) {
   // State for processing the response
   struct remote_state state = {
-      .buf = malloc(CONFIG_HTTP_BUFFER_SIZE_DEFAULT),
+      .buf = heap_caps_malloc(CONFIG_HTTP_BUFFER_SIZE_DEFAULT, MALLOC_CAP_SPIRAM),
       .len = 0,
       .size = CONFIG_HTTP_BUFFER_SIZE_DEFAULT,
       .max = CONFIG_HTTP_BUFFER_SIZE_MAX,
