@@ -1,8 +1,9 @@
 #pragma once
 
+#include <esp_err.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <esp_err.h>
+
 #include "esp_wifi_types.h"
 
 #ifdef __cplusplus
@@ -27,7 +28,7 @@ esp_err_t nvs_get_password(char *password, size_t max_len);
 esp_err_t nvs_get_hostname(char *hostname, size_t max_len);
 esp_err_t nvs_get_syslog_addr(char *addr, size_t max_len);
 esp_err_t nvs_get_sntp_server(char *server, size_t max_len);
-const char* nvs_get_image_url(void);
+const char *nvs_get_image_url(void);
 bool nvs_get_swap_colors(void);
 wifi_ps_type_t nvs_get_wifi_power_save(void);
 bool nvs_get_skip_display_version(void);

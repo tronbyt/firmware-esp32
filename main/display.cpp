@@ -1,10 +1,11 @@
 #include "display.h"
-#include "font5x7.h"
-#include "nvs_settings.h"
-#include "esp_log.h"
-#include "esp_heap_caps.h"
 
 #include <hub75.h>
+
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "font5x7.h"
+#include "nvs_settings.h"
 
 static Hub75Driver *_matrix;
 static uint8_t _brightness = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
@@ -17,7 +18,8 @@ static uint32_t *_scaled_buffer = NULL;
 int display_initialize(void) {
 #if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
   if (_scaled_buffer == NULL) {
-    _scaled_buffer = (uint32_t *)heap_caps_malloc(128 * 64 * 4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    _scaled_buffer = (uint32_t *)heap_caps_malloc(
+        128 * 64 * 4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (_scaled_buffer == NULL) {
       ESP_LOGE(TAG, "Failed to allocate scaled buffer in PSRAM");
       return 1;
@@ -29,7 +31,8 @@ int display_initialize(void) {
   bool swap_colors = nvs_get_swap_colors();
 
   // Initialize pin values based on hardware and swap_colors setting
-  ESP_LOGI(TAG, "Initializing display with swap_colors=%s", swap_colors ? "true" : "false");
+  ESP_LOGI(TAG, "Initializing display with swap_colors=%s",
+           swap_colors ? "true" : "false");
 
   // Initialize the panel.
   Hub75Config mxconfig;
@@ -123,7 +126,7 @@ int display_initialize(void) {
     mxconfig.pins.b2 = 39;
   }
   ESP_LOGI(TAG, "Board preset: MatrixPortal S3");
-#else // GEN1 from here down.
+#else  // GEN1 from here down.
   mxconfig.pins.a = 26;
   mxconfig.pins.b = 5;
   mxconfig.pins.c = 25;
@@ -236,7 +239,8 @@ int display_initialize(void) {
 
 static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
   if (pct > 100) pct = 100;
-  return (uint8_t)(((uint32_t)pct * 230 + 50) / 100); // 230 as MAX 8 BIT HARDCODED
+  return (uint8_t)(((uint32_t)pct * 230 + 50) /
+                   100);  // 230 as MAX 8 BIT HARDCODED
 }
 
 void display_set_brightness(uint8_t brightness_pct) {
@@ -247,11 +251,13 @@ void display_set_brightness(uint8_t brightness_pct) {
     uint8_t max_brightness_8bit = MAX_BRIGHTNESS_8BIT;
     if (brightness_8bit > max_brightness_8bit) {
       brightness_8bit = max_brightness_8bit;
-      ESP_LOGI(TAG, "Clamping brightness to MAX_BRIGHTNESS (%d)", MAX_BRIGHTNESS_8BIT);
+      ESP_LOGI(TAG, "Clamping brightness to MAX_BRIGHTNESS (%d)",
+               MAX_BRIGHTNESS_8BIT);
     }
 #endif
 
-    ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct, brightness_8bit);
+    ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct,
+             brightness_8bit);
     _matrix->set_brightness(brightness_8bit);
     _matrix->clear();
     _brightness = brightness_pct;
@@ -283,14 +289,16 @@ void display_draw(const uint8_t *pix, int width, int height) {
       }
     }
 
-    _matrix->draw_pixels(0, 0, 128, 64, (uint8_t*)_scaled_buffer, Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
+    _matrix->draw_pixels(0, 0, 128, 64, (uint8_t *)_scaled_buffer,
+                         Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
     _matrix->flip_buffer();
     return;
   }
 #endif
 
   // Default path: bulk transfer for native resolution
-  _matrix->draw_pixels(0, 0, width, height, pix, Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
+  _matrix->draw_pixels(0, 0, width, height, pix, Hub75PixelFormat::RGB888_32,
+                       Hub75ColorOrder::BGR);
   _matrix->flip_buffer();
 }
 
@@ -303,18 +311,18 @@ void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   }
 }
 
-void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b) {
+void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
+                       uint8_t b) {
   if (_matrix != NULL) {
     _matrix->fill(x, y, w, h, r, g, b);
     // Note: No flip here, caller must flip
   }
 }
 
-void draw_error_indicator_pixel(void) {
-  display_draw_pixel(0, 0, 100, 0, 0);
-}
+void draw_error_indicator_pixel(void) { display_draw_pixel(0, 0, 100, 0, 0); }
 
-void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t b, int scale) {
+void display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
+                  uint8_t b, int scale) {
   if (_matrix == NULL || text == NULL) {
     return;
   }
@@ -328,12 +336,12 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
 
     // Check if character is in font range
     if (c < FONT5X7_FIRST_CHAR || c > FONT5X7_LAST_CHAR) {
-      c = ' '; // Replace unsupported characters with space
+      c = ' ';  // Replace unsupported characters with space
     }
 
     // Get font data for this character
     int char_index = c - FONT5X7_FIRST_CHAR;
-    const uint8_t* char_data = font5x7[char_index];
+    const uint8_t *char_data = font5x7[char_index];
 
     // Draw each column of the character
     for (int col = 0; col < FONT5X7_CHAR_WIDTH; col++) {
@@ -346,14 +354,15 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g, uint8_t 
           int py = cursor_y + (row * scale);
 
           if (scale > 1) {
-             // Optimize scaled text using fill
-             _matrix->fill(px, py, scale, scale, r, g, b);
+            // Optimize scaled text using fill
+            _matrix->fill(px, py, scale, scale, r, g, b);
           } else {
-             // Draw pixel(s) based on scale
-             // Check bounds
-             if (px >= 0 && px < CONFIG_HUB75_PANEL_WIDTH && py >= 0 && py < CONFIG_HUB75_PANEL_HEIGHT) {
-               _matrix->set_pixel(px, py, r, g, b);
-             }
+            // Draw pixel(s) based on scale
+            // Check bounds
+            if (px >= 0 && px < CONFIG_HUB75_PANEL_WIDTH && py >= 0 &&
+                py < CONFIG_HUB75_PANEL_HEIGHT) {
+              _matrix->set_pixel(px, py, r, g, b);
+            }
           }
         }
       }

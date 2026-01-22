@@ -1,9 +1,10 @@
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <esp_err.h>
 #include <esp_http_server.h>
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 
