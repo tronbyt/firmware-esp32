@@ -1,14 +1,15 @@
-#include <stdbool.h>
-#include <stdlib.h>
 #include <esp_crt_bundle.h>
+#include <esp_heap_caps.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_tls.h>
-#include <esp_heap_caps.h>
-#include "sdkconfig.h"
+#include <stdbool.h>
+#include <stdlib.h>
+
 #include "gfx.h"
+#include "sdkconfig.h"
 #include "version.h"
 
 static const char* TAG = "remote";
@@ -47,7 +48,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
     case HTTP_EVENT_ON_HEADER:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", event->header_key,
                event->header_value);
-      
+
       // Check for the Content-Length header
       if (strcasecmp(event->header_key, "Content-Length") == 0) {
         size_t content_length = (size_t)atoi(event->header_value);
@@ -69,14 +70,13 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
       // Check for the specific header key
       if (strcasecmp(event->header_key, "Tronbyt-Brightness") == 0) {
-        state->brightness = (uint8_t)atoi(event->header_value); // API spec: 0-100
+        state->brightness =
+            (uint8_t)atoi(event->header_value);  // API spec: 0-100
         ESP_LOGD(TAG, "Tronbyt-Brightness value: %d%%", state->brightness);
-      }
-      else if (strcasecmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
+      } else if (strcasecmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
         state->dwell_secs = (int)atoi(event->header_value);
         // ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
-      }
-      else if (strcasecmp(event->header_key, "Tronbyt-OTA-URL") == 0) {
+      } else if (strcasecmp(event->header_key, "Tronbyt-OTA-URL") == 0) {
         if (state->ota_url != NULL) free(state->ota_url);
         state->ota_url = strdup(event->header_value);
         ESP_LOGI(TAG, "Found OTA URL: %s", state->ota_url);
@@ -128,7 +128,8 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         }
 
         // And reallocate
-        void* new = heap_caps_realloc(state->buf, state->size, MALLOC_CAP_SPIRAM);
+        void* new =
+            heap_caps_realloc(state->buf, state->size, MALLOC_CAP_SPIRAM);
         if (new == NULL) {
           ESP_LOGE(TAG, "Resizing response buffer failed");
           free(state->buf);
@@ -169,10 +170,13 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
   return err;
 }
 
-int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_pct, int32_t* dwell_secs, int* return_status_code, char** ota_url) {
+int remote_get(const char* url, uint8_t** buf, size_t* len,
+               uint8_t* brightness_pct, int32_t* dwell_secs,
+               int* return_status_code, char** ota_url) {
   // State for processing the response
   struct remote_state state = {
-      .buf = heap_caps_malloc(CONFIG_HTTP_BUFFER_SIZE_DEFAULT, MALLOC_CAP_SPIRAM),
+      .buf =
+          heap_caps_malloc(CONFIG_HTTP_BUFFER_SIZE_DEFAULT, MALLOC_CAP_SPIRAM),
       .len = 0,
       .size = CONFIG_HTTP_BUFFER_SIZE_DEFAULT,
       .max = CONFIG_HTTP_BUFFER_SIZE_MAX,
@@ -203,7 +207,8 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
     return 1;
   }
 
-  if (esp_http_client_set_header(http, "X-Firmware-Version", FIRMWARE_VERSION) != ESP_OK) {
+  if (esp_http_client_set_header(http, "X-Firmware-Version",
+                                 FIRMWARE_VERSION) != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set firmware version header");
     // Not a critical error; continue anyway
   }
@@ -250,8 +255,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len, uint8_t* brightness_
   // Write back the results.
   *buf = state.buf;
   *len = state.len;
-  *brightness_pct = state.brightness; // Assumes API provides 0–100 as spec'd
-  if (state.dwell_secs > -1 && state.dwell_secs < 300) *dwell_secs = state.dwell_secs; // 5 minute max ?
+  *brightness_pct = state.brightness;  // Assumes API provides 0–100 as spec'd
+  if (state.dwell_secs > -1 && state.dwell_secs < 300)
+    *dwell_secs = state.dwell_secs;  // 5 minute max ?
   *ota_url = state.ota_url;
 
   esp_http_client_cleanup(http);

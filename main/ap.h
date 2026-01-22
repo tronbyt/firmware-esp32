@@ -1,11 +1,11 @@
 #pragma once
 
-#include "wifi.h"
-
 #include <esp_err.h>
 #include <esp_http_server.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
+
+#include "wifi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,14 +13,14 @@ extern "C" {
 
 /**
  * @brief Initialize the Access Point and start services
- * 
+ *
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t ap_start(void);
 
 /**
  * @brief Stop the Access Point services
- * 
+ *
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t ap_stop(void);
@@ -43,12 +43,7 @@ void ap_configure(void);
 
 void ap_start_shutdown_timer(void);
 
-
-
 #ifdef __cplusplus
-
 }
 
 #endif
-
-
