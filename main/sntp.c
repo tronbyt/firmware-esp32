@@ -28,7 +28,7 @@ void app_sntp_config(void) {
   } else {
     // 2. Use DHCP (if enabled)
     ESP_LOGI(TAG, "Using SNTP from DHCP (fallback: pool.ntp.org)");
-    esp_sntp_servermode_dhcp(1);
+    sntp_servermode_dhcp(1);
     esp_sntp_setservername(0, "pool.ntp.org");
   }
 }

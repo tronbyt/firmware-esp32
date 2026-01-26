@@ -38,7 +38,7 @@
 #endif
 
 static const char* TAG = "main";
-volatile int32_t isAnimating = 1;
+int32_t isAnimating = 1;
 static int32_t app_dwell_secs = CONFIG_REFRESH_INTERVAL_SECONDS;
 // main buffer downloaded webp data
 static uint8_t* webp;
@@ -700,7 +700,7 @@ void app_main(void) {
     for (;;) {
       uint8_t* webp;
       size_t len;
-      static uint8_t brightness_pct = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
+      static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
