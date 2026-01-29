@@ -182,6 +182,7 @@ int gfx_initialize(const char *img_url) {
     ESP_LOGE(TAG, "Could not create gfx task");
     return 1;
   }
+  ESP_LOGI(TAG, "Gfx task created successfully");
 
   return 0;
 }
@@ -247,8 +248,9 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   _state->len = len;
   _state->dwell_secs = dwell_secs;
   _state->counter++;
-
   int counter = _state->counter;
+  ESP_LOGI(TAG, "Queued image counter=%d size=%zu dwell=%d", counter, len,
+           dwell_secs);
 
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
@@ -348,6 +350,7 @@ void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
 void gfx_shutdown(void) { display_shutdown(); }
 
 static void gfx_loop(void *args) {
+  ESP_LOGI(TAG, "gfx_loop ENTERED");
   void *webp = NULL;
   size_t len = 0;
   int32_t dwell_secs = 0;
@@ -366,8 +369,8 @@ static void gfx_loop(void *args) {
 
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
-      ESP_LOGI(TAG, "Loaded new webp");
-      if (webp) free(webp);
+      ESP_LOGI(TAG, "Displaying image counter=%d", _state->counter);
+      if (webp && !is_static_asset(webp)) free(webp);
       webp = _state->buf;
       len = _state->len;
       dwell_secs = _state->dwell_secs;
