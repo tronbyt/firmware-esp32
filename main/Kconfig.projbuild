@@ -12,6 +12,12 @@ menu "Application Configuration"
         help
             Swap RGB colors.
 
+    config NO_INVERT_CLOCK_PHASE
+        bool "No Invert Clock Phase"
+        default n
+        help
+            Do not invert clock phase. Required for some display panels (e.g., Tidbyt Gen2).
+
     config REFRESH_INTERVAL_SECONDS
         int "Default Refresh Interval (seconds)"
         default 10
