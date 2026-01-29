@@ -36,9 +36,17 @@ struct gfx_state {
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t isAnimating);
+static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs);
 static void send_websocket_notification(int counter);
+
+static bool is_static_asset(const void *ptr) {
+  if (ptr == ASSET_BOOT_WEBP) return true;
+  if (ptr == ASSET_CONFIG_WEBP) return true;
+  if (ptr == ASSET_404_WEBP) return true;
+  if (ptr == ASSET_OVERSIZE_WEBP) return true;
+  if (ptr == ASSET_NOCONNECT_WEBP) return true;
+  return false;
+}
 
 int gfx_initialize(const char *img_url) {
   // Only initialize once
@@ -389,7 +397,7 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
+      if (draw_webp(webp, len, dwell_secs)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -406,8 +414,7 @@ static void gfx_loop(void *args) {
   }
 }
 
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t isAnimating) {
+static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -500,7 +507,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   }
   WebPAnimDecoderDelete(decoder);
 
-  ESP_LOGI(TAG, "Setting isAnimating to 0");
+  // ESP_LOGI(TAG, "Setting isAnimating to 0");
   isAnimating = 0;
   return 0;
 }

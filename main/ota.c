@@ -290,6 +290,12 @@ void run_ota(const char *url) {
       int progress_width = (cur_len * bar_w) / total_len;
 
       if (progress_width != last_progress_width) {
+        // Draw background (dim)
+        display_fill_rect(bar_x, bar_y, bar_w, bar_h, 10, 10, 10);
+        // Draw progress (green)
+        if (progress_width > 0) {
+          display_fill_rect(bar_x, bar_y, progress_width, bar_h, 0, 255, 0);
+        }
         display_flip();
         last_progress_width = progress_width;
       }
