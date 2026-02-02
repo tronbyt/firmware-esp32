@@ -38,7 +38,8 @@ struct gfx_state {
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs);
+static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
+                     int32_t *isAnimating);
 static void send_websocket_notification(int counter);
 
 static bool is_static_asset(const void *ptr) {
@@ -403,7 +404,7 @@ static void gfx_loop(void *args) {
       _state->buf = NULL;  // gfx_loop now owns the buffer
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
-      if (*isAnimating == -1 && !_state->paused) *isAnimating = 1;
+      if (isAnimating == -1 && !_state->paused) isAnimating = 1;
 
       // Send websocket notification that we're now displaying this image
       send_websocket_notification(counter);
@@ -415,7 +416,7 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs)) {
+      if (draw_webp(webp, len, dwell_secs, &isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -434,7 +435,8 @@ static void gfx_loop(void *args) {
   }
 }
 
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs) {
+static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
+                     int32_t *isAnimating) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -477,15 +479,13 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs) {
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
 
-  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 &&
-         !_state->paused) {
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 && !_state->paused) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
-    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 &&
-           !_state->paused) {
+    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 && !_state->paused) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
@@ -534,6 +534,24 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs) {
   WebPAnimDecoderDelete(decoder);
 
   // ESP_LOGI(TAG, "Setting isAnimating to 0");
-  isAnimating = 0;
+  if (*isAnimating != -1) {
+    *isAnimating = 0;
+  }
   return 0;
+}
+
+void gfx_stop(void) {
+  if (_state) {
+    isAnimating = -1;  // Signal current draw to stop
+    _state->paused = true;
+    ESP_LOGI(TAG, "Graphics loop paused");
+  }
+}
+
+void gfx_start(void) {
+  if (_state) {
+    isAnimating = 0;
+    _state->paused = false;
+    ESP_LOGI(TAG, "Graphics loop resumed");
+  }
 }

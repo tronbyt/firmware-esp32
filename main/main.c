@@ -773,7 +773,10 @@ void app_main(void) {
         }
 
         // ESP_LOGD(TAG, "Setting isAnimating to 1");
-        isAnimating = 1;
+        // Only start animation if OTA is not in progress
+        if (isAnimating != -1) {
+          isAnimating = 1;
+        }
       }
       wifi_health_check();
     }
