@@ -397,7 +397,7 @@ static void gfx_loop(void *args) {
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
       ESP_LOGI(TAG, "Displaying image counter=%d", _state->counter);
-      if (webp && !is_static_asset(webp)) free(webp);
+      if (webp) free(webp);
       webp = _state->buf;
       len = _state->len;
       dwell_secs = _state->dwell_secs;
