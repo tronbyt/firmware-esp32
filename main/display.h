@@ -25,7 +25,6 @@ void draw_error_indicator_pixel(void);
 void display_text(const char* text, int x, int y, uint8_t r, uint8_t g,
                   uint8_t b, int scale);
 void display_flip(void);
-// int32_t isAnimating = 0;  // Initialize with a valid value
 
 #ifdef __cplusplus
 }

@@ -193,12 +193,6 @@ int display_initialize(void) {
 
   _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
-  if (_matrix ==
-      NULL) {  // Should not happen with new if it throws std::bad_alloc
-    ESP_LOGE(TAG, "Failed to allocate MatrixPanel_I2S_DMA object");
-    return 1;
-  }
-
   if (!_matrix->begin()) {
     ESP_LOGE(TAG, "MatrixPanel_I2S_DMA begin() failed");
     delete _matrix;
