@@ -1,3 +1,4 @@
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_websocket_client.h>
 #include <freertos/FreeRTOS.h>
