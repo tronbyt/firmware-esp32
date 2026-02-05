@@ -102,7 +102,7 @@ static const char *s_html_part4 =
     "var x=new XMLHttpRequest();x.open('POST','/update',true);"
     "x.upload.onprogress=function(e){if(e.lengthComputable){document."
     "getElementById('progress').innerText='Upload: "
-    "'+((e.loaded/e.total)*100).toFixed(0)+'%%';}};"
+    "'+((e.loaded/e.total)*100).toFixed(0)+'%';}};"
     "x.onload=function(){if(x.status==200){document.getElementById('progress')."
     "innerText='Success! "
     "Rebooting...';}else{document.getElementById('progress').innerText='Failed:"
