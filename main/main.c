@@ -22,6 +22,7 @@
 #include "sdkconfig.h"
 #include "sntp.h"
 #include "syslog.h"
+#include "touch_control.h"
 #include "version.h"
 #include "wifi.h"
 
@@ -53,6 +54,13 @@ static EventGroupHandle_t s_ws_event_group;
 static bool button_boot = false;
 static bool first_ws_image_received = false;
 static bool config_received = false;
+
+// Touch control state
+static bool display_power_on = true;
+static uint8_t saved_brightness = 30;
+
+// Touch control function declaration
+static void handle_touch_event(touch_event_t event);
 
 static void config_saved_callback(void) {
   config_received = true;
@@ -496,6 +504,17 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&display_shutdown);
 
+  // Initialize touch controls (GPIO33 on Tidbyt Gen2)
+  ESP_LOGI(TAG, "Initializing touch control...");
+  esp_err_t touch_ret = touch_control_init();
+  if (touch_ret == ESP_OK) {
+    ESP_LOGI(TAG, "Touch control ready on GPIO33");
+    touch_control_debug_all_pads();
+  } else {
+    ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
+             esp_err_to_name(touch_ret));
+  }
+
   // Start the AP web server now that display memory is allocated
   if (nvs_get_ap_mode()) {
     ESP_LOGI(TAG, "Starting AP Web Server...");
@@ -692,7 +711,16 @@ void app_main(void) {
       }
 
       wifi_health_check();
-      vTaskDelay(pdMS_TO_TICKS(5000));  // check every 5s
+
+      // Poll touch frequently for 5 seconds (50ms intervals = 100 checks)
+      // This allows proper gesture detection while keeping health checks at 5s
+      for (int i = 0; i < 100; i++) {
+        touch_event_t touch_event = touch_control_check();
+        if (touch_event != TOUCH_EVENT_NONE) {
+          handle_touch_event(touch_event);
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
+      }
     }
   } else {
     // normal http
@@ -778,7 +806,58 @@ void app_main(void) {
           isAnimating = 1;
         }
       }
+
+      // Check for touch events
+      touch_event_t touch_event = touch_control_check();
+      if (touch_event != TOUCH_EVENT_NONE) {
+        handle_touch_event(touch_event);
+      }
+
       wifi_health_check();
     }
+  }
+}
+
+/**
+ * Handle touch events from the single touch pad
+ * TAP = skip to next app
+ * DOUBLE_TAP = (reserved for future use)
+ * HOLD = toggle display power on/off
+ */
+static void handle_touch_event(touch_event_t event) {
+  ESP_LOGI(TAG, "Touch event: %s", touch_event_to_string(event));
+
+  switch (event) {
+    case TOUCH_EVENT_TAP:
+      if (display_power_on) {
+        ESP_LOGI(TAG, "TAP - skip to next app");
+        isAnimating = -1;
+      } else {
+        ESP_LOGI(TAG, "TAP ignored - display is off (hold to turn on)");
+      }
+      break;
+
+    case TOUCH_EVENT_DOUBLE_TAP:
+      // Reserved for future use
+      ESP_LOGI(TAG, "DOUBLE TAP - no action assigned");
+      break;
+
+    case TOUCH_EVENT_HOLD:
+      display_power_on = !display_power_on;
+
+      if (display_power_on) {
+        ESP_LOGI(TAG, "HOLD - Display ON");
+        display_set_brightness(saved_brightness);
+        isAnimating = 1;
+      } else {
+        ESP_LOGI(TAG, "HOLD - Display OFF");
+        saved_brightness = 30;
+        display_set_brightness(0);
+        isAnimating = 0;
+      }
+      break;
+
+    default:
+      break;
   }
 }
