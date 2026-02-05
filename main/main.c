@@ -700,7 +700,7 @@ void app_main(void) {
     for (;;) {
       uint8_t* webp;
       size_t len;
-      static uint8_t brightness_pct = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
+      static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
@@ -760,8 +760,7 @@ void app_main(void) {
         // Wait for gfx task to load the newly queued image before fetching the
         // next one This ensures the image has begun displaying before we fetch
         // again
-        ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)",
-                 queued_counter);
+        // ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)", queued_counter);
         int timeout = 0;
         while (gfx_get_loaded_counter() != queued_counter && timeout < 20000) {
           vTaskDelay(pdMS_TO_TICKS(10));
@@ -770,11 +769,14 @@ void app_main(void) {
         if (timeout >= 20000) {
           ESP_LOGE(TAG, "Timeout waiting for gfx task to load image");
         } else {
-          ESP_LOGI(TAG, "Gfx task loaded image after %d ms", timeout);
+          ESP_LOGI(TAG, "Gfx task loaded image counter %d ms", queued_counter);
         }
 
-        ESP_LOGD(TAG, "Setting isAnimating to 1");
-        isAnimating = 1;
+        // ESP_LOGD(TAG, "Setting isAnimating to 1");
+        // Only start animation if OTA is not in progress
+        if (isAnimating != -1) {
+          isAnimating = 1;
+        }
       }
       wifi_health_check();
     }

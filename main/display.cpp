@@ -1,238 +1,205 @@
 #include "display.h"
 
-#include <hub75.h>
+#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
-#include "esp_heap_caps.h"
-#include "esp_log.h"
 #include "font5x7.h"
 #include "nvs_settings.h"
+#if CONFIG_BOARD_TIDBYT_GEN2
+#define R1 5
+#define G1 23
+#define BL1 4
+#define R2 2
+#define G2 22
+#define BL2 32
 
-static Hub75Driver *_matrix;
-static uint8_t _brightness = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
+#define CH_A 25
+#define CH_B 21
+#define CH_C 26
+#define CH_D 19
+#define CH_E -1  // assign to pin 14 if using more than two panels
+
+#define LAT 18
+#define OE 27
+#define CLK 15
+#elif CONFIG_BOARD_TRONBYT_S3_WIDE
+#define R1 4
+#define G1 5
+#define BL1 6
+#define R2 7
+#define G2 15
+#define BL2 16
+
+#define CH_A 17
+#define CH_B 18
+#define CH_C 8
+#define CH_D 3
+#define CH_E 46
+#define LAT 9
+#define OE 10
+#define CLK 11
+
+#define WIDTH 128
+#define HEIGHT 64
+#elif CONFIG_BOARD_TRONBYT_S3
+#define R1 4
+#define G1 6
+#define BL1 5
+#define R2 7
+#define G2 16
+#define BL2 15
+
+#define CH_A 17
+#define CH_B 18
+#define CH_C 8
+#define CH_D 3
+#define CH_E -1
+
+#define LAT 9
+#define OE 10
+#define CLK 11
+#elif CONFIG_BOARD_PIXOTICKER
+#define R1 2
+#define G1 4
+#define BL1 15
+#define R2 16
+#define G2 17
+#define BL2 27
+#define CH_A 5
+#define CH_B 18
+#define CH_C 19
+#define CH_D 21
+#define CH_E 12
+#define CLK 22
+#define LAT 26
+#define OE 25
+#elif CONFIG_BOARD_MATRIXPORTAL_S3
+//                     R1, G1, B1, R2, G2, B2
+// uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
+// uint8_t addrPins[] = {45, 36, 48, 35, 21};
+// uint8_t clockPin = 2;
+// uint8_t latchPin = 47;
+// uint8_t oePin = 14;
+#define R1 42
+#define R2 38
+#define CH_A 45
+#define CH_B 36
+#define CH_C 48
+#define CH_D 35
+#define CH_E 21
+#define CLK 2
+#define LAT 47
+#define OE 14
+#else  // GEN1 from here down.
+#define CH_A 26
+#define CH_B 5
+#define CH_C 25
+#define CH_D 18
+#define CH_E -1  // assign to pin 14 if using more than two panels
+
+#define LAT 19
+#define OE 32
+#define CLK 33
+#endif
+
+#ifndef WIDTH
+#define WIDTH 64
+#endif
+
+#ifndef HEIGHT
+#define HEIGHT 32
+#endif
+
+static MatrixPanel_I2S_DMA *_matrix;
+static uint8_t _brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
 
-#if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
-static uint32_t *_scaled_buffer = NULL;
-#endif
-
 int display_initialize(void) {
-#if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
-  if (_scaled_buffer == NULL) {
-    _scaled_buffer = (uint32_t *)heap_caps_malloc(
-        128 * 64 * 4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (_scaled_buffer == NULL) {
-      ESP_LOGE(TAG, "Failed to allocate scaled buffer in PSRAM");
-      return 1;
-    }
-  }
-#endif
-
   // Get swap_colors setting
   bool swap_colors = nvs_get_swap_colors();
 
   // Initialize pin values based on hardware and swap_colors setting
+  int8_t pin_R1, pin_G1, pin_BL1, pin_R2, pin_G2, pin_BL2;
+
+#if CONFIG_BOARD_MATRIXPORTAL_S3
+  pin_R1 = R1;  // R1 = 42
+  pin_R2 = R2;  // R2 = 38
+  if (swap_colors) {
+    // Swapped configuration for MATRIXPORTALS3
+    pin_G1 = 40;
+    pin_BL1 = 41;
+    pin_G2 = 37;
+    pin_BL2 = 39;
+  } else {
+    // Normal configuration for MATRIXPORTALS3
+    pin_G1 = 41;
+    pin_BL1 = 40;
+    pin_G2 = 39;
+    pin_BL2 = 37;
+  }
+#elif CONFIG_BOARD_TIDBYT_GEN2 || CONFIG_BOARD_TRONBYT_S3_WIDE || \
+    CONFIG_BOARD_TRONBYT_S3 || CONFIG_BOARD_PIXOTICKER
+  // These variants don't support color swapping, use fixed pins
+  pin_R1 = R1;
+  pin_G1 = G1;
+  pin_BL1 = BL1;
+  pin_R2 = R2;
+  pin_G2 = G2;
+  pin_BL2 = BL2;
+#else  // GEN1
+  if (swap_colors) {
+    // Swapped configuration for GEN1
+    pin_R1 = 21;
+    pin_G1 = 2;
+    pin_BL1 = 22;
+    pin_R2 = 23;
+    pin_G2 = 4;
+    pin_BL2 = 27;
+  } else {
+    // Normal configuration for GEN1
+    pin_R1 = 2;
+    pin_G1 = 22;
+    pin_BL1 = 21;
+    pin_R2 = 4;
+    pin_G2 = 27;
+    pin_BL2 = 23;
+  }
+#endif
+
   ESP_LOGI(TAG, "Initializing display with swap_colors=%s",
            swap_colors ? "true" : "false");
 
   // Initialize the panel.
-  Hub75Config mxconfig;
-  mxconfig.panel_width = CONFIG_HUB75_PANEL_WIDTH;
-  mxconfig.panel_height = CONFIG_HUB75_PANEL_HEIGHT;
+  HUB75_I2S_CFG::i2s_pins pins = {pin_R1,  pin_G1, pin_BL1, pin_R2, pin_G2,
+                                  pin_BL2, CH_A,   CH_B,    CH_C,   CH_D,
+                                  CH_E,    LAT,    OE,      CLK};
 
-#if CONFIG_BOARD_TIDBYT_GEN2
-  mxconfig.pins.r1 = 5;
-  mxconfig.pins.g1 = 23;
-  mxconfig.pins.b1 = 4;
-  mxconfig.pins.r2 = 2;
-  mxconfig.pins.g2 = 22;
-  mxconfig.pins.b2 = 32;
-  mxconfig.pins.a = 25;
-  mxconfig.pins.b = 21;
-  mxconfig.pins.c = 26;
-  mxconfig.pins.d = 19;
-  mxconfig.pins.e = -1;  // assign to pin 14 if using more than two panels
-  mxconfig.pins.lat = 18;
-  mxconfig.pins.oe = 27;
-  mxconfig.pins.clk = 15;
-  ESP_LOGI(TAG, "Board preset: Tidbyt Gen2");
-#elif CONFIG_BOARD_TRONBYT_S3_WIDE
-  mxconfig.pins.r1 = 4;
-  mxconfig.pins.g1 = 5;
-  mxconfig.pins.b1 = 6;
-  mxconfig.pins.r2 = 7;
-  mxconfig.pins.g2 = 15;
-  mxconfig.pins.b2 = 16;
-  mxconfig.pins.a = 17;
-  mxconfig.pins.b = 18;
-  mxconfig.pins.c = 8;
-  mxconfig.pins.d = 3;
-  mxconfig.pins.e = 46;
-  mxconfig.pins.lat = 9;
-  mxconfig.pins.oe = 10;
-  mxconfig.pins.clk = 11;
-  ESP_LOGI(TAG, "Board preset: Tronbyt S3 Wide");
-#elif CONFIG_BOARD_TRONBYT_S3
-  mxconfig.pins.r1 = 4;
-  mxconfig.pins.g1 = 6;
-  mxconfig.pins.b1 = 5;
-  mxconfig.pins.r2 = 7;
-  mxconfig.pins.g2 = 16;
-  mxconfig.pins.b2 = 15;
-  mxconfig.pins.a = 17;
-  mxconfig.pins.b = 18;
-  mxconfig.pins.c = 8;
-  mxconfig.pins.d = 3;
-  mxconfig.pins.e = -1;
-  mxconfig.pins.lat = 9;
-  mxconfig.pins.oe = 10;
-  mxconfig.pins.clk = 11;
-  ESP_LOGI(TAG, "Board preset: Tronbyt S3");
-#elif CONFIG_BOARD_PIXOTICKER
-  mxconfig.pins.r1 = 2;
-  mxconfig.pins.g1 = 4;
-  mxconfig.pins.b1 = 15;
-  mxconfig.pins.r2 = 16;
-  mxconfig.pins.g2 = 17;
-  mxconfig.pins.b2 = 27;
-  mxconfig.pins.a = 5;
-  mxconfig.pins.b = 18;
-  mxconfig.pins.c = 19;
-  mxconfig.pins.d = 21;
-  mxconfig.pins.e = 12;
-  mxconfig.pins.lat = 26;
-  mxconfig.pins.oe = 25;
-  mxconfig.pins.clk = 22;
-  ESP_LOGI(TAG, "Board preset: Pixoticker");
-#elif CONFIG_BOARD_MATRIXPORTAL_S3
-  mxconfig.pins.r1 = 42;
-  mxconfig.pins.r2 = 38;
-  mxconfig.pins.a = 45;
-  mxconfig.pins.b = 36;
-  mxconfig.pins.c = 48;
-  mxconfig.pins.d = 35;
-  mxconfig.pins.e = 21;
-  mxconfig.pins.lat = 47;
-  mxconfig.pins.oe = 14;
-  mxconfig.pins.clk = 2;
-  if (swap_colors) {
-    mxconfig.pins.g1 = 41;
-    mxconfig.pins.b1 = 40;
-    mxconfig.pins.g2 = 39;
-    mxconfig.pins.b2 = 37;
-  } else {
-    mxconfig.pins.g1 = 40;
-    mxconfig.pins.b1 = 41;
-    mxconfig.pins.g2 = 37;
-    mxconfig.pins.b2 = 39;
-  }
-  ESP_LOGI(TAG, "Board preset: MatrixPortal S3");
-#else  // GEN1 from here down.
-  mxconfig.pins.a = 26;
-  mxconfig.pins.b = 5;
-  mxconfig.pins.c = 25;
-  mxconfig.pins.d = 18;
-  mxconfig.pins.e = -1;  // assign to pin 14 if using more than two panels
-  mxconfig.pins.lat = 19;
-  mxconfig.pins.oe = 32;
-  mxconfig.pins.clk = 33;
-  if (swap_colors) {
-    // Swapped configuration for GEN1
-    mxconfig.pins.r1 = 21;
-    mxconfig.pins.g1 = 2;
-    mxconfig.pins.b1 = 22;
-    mxconfig.pins.r2 = 23;
-    mxconfig.pins.g2 = 4;
-    mxconfig.pins.b2 = 27;
-  } else {
-    // Normal configuration for GEN1
-    mxconfig.pins.r1 = 2;
-    mxconfig.pins.g1 = 22;
-    mxconfig.pins.b1 = 21;
-    mxconfig.pins.r2 = 4;
-    mxconfig.pins.g2 = 27;
-    mxconfig.pins.b2 = 23;
-  }
-  ESP_LOGI(TAG, "Board preset: Tidbyt Gen1");
-#endif
-
-  // Scan Pattern
-#if defined(CONFIG_HUB75_SCAN_1_32)
-  mxconfig.scan_pattern = Hub75ScanPattern::SCAN_1_32;
-#elif defined(CONFIG_HUB75_SCAN_1_16)
-  mxconfig.scan_pattern = Hub75ScanPattern::SCAN_1_16;
-#elif defined(CONFIG_HUB75_SCAN_1_8)
-  mxconfig.scan_pattern = Hub75ScanPattern::SCAN_1_8;
-#endif
-
-  // Scan wiring
-#if defined(CONFIG_HUB75_WIRING_STANDARD)
-  mxconfig.scan_wiring = Hub75ScanWiring::STANDARD_TWO_SCAN;
-#elif defined(CONFIG_HUB75_WIRING_FOUR_SCAN_16PX)
-  mxconfig.scan_wiring = Hub75ScanWiring::FOUR_SCAN_16PX_HIGH;
-#elif defined(CONFIG_HUB75_WIRING_FOUR_SCAN_32PX)
-  mxconfig.scan_wiring = Hub75ScanWiring::FOUR_SCAN_32PX_HIGH;
-#elif defined(CONFIG_HUB75_WIRING_FOUR_SCAN_64PX)
-  mxconfig.scan_wiring = Hub75ScanWiring::FOUR_SCAN_64PX_HIGH;
-#endif
-
-  // Shift Driver
-#if defined(CONFIG_HUB75_DRIVER_GENERIC)
-  mxconfig.shift_driver = Hub75ShiftDriver::GENERIC;
-#elif defined(CONFIG_HUB75_DRIVER_FM6126A)
-  mxconfig.shift_driver = Hub75ShiftDriver::FM6126A;
-#elif defined(CONFIG_HUB75_DRIVER_FM6124)
-  mxconfig.shift_driver = Hub75ShiftDriver::FM6124;
-#elif defined(CONFIG_HUB75_DRIVER_MBI5124)
-  mxconfig.shift_driver = Hub75ShiftDriver::MBI5124;
-#elif defined(CONFIG_HUB75_DRIVER_DP3246)
-  mxconfig.shift_driver = Hub75ShiftDriver::DP3246;
-#endif
-
-#if CONFIG_HUB75_DOUBLE_BUFFER
-  mxconfig.double_buffer = true;
+#if CONFIG_NO_INVERT_CLOCK_PHASE
+  bool invert_clock_phase = false;
 #else
-  mxconfig.double_buffer = false;
+  bool invert_clock_phase = true;
 #endif
 
-  // Clock Speed
-#if defined(CONFIG_HUB75_CLK_32MHZ)
-  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_32M;
-#elif defined(CONFIG_HUB75_CLK_20MHZ)
-  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_20M;
-#elif defined(CONFIG_HUB75_CLK_16MHZ)
-  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_16M;
-#elif defined(CONFIG_HUB75_CLK_10MHZ)
-  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_10M;
-#elif defined(CONFIG_HUB75_CLK_8MHZ)
-  mxconfig.output_clock_speed = Hub75ClockSpeed::HZ_8M;
-#endif
+  HUB75_I2S_CFG mxconfig(WIDTH,                   // width
+                         HEIGHT,                  // height
+                         1,                       // chain length
+                         pins,                    // pin mapping
+                         HUB75_I2S_CFG::FM6126A,  // driver chip
+                         HUB75_I2S_CFG::TYPE138,  // line driver
+                         true,                    // double-buffering
+                         HUB75_I2S_CFG::HZ_10M,   // clock speed
+                         1,                       // latch blanking
+                         invert_clock_phase       // invert clock phase
+  );
 
-  mxconfig.min_refresh_rate = CONFIG_HUB75_MIN_REFRESH_RATE;
-  mxconfig.latch_blanking = CONFIG_HUB75_LATCH_BLANKING;
-
-  // Clock Phase
-#ifdef CONFIG_HUB75_CLK_PHASE_INVERTED
-  mxconfig.clk_phase_inverted = true;
-#else
-  mxconfig.clk_phase_inverted = false;
-#endif
-
-  mxconfig.brightness = CONFIG_HUB75_BRIGHTNESS;
-
-  _matrix = new Hub75Driver(mxconfig);
-
-  if (_matrix == NULL) {
-    ESP_LOGE(TAG, "Failed to allocate Hub75Driver object");
-    return 1;
-  }
+  _matrix = new MatrixPanel_I2S_DMA(mxconfig);
 
   if (!_matrix->begin()) {
-    ESP_LOGE(TAG, "Hub75Driver begin() failed");
+    ESP_LOGE(TAG, "MatrixPanel_I2S_DMA begin() failed");
     delete _matrix;
     _matrix = NULL;
     return 1;
   }
-  display_set_brightness((CONFIG_HUB75_BRIGHTNESS * 100) / 255);
+  display_set_brightness(DISPLAY_DEFAULT_BRIGHTNESS);
 
   return 0;
 }
@@ -258,68 +225,67 @@ void display_set_brightness(uint8_t brightness_pct) {
 
     ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct,
              brightness_8bit);
-    _matrix->set_brightness(brightness_8bit);
-    _matrix->clear();
+    _matrix->setBrightness8(brightness_8bit);
+    _matrix->clearScreen();
     _brightness = brightness_pct;
   }
 }
 
 void display_shutdown(void) {
-  _matrix->clear();
-  _matrix->end();
+  _matrix->clearScreen();
+  _matrix->stopDMAoutput();
   delete _matrix;
   _matrix = NULL;
 }
 
-void display_draw(const uint8_t *pix, int width, int height) {
-#if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
+void display_draw(const uint8_t *pix, int width, int height, int channels,
+                  int ixR, int ixG, int ixB) {
+  int scale = 1;
+#if CONFIG_BOARD_TRONBYT_S3_WIDE
   if (width == 64 && height == 32) {
-    // Optimize scale-by-2 drawing (specifically for 64x32 -> 128x64)
-    const uint32_t *src32 = (const uint32_t *)pix;
-    for (int y = 0; y < height; y++) {
-      uint32_t *dst_row1 = &_scaled_buffer[(y * 2) * 128];
-      uint32_t *dst_row2 = &_scaled_buffer[(y * 2 + 1) * 128];
-      for (int x = 0; x < width; x++) {
-        uint32_t pixel = src32[y * width + x];
-        // Fill 2x2 block
-        dst_row1[x * 2] = pixel;
-        dst_row1[x * 2 + 1] = pixel;
-        dst_row2[x * 2] = pixel;
-        dst_row2[x * 2 + 1] = pixel;
-      }
-    }
-
-    _matrix->draw_pixels(0, 0, 128, 64, (uint8_t *)_scaled_buffer,
-                         Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
-    _matrix->flip_buffer();
-    return;
+    scale = 2;  // Scale up to 128x64
   }
 #endif
 
-  // Default path: bulk transfer for native resolution
-  _matrix->draw_pixels(0, 0, width, height, pix, Hub75PixelFormat::RGB888_32,
-                       Hub75ColorOrder::BGR);
-  _matrix->flip_buffer();
+  for (unsigned int i = 0; i < height; i++) {
+    for (unsigned int j = 0; j < width; j++) {
+      const uint8_t *p = &pix[(i * width + j) * channels];
+      uint8_t r = p[ixR];
+      uint8_t g = p[ixG];
+      uint8_t b = p[ixB];
+
+      // Draw each pixel scaled up (2x2 pixels for each original pixel)
+      for (int sy = 0; sy < scale; sy++) {
+        for (int sx = 0; sx < scale; sx++) {
+          _matrix->drawPixelRGB888(j * scale + sx, i * scale + sy, r, g, b);
+        }
+      }
+    }
+  }
+  _matrix->flipDMABuffer();
 }
 
-void display_clear(void) { _matrix->clear(); }
+void display_clear(void) { _matrix->clearScreen(); }
 
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   if (_matrix != NULL) {
-    _matrix->set_pixel(x, y, r, g, b);
-    _matrix->flip_buffer();
-  }
-}
-
-void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
-                       uint8_t b) {
-  if (_matrix != NULL) {
-    _matrix->fill(x, y, w, h, r, g, b);
-    // Note: No flip here, caller must flip
+    _matrix->drawPixelRGB888(x, y, r, g, b);
+    _matrix->flipDMABuffer();
   }
 }
 
 void draw_error_indicator_pixel(void) { display_draw_pixel(0, 0, 100, 0, 0); }
+
+void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
+                       uint8_t b) {
+  if (_matrix != NULL) {
+    for (int iy = y; iy < y + h; iy++) {
+      for (int ix = x; ix < x + w; ix++) {
+        _matrix->drawPixelRGB888(ix, iy, r, g, b);
+      }
+    }
+  }
+}
 
 void display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
                   uint8_t b, int scale) {
@@ -350,18 +316,16 @@ void display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
       // Draw each row in the column
       for (int row = 0; row < FONT5X7_CHAR_HEIGHT; row++) {
         if (column_data & (1 << row)) {
-          int px = cursor_x + (col * scale);
-          int py = cursor_y + (row * scale);
+          // Draw pixel(s) based on scale
+          for (int sy = 0; sy < scale; sy++) {
+            for (int sx = 0; sx < scale; sx++) {
+              int px = cursor_x + (col * scale) + sx;
+              int py = cursor_y + (row * scale) + sy;
 
-          if (scale > 1) {
-            // Optimize scaled text using fill
-            _matrix->fill(px, py, scale, scale, r, g, b);
-          } else {
-            // Draw pixel(s) based on scale
-            // Check bounds
-            if (px >= 0 && px < CONFIG_HUB75_PANEL_WIDTH && py >= 0 &&
-                py < CONFIG_HUB75_PANEL_HEIGHT) {
-              _matrix->set_pixel(px, py, r, g, b);
+              // Check bounds
+              if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
+                _matrix->drawPixelRGB888(px, py, r, g, b);
+              }
             }
           }
         }
@@ -377,6 +341,6 @@ void display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
 
 void display_flip(void) {
   if (_matrix != NULL) {
-    _matrix->flip_buffer();
+    _matrix->flipDMABuffer();
   }
 }

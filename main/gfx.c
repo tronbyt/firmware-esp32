@@ -63,13 +63,20 @@ int gfx_initialize(const char *img_url) {
   ESP_LOGI(TAG, "largest heap %d", heapl);
   // ESP_LOGI(TAG, "calling calloc");
   // Initialize state
-  ESP_LOGI(TAG, "Using static buffer for boot animation");
+  ESP_LOGI(TAG, "Allocating buffer of size: %d", ASSET_BOOT_WEBP_LEN);
 
   _state = calloc(1, sizeof(struct gfx_state));
   _state->len = ASSET_BOOT_WEBP_LEN;
-  // Use static asset directly, no allocation or copy needed
-  _state->buf = (void *)ASSET_BOOT_WEBP;
   _state->paused = false;
+  ESP_LOGI(TAG, "calloc buff");
+  _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
+  ESP_LOGI(TAG, "done calloc, copying");
+  if (_state->buf == NULL) {
+    ESP_LOGE("gfx", "Memory allocation failed!");
+    return 1;
+  }
+  memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
+  ESP_LOGI(TAG, "done, copying");
 
   _state->mutex = xSemaphoreCreateMutex();
   if (_state->mutex == NULL) {
@@ -187,6 +194,7 @@ int gfx_initialize(const char *img_url) {
     ESP_LOGE(TAG, "Could not create gfx task");
     return 1;
   }
+  ESP_LOGI(TAG, "Gfx task created successfully");
 
   return 0;
 }
@@ -225,7 +233,7 @@ static void send_websocket_notification(int counter) {
   if (sent < 0) {
     ESP_LOGE(TAG, "Failed to send websocket notification");
   } else {
-    ESP_LOGD(TAG, "Sent websocket notification: %s", message);
+    ESP_LOGI(TAG, "Sent websocket notification: %s", message);
   }
 }
 
@@ -239,16 +247,11 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   // free the old buffer here to prevent a memory leak (frame-dropping
   // strategy).
   if (_state->buf) {
-    if (!is_static_asset(_state->buf)) {
-      ESP_LOGW(TAG,
-               "Dropping queued image (counter %d) - new image arrived before "
-               "it was displayed",
-               _state->counter);
-      free(_state->buf);
-    } else {
-      ESP_LOGD(TAG, "Dropping queued static image (counter %d)",
-               _state->counter);
-    }
+    ESP_LOGW(TAG,
+             "Dropping queued image (counter %d) - new image arrived before it "
+             "was displayed",
+             _state->counter);
+    free(_state->buf);
     _state->buf = NULL;
   }
 
@@ -257,8 +260,9 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   _state->len = len;
   _state->dwell_secs = dwell_secs;
   _state->counter++;
-
   int counter = _state->counter;
+  ESP_LOGI(TAG, "Queued image counter=%d size=%zu dwell=%d", counter, len,
+           dwell_secs);
 
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
     ESP_LOGE(TAG, "Could not give gfx mutex");
@@ -274,7 +278,7 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
     if (msg_len > 0 && msg_len < sizeof(message)) {
       esp_websocket_client_send_text(_state->ws_handle, message, msg_len,
                                      portMAX_DELAY);
-      ESP_LOGD(TAG, "Sent queued notification: %s", message);
+      ESP_LOGI(TAG, "Sent queued notification: %s", message);
     }
   }
 
@@ -324,24 +328,29 @@ int gfx_display_asset(const char *asset_type) {
   }
 
   // Allocate heap memory and copy asset data
-  // Optimization: pass static pointer directly to gfx_update
-  // logic in gfx_update/gfx_loop ensures it is not freed.
+  uint8_t *asset_heap_copy = (uint8_t *)malloc(asset_len);
+  if (asset_heap_copy == NULL) {
+    ESP_LOGE(TAG, "Failed to allocate memory for %s asset copy", asset_type);
+    return 1;
+  }
+
+  memcpy(asset_heap_copy, asset_data, asset_len);
 
   // Interrupt current animation to display asset immediately
   isAnimating = -1;
 
   // Display the asset with no dwell time (static display)
-  // We cast const away because gfx_update takes void*, but we know we won't
-  // write to it.
-  int result = gfx_update((void *)asset_data, asset_len, 0);
+  int result = gfx_update(asset_heap_copy, asset_len, 0);
   if (result < 0) {
     // Only free if gfx_update failed to take ownership (returned negative
     // error)
     ESP_LOGE(TAG, "Failed to update graphics with %s asset", asset_type);
+    free(asset_heap_copy);
     return 1;
   }
 
-  // gfx_update now owns the asset buffer (returns counter >= 0 on success)
+  // gfx_update now owns the asset_heap_copy buffer (returns counter >= 0 on
+  // success)
   return 0;
 }
 
@@ -350,30 +359,14 @@ void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
   display_text(text, x, y, r, g, b, scale);
 }
 
-void gfx_stop(void) {
-  if (_state) {
-    isAnimating = -1;  // Signal current draw to stop
-    _state->paused = true;
-    ESP_LOGI(TAG, "Graphics loop paused");
-  }
-}
-
-void gfx_start(void) {
-  if (_state) {
-    isAnimating = 0;
-    _state->paused = false;
-    ESP_LOGI(TAG, "Graphics loop resumed");
-  }
-}
-
 void gfx_shutdown(void) { display_shutdown(); }
 
 static void gfx_loop(void *args) {
+  ESP_LOGI(TAG, "gfx_loop ENTERED");
   void *webp = NULL;
   size_t len = 0;
   int32_t dwell_secs = 0;
   int counter = -1;
-  int32_t *isAnimating = (int32_t *)args;
   ESP_LOGI(TAG, "Graphics loop running on core %d", xPortGetCoreID());
 
   for (;;) {
@@ -384,7 +377,7 @@ static void gfx_loop(void *args) {
 
     if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
       ESP_LOGE(TAG, "Could not take gfx mutex");
-      if (webp && !is_static_asset(webp)) {
+      if (webp) {
         free(webp);
         webp = NULL;
       }
@@ -393,15 +386,15 @@ static void gfx_loop(void *args) {
 
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
-      ESP_LOGD(TAG, "Loaded new webp");
-      if (webp && !is_static_asset(webp)) free(webp);
+      ESP_LOGI(TAG, "Displaying image counter=%d", _state->counter);
+      if (webp) free(webp);
       webp = _state->buf;
       len = _state->len;
       dwell_secs = _state->dwell_secs;
       _state->buf = NULL;  // gfx_loop now owns the buffer
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
-      if (*isAnimating == -1 && !_state->paused) *isAnimating = 1;
+      if (isAnimating == -1 && !_state->paused) isAnimating = 1;
 
       // Send websocket notification that we're now displaying this image
       send_websocket_notification(counter);
@@ -413,15 +406,13 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
+      if (draw_webp(webp, len, dwell_secs, &isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-        *isAnimating = 0;
+        isAnimating = 0;
         // Free the invalid buffer to prevent re-drawing it
-        if (webp && !is_static_asset(webp)) {
-          free(webp);
-        }
+        free(webp);
         webp = NULL;
         len = 0;
       }
@@ -445,7 +436,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     dwell_us = 1 * 1000000;  // default to 1s if it's zero so we loop again or
                              // show the image for 1 more second.
   } else {
-    ESP_LOGD(TAG, "dwell_secs: %d", app_dwell_secs);
+    ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
     dwell_us = app_dwell_secs * 1000000;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
@@ -476,30 +467,24 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
 
-  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 &&
-         !_state->paused) {
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 && !_state->paused) {
     int lastTimestamp = 0;
     int delay = 0;
-    TickType_t lastWakeTime = xTaskGetTickCount();
+    TickType_t drawStartTick = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
-    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 &&
-           !_state->paused) {
+    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 && !_state->paused) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
-
       if (delay > 0) {
-        // Wait for the previous frame's duration to expire.
-        // Since we decoded *during* this time, we only sleep for the remainder.
-        xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
+        xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
       } else {
-        // First frame or no delay: yield briefly to let other tasks run
-        vTaskDelay(pdMS_TO_TICKS(1));
-        lastWakeTime = xTaskGetTickCount();
+        vTaskDelay(10);  // small delay for yield.
       }
-
-      display_draw(pix, animation.canvas_width, animation.canvas_height);
+      drawStartTick = xTaskGetTickCount();
+      display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0,
+                   1, 2);
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
@@ -508,7 +493,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     WebPAnimDecoderReset(decoder);
 
     if (delay > 0) {
-      xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
+      xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
     } else {
       vTaskDelay(
           pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
@@ -532,7 +517,25 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   }
   WebPAnimDecoderDelete(decoder);
 
-  ESP_LOGD(TAG, "Setting isAnimating to 0");
-  *isAnimating = 0;
+  // ESP_LOGI(TAG, "Setting isAnimating to 0");
+  if (*isAnimating != -1) {
+    *isAnimating = 0;
+  }
   return 0;
+}
+
+void gfx_stop(void) {
+  if (_state) {
+    isAnimating = -1;  // Signal current draw to stop
+    _state->paused = true;
+    ESP_LOGI(TAG, "Graphics loop paused");
+  }
+}
+
+void gfx_start(void) {
+  if (_state) {
+    isAnimating = 0;
+    _state->paused = false;
+    ESP_LOGI(TAG, "Graphics loop resumed");
+  }
 }
