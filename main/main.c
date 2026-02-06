@@ -22,7 +22,9 @@
 #include "sdkconfig.h"
 #include "sntp.h"
 #include "syslog.h"
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
 #include "touch_control.h"
+#endif
 #include "version.h"
 #include "wifi.h"
 
@@ -55,12 +57,12 @@ static bool button_boot = false;
 static bool first_ws_image_received = false;
 static bool config_received = false;
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
 // Touch control state
 static bool display_power_on = true;
 static uint8_t saved_brightness = 30;
-
-// Touch control function declaration
 static void handle_touch_event(touch_event_t event);
+#endif
 
 static void config_saved_callback(void) {
   config_received = true;
@@ -209,6 +211,11 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                   brightness_value = DISPLAY_MAX_BRIGHTNESS;
                 display_set_brightness((uint8_t)brightness_value);
                 ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+                // Sync touch control state - server brightness command means display is on
+                display_power_on = true;
+                saved_brightness = (uint8_t)brightness_value;
+#endif
               }
 
               // Check for "ota_url"
@@ -504,6 +511,7 @@ void app_main(void) {
   }
   esp_register_shutdown_handler(&display_shutdown);
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
   ESP_LOGI(TAG, "Initializing touch control...");
   esp_err_t touch_ret = touch_control_init();
@@ -514,6 +522,7 @@ void app_main(void) {
     ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
              esp_err_to_name(touch_ret));
   }
+#endif
 
   // Start the AP web server now that display memory is allocated
   if (nvs_get_ap_mode()) {
@@ -712,6 +721,7 @@ void app_main(void) {
 
       wifi_health_check();
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Poll touch frequently for 5 seconds (50ms intervals = 100 checks)
       // This allows proper gesture detection while keeping health checks at 5s
       for (int i = 0; i < 100; i++) {
@@ -721,6 +731,9 @@ void app_main(void) {
         }
         vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
       }
+#else
+      vTaskDelay(pdMS_TO_TICKS(5000));  // 5 second health check interval
+#endif
     }
   } else {
     // normal http
@@ -807,17 +820,20 @@ void app_main(void) {
         }
       }
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Check for touch events
       touch_event_t touch_event = touch_control_check();
       if (touch_event != TOUCH_EVENT_NONE) {
         handle_touch_event(touch_event);
       }
+#endif
 
       wifi_health_check();
     }
   }
 }
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
 /**
  * Handle touch events from the single touch pad
  * TAP = skip to next app
@@ -861,3 +877,4 @@ static void handle_touch_event(touch_event_t event) {
       break;
   }
 }
+#endif
