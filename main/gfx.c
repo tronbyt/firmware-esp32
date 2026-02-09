@@ -233,7 +233,7 @@ static void send_websocket_notification(int counter) {
   if (sent < 0) {
     ESP_LOGE(TAG, "Failed to send websocket notification");
   } else {
-    ESP_LOGI(TAG, "Sent websocket notification: %s", message);
+    ESP_LOGI(TAG, "WS send: %s", message);
   }
 }
 
@@ -278,7 +278,7 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
     if (msg_len > 0 && msg_len < sizeof(message)) {
       esp_websocket_client_send_text(_state->ws_handle, message, msg_len,
                                      portMAX_DELAY);
-      ESP_LOGI(TAG, "Sent queued notification: %s", message);
+      ESP_LOGI(TAG, "WS Send: %s", message);
     }
   }
 
@@ -405,6 +405,13 @@ static void gfx_loop(void *args) {
       continue;
     }
 
+    // static int stack_check_counter = 0;
+    // if (++stack_check_counter >= 100) {
+      // stack_check_counter = 0;
+      UBaseType_t stack_free = uxTaskGetStackHighWaterMark(NULL);
+      ESP_LOGI(TAG, "Stack remaining: %u bytes", stack_free);
+    // }
+
     if (webp && len > 0) {
       if (draw_webp(webp, len, dwell_secs, &isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
@@ -436,7 +443,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     dwell_us = 1 * 1000000;  // default to 1s if it's zero so we loop again or
                              // show the image for 1 more second.
   } else {
-    ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
+    // ESP_LOGI(TAG, "dwell_secs : %d", app_dwell_secs);
     dwell_us = app_dwell_secs * 1000000;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
