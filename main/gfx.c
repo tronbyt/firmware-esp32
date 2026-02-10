@@ -166,13 +166,16 @@ int gfx_initialize(const char *img_url) {
       }
     }
 
+    // Display 3 colored boxes RGB horizontally centered above version
+    int box_x = (64 - 11) / 2;  // Center 11 pixels (3 boxes + 2 gaps)
+    display_fill_rect(box_x, 20, 3, 3, 255, 0, 0);      // Red box
+    display_fill_rect(box_x + 4, 20, 3, 3, 0, 255, 0);  // Green box
+    display_fill_rect(box_x + 8, 20, 3, 3, 0, 0, 255);  // Blue box
+
     // Display version at the bottom, centered
-    // Calculate x position to center text (approximately)
-    // Each character is 6 pixels wide (5 + 1 spacing)
     int text_width = strlen(version_text) * 6;
-    int x = (64 - text_width) / 2;  // Center on 64-pixel wide display
-    display_text(version_text, x, 24, 255, 255, 255,
-                 1);  // White text, centered at bottom
+    int x = (64 - text_width) / 2;
+    display_text(version_text, x, 24, 255, 255, 255, 1);
 
     // Flip the buffer once to show all three text lines at the same time
     display_flip();
