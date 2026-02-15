@@ -237,8 +237,10 @@ void run_ota(const char *url) {
 
   esp_https_ota_config_t ota_config = {
       .http_config = &http_config,
-      .partial_http_download = true,
   };
+#if CONFIG_ESP_HTTPS_OTA_ENABLE_PARTIAL_DOWNLOAD
+  ota_config.partial_http_download = true;
+#endif
 
   // Stop animation and graphics loop
   gfx_stop();
