@@ -103,6 +103,9 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # Enable TLS 1.3 support.
 CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y
 
+# Handle cross-signed certificates (e.g. GTS Root R4 cross-signed by GlobalSign).
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y
+
 # Do not put math/fast functions in IRAM (saves internal RAM).
 CONFIG_NO_FAST_FUNCTIONS=y
 
