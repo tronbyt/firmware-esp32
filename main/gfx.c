@@ -332,10 +332,10 @@ int gfx_display_asset(const char *asset_type) {
   // Interrupt current animation to display asset immediately
   isAnimating = -1;
 
-  // Display the asset with no dwell time (static display)
+  // Display the asset with a 5-second dwell time so it stays visible
   // We cast const away because gfx_update takes void*, but we know we won't
   // write to it.
-  int result = gfx_update((void *)asset_data, asset_len, 0);
+  int result = gfx_update((void *)asset_data, asset_len, 5);
   if (result < 0) {
     // Only free if gfx_update failed to take ownership (returned negative
     // error)
