@@ -5,5 +5,6 @@ dependencies:
     version: main
     path: components/hub75
   libwebp:
-    git: https://github.com/tronbyt/libwebp.git
+    git: https://github.com/datagutt/libwebp.git
+    version: xtensa-pie
   espressif/cjson: "*"
