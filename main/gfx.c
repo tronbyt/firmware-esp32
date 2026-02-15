@@ -404,7 +404,7 @@ static void gfx_loop(void *args) {
       _state->buf = NULL;  // gfx_loop now owns the buffer
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
-      if (isAnimating == -1 && !_state->paused) isAnimating = 1;
+      if (*isAnimating == -1 && !_state->paused) *isAnimating = 1;
 
       // Send websocket notification that we're now displaying this image
       send_websocket_notification(counter);
@@ -416,7 +416,7 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, &isAnimating)) {
+      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -538,20 +538,4 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     *isAnimating = 0;
   }
   return 0;
-}
-
-void gfx_stop(void) {
-  if (_state) {
-    isAnimating = -1;  // Signal current draw to stop
-    _state->paused = true;
-    ESP_LOGI(TAG, "Graphics loop paused");
-  }
-}
-
-void gfx_start(void) {
-  if (_state) {
-    isAnimating = 0;
-    _state->paused = false;
-    ESP_LOGI(TAG, "Graphics loop resumed");
-  }
 }
