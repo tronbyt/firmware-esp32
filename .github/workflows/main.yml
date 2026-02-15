@@ -98,7 +98,7 @@ jobs:
           # Generate merged binary
           echo "Generating merged binary for $chip..."
           # Run esptool from within the build directory so relative paths in flash_args work
-          (cd "$BUILD_DIR" && python -m esptool --chip "$chip" merge_bin -o "merged_firmware.bin" @flash_args)
+          (cd "$BUILD_DIR" && python -m esptool --chip "$chip" merge-bin -o "merged_firmware.bin" @flash_args)
 
           # Rename for artifact upload
           mv "$BUILD_DIR/firmware.bin" "${target}_firmware.bin"
