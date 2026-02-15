@@ -165,6 +165,14 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
       esp_http_client_set_redirection(event->client);
       break;
+
+    case HTTP_EVENT_ON_HEADERS_COMPLETE:
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADERS_COMPLETE");
+      break;
+
+    case HTTP_EVENT_ON_STATUS_CODE:
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_STATUS_CODE");
+      break;
   }
 
   return err;
