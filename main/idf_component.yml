@@ -1,8 +1,8 @@
 dependencies:
   espressif/esp_websocket_client: "1.6.1"
   esp-hub75:
-    git: https://github.com/esphome-libs/esp-hub75.git
-    version: "v0.3.2"
+    git: https://github.com/datagutt/esp-hub75.git
+    version: fun
     path: components/hub75
   libwebp:
     git: https://github.com/tronbyt/libwebp.git
