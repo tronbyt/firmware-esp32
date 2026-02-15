@@ -17,7 +17,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
-    container: espressif/idf:release-v5.5
+    container: espressif/idf:v6.0-beta2
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +73,7 @@ jobs:
           echo "--------------------------------------"
           echo "Building target: $target"
           echo "--------------------------------------"
-          
+
           # Determine chip type based on target
           case "$target" in
             tronbyt-s3*|matrixportal-s3*)
@@ -124,7 +124,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: release-artifacts
-          pattern: '*_firmware'
+          pattern: "*_firmware"
           merge-multiple: true
 
       - name: Display Artifacts
