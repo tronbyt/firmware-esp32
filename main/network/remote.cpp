@@ -153,7 +153,8 @@ esp_err_t http_callback(esp_http_client_event_t* event) {
       ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
       int mbedtls_err = 0;
       esp_err_t tls_err = esp_tls_get_and_clear_last_error(
-          event->data, &mbedtls_err, nullptr);
+          static_cast<esp_tls_error_handle_t>(event->data), &mbedtls_err,
+          nullptr);
       if (tls_err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP error - %s (mbedtls: 0x%x)",
                  esp_err_to_name(tls_err), mbedtls_err);
