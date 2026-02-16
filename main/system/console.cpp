@@ -14,7 +14,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
 #include <driver/usb_serial_jtag.h>
 #include <driver/usb_serial_jtag_vfs.h>
 #endif
@@ -114,19 +114,31 @@ void register_commands() {
       {.command = "free",
        .help = "Get free heap memory",
        .hint = nullptr,
-       .func = &cmd_free},
+       .func = &cmd_free,
+       .argtable = nullptr,
+       .func_w_context = nullptr,
+       .context = nullptr},
       {.command = "heap",
        .help = "Get heap statistics (internal, external, watermark)",
        .hint = nullptr,
-       .func = &cmd_heap},
+       .func = &cmd_heap,
+       .argtable = nullptr,
+       .func_w_context = nullptr,
+       .context = nullptr},
       {.command = "version",
        .help = "Get firmware version information",
        .hint = nullptr,
-       .func = &cmd_version},
+       .func = &cmd_version,
+       .argtable = nullptr,
+       .func_w_context = nullptr,
+       .context = nullptr},
       {.command = "assert",
        .help = "Crash the system for testing",
        .hint = nullptr,
-       .func = &cmd_assert},
+       .func = &cmd_assert,
+       .argtable = nullptr,
+       .func_w_context = nullptr,
+       .context = nullptr},
   };
 
   for (const auto& cmd : cmds) {
@@ -139,6 +151,9 @@ void register_commands() {
       .help = "Print task list (name, state, priority, stack HWM)",
       .hint = nullptr,
       .func = &cmd_task_dump,
+      .argtable = nullptr,
+      .func_w_context = nullptr,
+      .context = nullptr,
   };
   ESP_ERROR_CHECK(esp_console_cmd_register(&task_cmd));
 #endif
@@ -147,7 +162,7 @@ void register_commands() {
 }  // namespace
 
 void console_init(void) {
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
   if (!usb_serial_jtag_is_connected()) {
     return;
   }
