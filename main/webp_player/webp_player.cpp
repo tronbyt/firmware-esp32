@@ -269,6 +269,26 @@ bool start_playback() {
 }
 
 //------------------------------------------------------------------------------
+// Duration Check — applies to both animated and static images
+//------------------------------------------------------------------------------
+
+bool check_dwell_expired() {
+  // Embedded sprites loop forever
+  if (ctx.source_type == GFX_SOURCE_EMBEDDED) {
+    return false;
+  }
+
+  // Unlimited duration
+  if (ctx.dwell_secs <= 0) {
+    return false;
+  }
+
+  int64_t dwell_us = static_cast<int64_t>(ctx.dwell_secs) * 1000000;
+  int64_t elapsed_us = esp_timer_get_time() - ctx.playback_start_us;
+  return elapsed_us >= dwell_us;
+}
+
+//------------------------------------------------------------------------------
 // Decode Error Handling
 //------------------------------------------------------------------------------
 
@@ -384,21 +404,22 @@ int decode_and_render_frame() {
   int delay_ms = timestamp - ctx.last_timestamp;
   ctx.last_timestamp = timestamp;
 
-  // Static image: hold for remaining dwell time
+  // Static image: sleep for remaining dwell time (check_dwell_expired handles
+  // the actual stop, so we just need to hold the frame on screen).
   if (ctx.anim_info.frame_count == 1) {
-    int64_t dwell_us = (ctx.dwell_secs > 0)
-                           ? static_cast<int64_t>(ctx.dwell_secs) * 1000000
-                           : 1000000;
-    int64_t elapsed_us = esp_timer_get_time() - ctx.playback_start_us;
-    int64_t remaining_us = dwell_us - elapsed_us;
-    if (remaining_us > 0) {
-      uint32_t remaining_ms = static_cast<uint32_t>(remaining_us / 1000);
-      delay_ms = static_cast<int>(
-          remaining_ms > 60000 ? 60000 : remaining_ms);
+    if (ctx.dwell_secs > 0) {
+      int64_t dwell_us = static_cast<int64_t>(ctx.dwell_secs) * 1000000;
+      int64_t elapsed_us = esp_timer_get_time() - ctx.playback_start_us;
+      int64_t remaining_us = dwell_us - elapsed_us;
+      if (remaining_us > 0) {
+        uint32_t remaining_ms = static_cast<uint32_t>(remaining_us / 1000);
+        delay_ms = static_cast<int>(
+            remaining_ms > 60000 ? 60000 : remaining_ms);
+      } else {
+        delay_ms = 0;
+      }
     } else {
-      // Dwell expired, reset for next loop
-      ctx.playback_start_us = esp_timer_get_time();
-      delay_ms = 0;
+      delay_ms = 100;  // Unlimited duration static image
     }
   }
 
@@ -520,6 +541,18 @@ void player_task(void*) {
       continue;
     }
 
+    // Check if dwell time expired (applies to animated AND static)
+    if (check_dwell_expired()) {
+      ESP_LOGI(TAG, "Dwell expired (counter=%d)", ctx.active_counter);
+      emit_stopped_event();
+      goto_idle();
+      // If a new image is already queued, start it now
+      if (ctx.pending.valid.load(std::memory_order_acquire)) {
+        handle_pending_command();
+      }
+      continue;
+    }
+
     // Decode and render one frame
     int delay_ms = decode_and_render_frame();
     if (delay_ms < 0) {
@@ -532,7 +565,13 @@ void player_task(void*) {
     uint32_t notified = ulTaskNotifyTake(pdTRUE, wait_ticks);
 
     if (notified) {
-      handle_pending_command();
+      // Only accept interrupts (valid=false) during dwell.
+      // New images (valid=true) wait until dwell expires.
+      if (!ctx.pending.valid.load(std::memory_order_acquire)) {
+        handle_pending_command();  // interrupt/stop
+      }
+      // else: image queued but dwell not expired — ignore, loop will
+      // pick it up after check_dwell_expired() fires above.
     }
   }
 }
