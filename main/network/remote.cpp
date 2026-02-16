@@ -24,6 +24,7 @@ struct RemoteState {
   size_t len;
   size_t size;
   size_t max;
+  size_t expected_len;
   uint8_t brightness;
   int32_t dwell_secs;
   char* ota_url;
@@ -75,6 +76,22 @@ esp_err_t http_callback(esp_http_client_event_t* event) {
           err = ESP_ERR_NO_MEM;
           esp_http_client_close(event->client);
         } else {
+          state->expected_len = content_length;
+          if (content_length > state->size) {
+            void* resized = heap_caps_realloc(state->buf, content_length,
+                                              MALLOC_CAP_SPIRAM);
+            if (!resized) {
+              ESP_LOGE(TAG, "Failed to reserve Content-Length buffer (%zu)",
+                       content_length);
+              free(state->buf);
+              state->buf = nullptr;
+              err = ESP_ERR_NO_MEM;
+              esp_http_client_close(event->client);
+              break;
+            }
+            state->buf = resized;
+            state->size = content_length;
+          }
           ESP_LOGI(TAG, "Content-Length Header: %zu", content_length);
         }
       }
@@ -111,9 +128,14 @@ esp_err_t http_callback(esp_http_client_event_t* event) {
       }
 
       if (event->data_len + state->len > state->size) {
-        state->size = max_val(
-            min_val(state->size * 2, state->max),
-            state->len + event->data_len);
+        size_t required = state->len + event->data_len;
+        size_t target = required;
+        if (state->expected_len > 0 && state->expected_len <= state->max) {
+          target = max_val(required, state->expected_len);
+        } else {
+          target = max_val(min_val(state->size * 2, state->max), required);
+        }
+        state->size = target;
         if (state->size > state->max) {
           ESP_LOGE(TAG, "Response size exceeds allowed max (%zu bytes)",
                    state->max);
@@ -189,6 +211,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
       .len = 0,
       .size = CONFIG_HTTP_BUFFER_SIZE_DEFAULT,
       .max = CONFIG_HTTP_BUFFER_SIZE_MAX,
+      .expected_len = 0,
       .brightness = 255,
       .dwell_secs = -1,
       .ota_url = nullptr,
