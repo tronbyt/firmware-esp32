@@ -186,10 +186,9 @@ int wifi_initialize(const char* ssid, const char* password) {
 
   if (has_credentials) {
     wifi_config_t sta_config = {};
-    snprintf(reinterpret_cast<char*>(sta_config.sta.ssid),
-             sizeof(sta_config.sta.ssid), "%s", settings.ssid);
-    snprintf(reinterpret_cast<char*>(sta_config.sta.password),
-             sizeof(sta_config.sta.password), "%s", settings.password);
+    memcpy(sta_config.sta.ssid, settings.ssid, sizeof(sta_config.sta.ssid));
+    memcpy(sta_config.sta.password, settings.password,
+           sizeof(sta_config.sta.password));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
     ESP_LOGI(TAG, "Configured STA with SSID: %s", settings.ssid);
   }
