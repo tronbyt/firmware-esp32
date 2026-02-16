@@ -7,7 +7,7 @@
 #include <esp_wifi.h>
 
 #include "ap.h"
-#include "gfx.h"
+#include "webp_player.h"
 #include "heap_monitor.h"
 #include "version.h"
 #include "wifi.h"

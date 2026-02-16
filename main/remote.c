@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "gfx.h"
+#include "webp_player.h"
 #include "sdkconfig.h"
 #include "version.h"
 

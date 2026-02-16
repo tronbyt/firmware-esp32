@@ -16,3 +16,4 @@ secrets.cmake
 secrets.json
 secrets.json.injected*
 .cache/clangd/*
+inspiration/

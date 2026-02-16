@@ -1,5 +1,6 @@
 #pragma once
 
+#include <esp_event.h>
 #include <esp_websocket_client.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,6 +9,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+ESP_EVENT_DECLARE_BASE(GFX_PLAYER_EVENTS);
+enum {
+  GFX_PLAYER_EVT_PLAYING,  // playback started
+  GFX_PLAYER_EVT_ERROR,    // decode failed after retries
+  GFX_PLAYER_EVT_STOPPED,  // playback ended naturally
+};
 
 int gfx_initialize(const char* img_url);
 void gfx_set_websocket_handle(esp_websocket_client_handle_t ws_handle);

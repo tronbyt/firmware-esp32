@@ -16,7 +16,7 @@
 #include <stdatomic.h>
 
 #include "display.h"
-#include "gfx.h"
+#include "webp_player.h"
 
 static const char *TAG = "OTA";
 static atomic_bool s_ota_in_progress = false;

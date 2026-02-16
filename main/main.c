@@ -13,7 +13,7 @@
 #include "ap.h"
 #include "display.h"
 #include "esp_sntp.h"
-#include "gfx.h"
+#include "webp_player.h"
 #include "heap_monitor.h"
 #include "nvs_settings.h"
 #include "ota.h"
