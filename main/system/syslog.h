@@ -3,10 +3,6 @@
 #include <esp_err.h>
 #include <stdbool.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Initialize Syslog logging
  *
@@ -30,7 +26,3 @@ void syslog_deinit(void);
  * @param addr New address
  */
 void syslog_update_config(const char *addr);
-
-#ifdef __cplusplus
-}
-#endif

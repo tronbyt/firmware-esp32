@@ -4,10 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct {
     size_t internal_free;
     size_t internal_min;
@@ -38,7 +34,3 @@ bool heap_monitor_check_integrity(const char* location);
 
 /** Dump detailed per-region heap info to log. */
 void heap_monitor_dump_info(void);
-
-#ifdef __cplusplus
-}
-#endif

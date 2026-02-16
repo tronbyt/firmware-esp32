@@ -7,10 +7,6 @@
 
 #include "wifi.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Initialize the Access Point and start services
  *
@@ -55,8 +51,3 @@ void ap_configure(void);
  */
 
 void ap_start_shutdown_timer(void);
-
-#ifdef __cplusplus
-}
-
-#endif

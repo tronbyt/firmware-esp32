@@ -4,10 +4,6 @@
 #include <esp_http_server.h>
 #include <stdbool.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /** Start a lightweight HTTP server on port 80 for local status queries. */
 esp_err_t sta_api_start(void);
 
@@ -16,7 +12,3 @@ esp_err_t sta_api_stop(void);
 
 /** Return true if the STA API is using the given server handle. */
 bool sta_api_owns_server(httpd_handle_t server);
-
-#ifdef __cplusplus
-}
-#endif

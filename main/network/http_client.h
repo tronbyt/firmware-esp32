@@ -1,9 +1,5 @@
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Blocking HTTP polling loop — never returns.
  *
@@ -11,7 +7,3 @@ extern "C" {
  * handles OTA headers, error codes, and wifi health checks.
  */
 void http_client_run_loop(const char* url);
-
-#ifdef __cplusplus
-}
-#endif
