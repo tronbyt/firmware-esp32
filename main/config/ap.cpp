@@ -13,8 +13,8 @@
 #include <lwip/sockets.h>
 #include <sys/param.h>
 
+#include "http_server.h"
 #include "nvs_settings.h"
-#include "sta_api.h"
 #include "wifi.h"
 
 namespace {
@@ -28,7 +28,6 @@ constexpr int DNS_MAX_LEN = 512;
 constexpr int OTA_BUFFER_SIZE = 1024;
 
 TaskHandle_t s_dns_task_handle = nullptr;
-httpd_handle_t s_server = nullptr;
 TimerHandle_t s_ap_shutdown_timer = nullptr;
 
 // HTML Parts for chunked response
@@ -560,23 +559,11 @@ void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
 }  // namespace
 
 esp_err_t ap_start(void) {
-  if (s_server) {
-    ESP_LOGI(TAG, "Web server already started");
-    return ESP_OK;
-  }
+  http_server_start();
 
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 10;
-  config.max_resp_headers = 16;
-  config.recv_wait_timeout = 10;
-  config.send_wait_timeout = 10;
-  config.uri_match_fn = httpd_uri_match_wildcard;
-  config.lru_purge_enable = true;
-
-  ESP_LOGI(TAG, "Starting web server on 10.10.0.1:%d", config.server_port);
-
-  if (httpd_start(&s_server, &config) != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to start web server");
+  httpd_handle_t server = http_server_handle();
+  if (!server) {
+    ESP_LOGE(TAG, "Failed to get HTTP server handle");
     return ESP_FAIL;
   }
 
@@ -584,37 +571,37 @@ esp_err_t ap_start(void) {
                           .method = HTTP_GET,
                           .handler = root_handler,
                           .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &root_uri);
+  httpd_register_uri_handler(server, &root_uri);
 
   httpd_uri_t save_uri = {.uri = "/save",
                           .method = HTTP_POST,
                           .handler = save_handler,
                           .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &save_uri);
+  httpd_register_uri_handler(server, &save_uri);
 
   httpd_uri_t update_uri = {.uri = "/update",
                             .method = HTTP_POST,
                             .handler = update_handler,
                             .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &update_uri);
+  httpd_register_uri_handler(server, &update_uri);
 
   httpd_uri_t hotspot_detect_uri = {.uri = "/hotspot-detect.html",
                                     .method = HTTP_GET,
                                     .handler = captive_portal_handler,
                                     .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &hotspot_detect_uri);
+  httpd_register_uri_handler(server, &hotspot_detect_uri);
 
   httpd_uri_t generate_204_uri = {.uri = "/generate_204",
                                   .method = HTTP_GET,
                                   .handler = captive_portal_handler,
                                   .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &generate_204_uri);
+  httpd_register_uri_handler(server, &generate_204_uri);
 
   httpd_uri_t ncsi_uri = {.uri = "/ncsi.txt",
                           .method = HTTP_GET,
                           .handler = captive_portal_handler,
                           .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &ncsi_uri);
+  httpd_register_uri_handler(server, &ncsi_uri);
 
   // NOTE: The wildcard catch-all is NOT registered here. Call
   // ap_register_wildcard() after all other handlers (e.g. STA API)
@@ -626,36 +613,20 @@ esp_err_t ap_start(void) {
   return ESP_OK;
 }
 
-httpd_handle_t ap_get_server(void) { return s_server; }
-
 void ap_register_wildcard(void) {
-  if (!s_server) {
+  httpd_handle_t server = http_server_handle();
+  if (!server) {
     return;
   }
   httpd_uri_t wildcard_uri = {.uri = "/*",
                               .method = HTTP_GET,
                               .handler = captive_portal_handler,
                               .user_ctx = nullptr};
-  httpd_register_uri_handler(s_server, &wildcard_uri);
+  httpd_register_uri_handler(server, &wildcard_uri);
 }
 
 esp_err_t ap_stop(void) {
-  if (!s_server) {
-    return ESP_OK;
-  }
   stop_dns_server();
-
-  bool api_sharing = sta_api_owns_server(s_server);
-  if (api_sharing) {
-    sta_api_stop();
-  }
-  httpd_stop(s_server);
-  s_server = nullptr;
-
-  if (api_sharing) {
-    ESP_LOGI(TAG, "Restarting STA API on its own server");
-    sta_api_start();
-  }
   return ESP_OK;
 }
 

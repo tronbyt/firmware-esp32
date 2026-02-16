@@ -10,6 +10,7 @@
 #include "console.h"
 #include "display.h"
 #include "heap_monitor.h"
+#include "http_server.h"
 #include "mdns.h"
 #include "nvs_settings.h"
 #include "scheduler.h"
@@ -73,6 +74,7 @@ extern "C" void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
+  http_server_init();
   mdns_service_init();
 
   auto cfg = config_get();
