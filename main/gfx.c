@@ -508,6 +508,13 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
 #else
       display_draw(pix, animation.canvas_width, animation.canvas_height);
 #endif
+      // Guarantee a yield every frame to feed the watchdog. When decode
+      // time exceeds the animation frame delay, xTaskDelayUntil above
+      // returns immediately; likewise display_wait_frame returns instantly
+      // if the ISR already signalled the semaphore. Without this, the
+      // inner loop can starve IDLE1 for seconds on heavy animations.
+      vTaskDelay(1);
+
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
