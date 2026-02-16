@@ -50,7 +50,7 @@ extern "C" void app_main(void) {
                                  .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&button_config);
 
-  button_boot = (gpio_get_level(CONFIG_BUTTON_PIN) == 0);
+  button_boot = (gpio_get_level(static_cast<gpio_num_t>(CONFIG_BUTTON_PIN)) == 0);
 
   if (button_boot) {
     ESP_LOGI(TAG, "Boot button pressed - forcing configuration mode");
