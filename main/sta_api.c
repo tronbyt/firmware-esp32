@@ -6,6 +6,7 @@
 #include <esp_system.h>
 #include <esp_wifi.h>
 
+#include "ap.h"
 #include "gfx.h"
 #include "heap_monitor.h"
 #include "version.h"
@@ -13,6 +14,7 @@
 
 static const char* TAG = "sta_api";
 static httpd_handle_t s_server = NULL;
+static bool s_owns_server = false;
 
 static esp_err_t status_handler(httpd_req_t* req) {
   cJSON* root = cJSON_CreateObject();
@@ -66,15 +68,27 @@ esp_err_t sta_api_start(void) {
     return ESP_OK;
   }
 
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.server_port = 80;
-  config.max_uri_handlers = 4;
-  config.lru_purge_enable = true;
+  // If the AP web server is already running, register endpoints on it
+  // instead of starting a second server (both would compete for port 80).
+  httpd_handle_t ap_server = ap_get_server();
+  if (ap_server) {
+    s_server = ap_server;
+    s_owns_server = false;
+    ESP_LOGI(TAG, "Registering API endpoints on existing AP server");
+  } else {
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.server_port = 80;
+    config.max_uri_handlers = 4;
+    config.lru_purge_enable = true;
 
-  esp_err_t err = httpd_start(&s_server, &config);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to start STA API server: %s", esp_err_to_name(err));
-    return err;
+    esp_err_t err = httpd_start(&s_server, &config);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to start STA API server: %s",
+               esp_err_to_name(err));
+      return err;
+    }
+    s_owns_server = true;
+    ESP_LOGI(TAG, "STA API server started on port %d", config.server_port);
   }
 
   const httpd_uri_t status_uri = {
@@ -91,7 +105,12 @@ esp_err_t sta_api_start(void) {
   };
   httpd_register_uri_handler(s_server, &health_uri);
 
-  ESP_LOGI(TAG, "STA API server started on port %d", config.server_port);
+  // If sharing the AP server, move its wildcard handler to the end
+  // so /api/* paths are matched before the catch-all.
+  if (!s_owns_server) {
+    ap_reregister_wildcard();
+  }
+
   return ESP_OK;
 }
 
@@ -99,7 +118,11 @@ esp_err_t sta_api_stop(void) {
   if (!s_server) {
     return ESP_OK;
   }
-  esp_err_t err = httpd_stop(s_server);
+  esp_err_t err = ESP_OK;
+  if (s_owns_server) {
+    err = httpd_stop(s_server);
+  }
   s_server = NULL;
+  s_owns_server = false;
   return err;
 }

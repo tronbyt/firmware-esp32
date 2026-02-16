@@ -26,6 +26,20 @@ esp_err_t ap_start(void);
 esp_err_t ap_stop(void);
 
 /**
+ * @brief Get the AP HTTP server handle (NULL if not running)
+ */
+httpd_handle_t ap_get_server(void);
+
+/**
+ * @brief Move the wildcard URI handler to the end of the handler list.
+ *
+ * Call this after registering additional URI handlers on the AP server
+ * so that specific paths (e.g. /api/status) are matched before the
+ * catch-all wildcard.
+ */
+void ap_reregister_wildcard(void);
+
+/**
  * @brief Initialize the AP network interface
  */
 void ap_init_netif(void);

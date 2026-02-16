@@ -259,6 +259,7 @@ esp_err_t ap_start(void) {
   }
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.max_uri_handlers = 10;
   config.max_resp_headers = 16;
   config.recv_wait_timeout = 10;
   config.send_wait_timeout = 10;
@@ -317,6 +318,20 @@ esp_err_t ap_start(void) {
   start_dns_server();
 
   return ESP_OK;
+}
+
+httpd_handle_t ap_get_server(void) { return s_server; }
+
+void ap_reregister_wildcard(void) {
+  if (!s_server) {
+    return;
+  }
+  httpd_unregister_uri_handler(s_server, "/*", HTTP_GET);
+  httpd_uri_t wildcard_uri = {.uri = "/*",
+                              .method = HTTP_GET,
+                              .handler = captive_portal_handler,
+                              .user_ctx = NULL};
+  httpd_register_uri_handler(s_server, &wildcard_uri);
 }
 
 esp_err_t ap_stop(void) {
