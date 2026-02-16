@@ -1,7 +1,6 @@
 #include <cJSON.h>
 #include <ctype.h>  // For isdigit
 #include <esp_crt_bundle.h>
-#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <esp_websocket_client.h>
@@ -15,6 +14,7 @@
 #include "display.h"
 #include "esp_sntp.h"
 #include "gfx.h"
+#include "heap_monitor.h"
 #include "nvs_settings.h"
 #include "ota.h"
 #include "remote.h"
@@ -468,6 +468,8 @@ void app_main(void) {
   // Initialize NVS settings (includes nvs_flash_init with error recovery)
   ESP_ERROR_CHECK(nvs_settings_init());
 
+  heap_monitor_init();
+
   // Setup WiFi.
   ESP_LOGI(TAG, "Initializing WiFi manager...");
   // Pass empty strings to force AP mode
@@ -616,11 +618,7 @@ void app_main(void) {
   // image_url is now valid and usable here
   ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
 
-  ESP_LOGI(TAG, "Free heap: %" PRIu32, esp_get_free_heap_size());
-  ESP_LOGI(TAG, "Free PSRAM: %" PRIu32,
-           heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-  ESP_LOGI(TAG, "Free internal RAM: %" PRIu32,
-           heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  heap_monitor_log_status("pre-connect");
 
   // Check for ws:// or wss:// in the URL
   if (strncmp(image_url, "ws://", 5) == 0 ||
