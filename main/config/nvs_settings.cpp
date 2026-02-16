@@ -6,8 +6,8 @@
 #include <freertos/semphr.h>
 
 #include "esp_log.h"
-#include "nvs.h"
 #include "nvs_flash.h"
+#include "nvs_handle.h"
 #include "sdkconfig.h"
 
 namespace {
@@ -42,28 +42,24 @@ SemaphoreHandle_t s_mutex = nullptr;
 
 /// Write all fields of s_config to NVS. Caller must hold s_mutex.
 esp_err_t persist_to_nvs() {
-  nvs_handle_t nvs_handle;
-  esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-  if (err != ESP_OK) return err;
+  NvsHandle nvs(NVS_NAMESPACE, NVS_READWRITE);
+  if (!nvs) return nvs.open_error();
 
-  nvs_set_str(nvs_handle, NVS_KEY_SSID, s_config.ssid);
-  nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_config.password);
-  nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_config.hostname);
-  nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_config.syslog_addr);
-  nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_config.sntp_server);
-  nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_config.image_url);
+  nvs.set_str(NVS_KEY_SSID, s_config.ssid);
+  nvs.set_str(NVS_KEY_PASSWORD, s_config.password);
+  nvs.set_str(NVS_KEY_HOSTNAME, s_config.hostname);
+  nvs.set_str(NVS_KEY_SYSLOG_ADDR, s_config.syslog_addr);
+  nvs.set_str(NVS_KEY_SNTP_SERVER, s_config.sntp_server);
+  nvs.set_str(NVS_KEY_IMAGE_URL, s_config.image_url);
 
-  nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_config.swap_colors ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE,
+  nvs.set_u8(NVS_KEY_SWAP_COLORS, s_config.swap_colors ? 1 : 0);
+  nvs.set_u8(NVS_KEY_WIFI_POWER_SAVE,
              static_cast<uint8_t>(s_config.wifi_power_save));
-  nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION,
-             s_config.skip_display_version ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_config.ap_mode ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_config.prefer_ipv6 ? 1 : 0);
+  nvs.set_u8(NVS_KEY_SKIP_VERSION, s_config.skip_display_version ? 1 : 0);
+  nvs.set_u8(NVS_KEY_AP_MODE, s_config.ap_mode ? 1 : 0);
+  nvs.set_u8(NVS_KEY_PREFER_IPV6, s_config.prefer_ipv6 ? 1 : 0);
 
-  err = nvs_commit(nvs_handle);
-  nvs_close(nvs_handle);
-  return err;
+  return nvs.commit();
 }
 
 }  // namespace
@@ -106,71 +102,54 @@ esp_err_t nvs_settings_init(void) {
 #endif
 
   // Load from NVS (overrides Kconfig defaults)
-  nvs_handle_t nvs_handle;
-  ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+  {
+    NvsHandle nvs(NVS_NAMESPACE, NVS_READONLY);
+    if (nvs) {
+      size_t sz;
 
-  if (ret == ESP_OK) {
-    size_t required_size;
+      sz = sizeof(s_config.ssid);
+      if (nvs.get_str(NVS_KEY_SSID, s_config.ssid, &sz) != ESP_OK)
+        s_config.ssid[0] = '\0';
 
-    required_size = sizeof(s_config.ssid);
-    if (nvs_get_str(nvs_handle, NVS_KEY_SSID, s_config.ssid,
-                    &required_size) != ESP_OK) {
-      s_config.ssid[0] = '\0';
+      sz = sizeof(s_config.password);
+      if (nvs.get_str(NVS_KEY_PASSWORD, s_config.password, &sz) != ESP_OK)
+        s_config.password[0] = '\0';
+
+      sz = sizeof(s_config.hostname);
+      if (nvs.get_str(NVS_KEY_HOSTNAME, s_config.hostname, &sz) != ESP_OK)
+        s_config.hostname[0] = '\0';
+
+      sz = sizeof(s_config.syslog_addr);
+      if (nvs.get_str(NVS_KEY_SYSLOG_ADDR, s_config.syslog_addr, &sz) !=
+          ESP_OK)
+        s_config.syslog_addr[0] = '\0';
+
+      sz = sizeof(s_config.sntp_server);
+      if (nvs.get_str(NVS_KEY_SNTP_SERVER, s_config.sntp_server, &sz) !=
+          ESP_OK)
+        s_config.sntp_server[0] = '\0';
+
+      sz = sizeof(s_config.image_url);
+      if (nvs.get_str(NVS_KEY_IMAGE_URL, s_config.image_url, &sz) != ESP_OK)
+        s_config.image_url[0] = '\0';
+
+      uint8_t val_u8;
+
+      if (nvs.get_u8(NVS_KEY_SWAP_COLORS, &val_u8) == ESP_OK)
+        s_config.swap_colors = (val_u8 != 0);
+
+      if (nvs.get_u8(NVS_KEY_WIFI_POWER_SAVE, &val_u8) == ESP_OK)
+        s_config.wifi_power_save = static_cast<wifi_ps_type_t>(val_u8);
+
+      if (nvs.get_u8(NVS_KEY_SKIP_VERSION, &val_u8) == ESP_OK)
+        s_config.skip_display_version = (val_u8 != 0);
+
+      if (nvs.get_u8(NVS_KEY_AP_MODE, &val_u8) == ESP_OK)
+        s_config.ap_mode = (val_u8 != 0);
+
+      if (nvs.get_u8(NVS_KEY_PREFER_IPV6, &val_u8) == ESP_OK)
+        s_config.prefer_ipv6 = (val_u8 != 0);
     }
-
-    required_size = sizeof(s_config.password);
-    if (nvs_get_str(nvs_handle, NVS_KEY_PASSWORD, s_config.password,
-                    &required_size) != ESP_OK) {
-      s_config.password[0] = '\0';
-    }
-
-    required_size = sizeof(s_config.hostname);
-    if (nvs_get_str(nvs_handle, NVS_KEY_HOSTNAME, s_config.hostname,
-                    &required_size) != ESP_OK) {
-      s_config.hostname[0] = '\0';
-    }
-
-    required_size = sizeof(s_config.syslog_addr);
-    if (nvs_get_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_config.syslog_addr,
-                    &required_size) != ESP_OK) {
-      s_config.syslog_addr[0] = '\0';
-    }
-
-    required_size = sizeof(s_config.sntp_server);
-    if (nvs_get_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_config.sntp_server,
-                    &required_size) != ESP_OK) {
-      s_config.sntp_server[0] = '\0';
-    }
-
-    required_size = sizeof(s_config.image_url);
-    if (nvs_get_str(nvs_handle, NVS_KEY_IMAGE_URL, s_config.image_url,
-                    &required_size) != ESP_OK) {
-      s_config.image_url[0] = '\0';
-    }
-
-    uint8_t val_u8;
-
-    if (nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &val_u8) == ESP_OK) {
-      s_config.swap_colors = (val_u8 != 0);
-    }
-
-    if (nvs_get_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, &val_u8) == ESP_OK) {
-      s_config.wifi_power_save = static_cast<wifi_ps_type_t>(val_u8);
-    }
-
-    if (nvs_get_u8(nvs_handle, NVS_KEY_SKIP_VERSION, &val_u8) == ESP_OK) {
-      s_config.skip_display_version = (val_u8 != 0);
-    }
-
-    if (nvs_get_u8(nvs_handle, NVS_KEY_AP_MODE, &val_u8) == ESP_OK) {
-      s_config.ap_mode = (val_u8 != 0);
-    }
-
-    if (nvs_get_u8(nvs_handle, NVS_KEY_PREFER_IPV6, &val_u8) == ESP_OK) {
-      s_config.prefer_ipv6 = (val_u8 != 0);
-    }
-
-    nvs_close(nvs_handle);
   }
 
   // Apply secrets.json defaults if NVS has no SSID
