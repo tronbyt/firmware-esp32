@@ -65,7 +65,8 @@ void gfx_shutdown(void);
 
 /**
  * Queue a RAM WebP buffer for playback.
- * Ownership of @p webp transfers to the player (freed when replaced).
+ * Ownership of @p webp transfers to the player only on success.
+ * On error (return < 0), caller retains ownership and must free it.
  * @return counter value, or -1 on error
  */
 int gfx_update(void* webp, size_t len, int32_t dwell_secs);

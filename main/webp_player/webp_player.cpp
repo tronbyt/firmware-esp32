@@ -76,6 +76,7 @@ struct PlayerContext {
 
   std::atomic<State> state{State::IDLE};
   std::atomic<bool> paused{false};
+  std::atomic<bool> interrupt_requested{false};
   PendingCmd pending;
   int counter = 0;
   int loaded_counter = 0;
