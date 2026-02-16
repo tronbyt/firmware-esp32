@@ -14,7 +14,7 @@ endif()
 
 file(GLOB_RECURSE MAIN_SRCS "*.cpp" "*.c")
 idf_component_register(SRCS ${MAIN_SRCS}
-                       INCLUDE_DIRS "." "display" "webp_player" "network" "config" "system")
+                       INCLUDE_DIRS "." "display" "webp_player" "network" "config" "system" "scheduler")
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 

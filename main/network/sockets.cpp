@@ -17,6 +17,7 @@
 #include <freertos/event_groups.h>
 
 #include "display.h"
+#include "scheduler.h"
 #include "webp_player.h"
 #include "wifi.h"
 
@@ -113,9 +114,9 @@ void ws_event_handler(void*, esp_event_base_t, int32_t event_id,
       ESP_LOGI(TAG, "Connected");
       ctx.state = State::Connected;
       ctx.sent_client_info = false;
-      // Send client info on connect
       msg_send_client_info();
       ctx.sent_client_info = true;
+      scheduler_on_ws_connect();
       break;
 
     case WEBSOCKET_EVENT_DISCONNECTED:
@@ -123,6 +124,7 @@ void ws_event_handler(void*, esp_event_base_t, int32_t event_id,
       draw_error_indicator_pixel();
       if (ctx.state == State::Connected) {
         ctx.state = State::Ready;
+        scheduler_on_ws_disconnect();
         schedule_reconnect();
       }
       break;
@@ -140,6 +142,7 @@ void ws_event_handler(void*, esp_event_base_t, int32_t event_id,
       draw_error_indicator_pixel();
       if (ctx.state == State::Connected) {
         ctx.state = State::Ready;
+        scheduler_on_ws_disconnect();
         schedule_reconnect();
       }
       break;

@@ -9,16 +9,16 @@
 #include "ap.h"
 #include "display.h"
 #include "heap_monitor.h"
-#include "http_client.h"
 #include "nvs_settings.h"
+#include "scheduler.h"
 #include "sdkconfig.h"
 #include "sntp.h"
+#include "sockets.h"
 #include "sta_api.h"
 #include "syslog.h"
 #include "version.h"
 #include "webp_player.h"
 #include "wifi.h"
-#include "sockets.h"
 
 #if CONFIG_BUTTON_PIN >= 0
 #include <driver/gpio.h>
@@ -196,16 +196,20 @@ extern "C" void app_main(void) {
   ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
   heap_monitor_log_status("pre-connect");
 
+  // Initialize the scheduler (registers player event handlers)
+  scheduler_init();
+
   if (strncmp(image_url, "ws://", 5) == 0 ||
       strncmp(image_url, "wss://", 6) == 0) {
     ESP_LOGI(TAG, "Using websockets with URL: %s", image_url);
-    // Event-driven: sockets_init sets up timers + event handlers, returns immediately
     sockets_init(image_url);
-    // Keep app_main alive (will be replaced with vTaskDelete in task #12)
-    while (true) {
-      vTaskDelay(portMAX_DELAY);
-    }
+    scheduler_start_ws();
   } else {
-    http_client_run_loop(image_url);
+    ESP_LOGI(TAG, "Using HTTP polling with URL: %s", image_url);
+    scheduler_start_http(image_url);
   }
+
+  // All work is now event-driven. Delete this task to free its stack.
+  ESP_LOGI(TAG, "Setup complete — deleting app_main task");
+  vTaskDelete(nullptr);
 }
