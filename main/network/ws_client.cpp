@@ -372,14 +372,13 @@ void websocket_event_handler(void* handler_args, esp_event_base_t base,
 esp_err_t ws_client_start(const char* url) {
   ESP_LOGI(TAG, "Starting WebSocket client with URL: %s", url);
 
-  const esp_websocket_client_config_t ws_cfg = {
-      .uri = url,
-      .task_stack = 8192,
-      .buffer_size = 8192,
-      .crt_bundle_attach = esp_crt_bundle_attach,
-      .reconnect_timeout_ms = 10000,
-      .network_timeout_ms = 10000,
-  };
+  esp_websocket_client_config_t ws_cfg = {};
+  ws_cfg.uri = url;
+  ws_cfg.task_stack = 8192;
+  ws_cfg.buffer_size = 8192;
+  ws_cfg.crt_bundle_attach = esp_crt_bundle_attach;
+  ws_cfg.reconnect_timeout_ms = 10000;
+  ws_cfg.network_timeout_ms = 10000;
 
   s_ws_handle = esp_websocket_client_init(&ws_cfg);
   esp_websocket_register_events(s_ws_handle, WEBSOCKET_EVENT_ANY,
