@@ -172,6 +172,8 @@ esp_err_t start_client() {
   ws_cfg.crt_bundle_attach = esp_crt_bundle_attach;
   ws_cfg.reconnect_timeout_ms = 10000;
   ws_cfg.network_timeout_ms = 10000;
+  
+  ws_cfg.enable_close_reconnect = true;
 
   ctx.client = esp_websocket_client_init(&ws_cfg);
   if (!ctx.client) {
