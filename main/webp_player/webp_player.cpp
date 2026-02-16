@@ -659,9 +659,9 @@ int gfx_update(void* webp, size_t len, int32_t dwell_secs) {
     return -1;
   }
 
-  // Free unconsumed pending buffer (frame-dropping)
-  if (ctx.pending.valid.load() && ctx.pending.buf &&
-      !is_static_asset(ctx.pending.buf)) {
+  // Free any unconsumed pending buffer (frame-dropping).
+  // This also cleans up buffers left behind by an interrupt.
+  if (ctx.pending.buf && !is_static_asset(ctx.pending.buf)) {
     ESP_LOGW(TAG, "Dropping queued image (counter %d)", ctx.counter);
     free(ctx.pending.buf);
   }
@@ -739,9 +739,8 @@ int gfx_play_embedded(const char* name, bool immediate) {
     return 1;
   }
 
-  // Free unconsumed pending buffer
-  if (ctx.pending.valid.load() && ctx.pending.buf &&
-      !is_static_asset(ctx.pending.buf)) {
+  // Free any unconsumed pending buffer.
+  if (ctx.pending.buf && !is_static_asset(ctx.pending.buf)) {
     free(ctx.pending.buf);
   }
 
@@ -788,7 +787,17 @@ void gfx_start(void) {
 void gfx_shutdown(void) { display_shutdown(); }
 
 void gfx_interrupt(void) {
-  // Clear pending valid (signals stop to handle_pending_command)
+  // Clear pending valid (signals stop to handle_pending_command) and release
+  // any queued RAM buffer to avoid leaking frame data on repeated interrupts.
+  raii::MutexGuard lock(ctx.mutex);
+  if (lock && ctx.pending.buf && !is_static_asset(ctx.pending.buf)) {
+    free(ctx.pending.buf);
+  }
+  if (lock) {
+    ctx.pending.buf = nullptr;
+    ctx.pending.len = 0;
+    ctx.pending.embedded_name = nullptr;
+  }
   ctx.pending.valid.store(false, std::memory_order_release);
   if (ctx.task) xTaskNotifyGive(ctx.task);
 }
