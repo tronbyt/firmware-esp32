@@ -102,6 +102,7 @@ esp_err_t sta_api_start(void) {
       .uri = "/api/status",
       .method = HTTP_GET,
       .handler = status_handler,
+      .user_ctx = nullptr,
   };
   httpd_register_uri_handler(s_server, &status_uri);
 
@@ -109,6 +110,7 @@ esp_err_t sta_api_start(void) {
       .uri = "/api/health",
       .method = HTTP_GET,
       .handler = health_handler,
+      .user_ctx = nullptr,
   };
   httpd_register_uri_handler(s_server, &health_uri);
 
