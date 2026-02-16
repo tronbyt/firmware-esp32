@@ -22,6 +22,10 @@ CONFIG_ESP_INT_WDT_TIMEOUT_MS=300
 # Increase stack size for the main application task.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 
+# Increase system event task stack so httpd_start() can be called
+# from WiFi event handlers without overflow.
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
 # Reduce PHY TX power when brownout reset.
 CONFIG_ESP_PHY_REDUCE_TX_POWER=y
 

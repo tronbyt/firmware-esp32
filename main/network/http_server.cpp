@@ -20,20 +20,17 @@ void invoke_registrars() {
   }
 }
 
-void on_connect(void *arg, esp_event_base_t event_base, int32_t event_id,
-                void *event_data) {
-  if (s_server) {
-    ESP_LOGD(TAG, "Server already running");
-    return;
+void event_handler(void *arg, esp_event_base_t base, int32_t id,
+                   void *event_data) {
+  if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+    http_server_start();
   }
-  ESP_LOGI(TAG, "STA got IP — starting HTTP server");
-  http_server_start();
 }
 
 }  // namespace
 
 void http_server_init(void) {
-  esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_connect,
+  esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, event_handler,
                              nullptr);
 }
 
