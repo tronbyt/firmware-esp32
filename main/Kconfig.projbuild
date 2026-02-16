@@ -112,6 +112,14 @@ menu "Application Configuration"
             Not yet supported on ESP32/S2 (I2S) — leave disabled for those
             targets to avoid a 50ms per-frame timeout penalty.
 
+    config ENABLE_CONSOLE
+        bool "Enable UART Console"
+        default y
+        depends on SOC_USB_SERIAL_JTAG_SUPPORTED
+        help
+            Enable interactive console over USB Serial JTAG with
+            diagnostic commands (heap, tasks, version).
+
     config BUTTON_PIN
         int "Button Pin"
         default -1
