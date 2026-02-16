@@ -390,6 +390,12 @@ void wifi_health_check(void) {
   ESP_LOGW(TAG, "WiFi Health check. Disconnect count: %d",
            s_wifi_disconnect_counter);
 
+  if (s_wifi_disconnect_counter >= 10) {
+    ESP_LOGE(TAG, "WiFi disconnect count reached %d - rebooting",
+             s_wifi_disconnect_counter);
+    esp_restart();
+  }
+
   // Try to reconnect
   char saved_ssid[33] = {0};
   nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
