@@ -14,7 +14,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
 #include <driver/usb_serial_jtag.h>
 #include <driver/usb_serial_jtag_vfs.h>
 #endif
@@ -162,7 +162,7 @@ void register_commands() {
 }  // namespace
 
 void console_init(void) {
-#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
   if (!usb_serial_jtag_is_connected()) {
     return;
   }
@@ -173,10 +173,17 @@ void console_init(void) {
 
   register_commands();
 
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
   esp_console_dev_usb_serial_jtag_config_t hw_config =
       ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(
       esp_console_new_repl_usb_serial_jtag(&hw_config, &repl_config, &repl));
+#else
+  esp_console_dev_uart_config_t hw_config =
+      ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+  ESP_ERROR_CHECK(
+      esp_console_new_repl_uart(&hw_config, &repl_config, &repl));
+#endif
   ESP_ERROR_CHECK(esp_console_start_repl(repl));
 #endif
 }
