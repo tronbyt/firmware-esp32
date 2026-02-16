@@ -265,15 +265,37 @@ void handle_binary_message(esp_websocket_event_data_t* data) {
     }
     s_ws_accumulated_len = 0;
     s_oversize_detected = false;
+
+    if (data->payload_len > CONFIG_HTTP_BUFFER_SIZE_MAX) {
+      ESP_LOGE(TAG, "WebP size (%d bytes) exceeds max (%d)", data->payload_len,
+               CONFIG_HTTP_BUFFER_SIZE_MAX);
+      s_oversize_detected = true;
+      if (gfx_display_asset("oversize") != 0) {
+        ESP_LOGE(TAG, "Failed to display oversize graphic");
+      }
+      return;
+    }
+
+    if (data->payload_len > 0) {
+      s_webp = static_cast<uint8_t*>(heap_caps_malloc(
+          static_cast<size_t>(data->payload_len),
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+      if (!s_webp) {
+        ESP_LOGE(TAG, "Failed to allocate WebP buffer (%d bytes)",
+                 data->payload_len);
+        s_oversize_detected = true;
+        return;
+      }
+    }
   }
 
   if (s_oversize_detected) return;
 
   if (data->op_code == 0 && !s_webp) return;
 
-  size_t new_size = s_ws_accumulated_len + data->data_len;
-  if (new_size > CONFIG_HTTP_BUFFER_SIZE_MAX) {
-    ESP_LOGE(TAG, "WebP size (%zu bytes) exceeds max (%d)", new_size,
+  size_t end_offset = static_cast<size_t>(data->payload_offset) + data->data_len;
+  if (end_offset > CONFIG_HTTP_BUFFER_SIZE_MAX) {
+    ESP_LOGE(TAG, "WebP size (%zu bytes) exceeds max (%d)", end_offset,
              CONFIG_HTTP_BUFFER_SIZE_MAX);
     s_oversize_detected = true;
     if (gfx_display_asset("oversize") != 0) {
@@ -285,29 +307,41 @@ void handle_binary_message(esp_websocket_event_data_t* data) {
     return;
   }
 
-  auto* new_buf = static_cast<uint8_t*>(
-      heap_caps_realloc(s_webp, new_size, MALLOC_CAP_SPIRAM));
-  if (!new_buf) {
-    ESP_LOGE(TAG, "Failed to allocate memory (%zu bytes)", new_size);
+  if (data->payload_len > 0 &&
+      end_offset > static_cast<size_t>(data->payload_len)) {
+    ESP_LOGE(TAG,
+             "Invalid WebSocket payload offsets (%zu > total %d); dropping",
+             end_offset, data->payload_len);
     free(s_webp);
     s_webp = nullptr;
     s_ws_accumulated_len = 0;
+    s_oversize_detected = true;
     return;
   }
-  s_webp = new_buf;
 
-  memcpy(s_webp + s_ws_accumulated_len, data->data_ptr, data->data_len);
-  s_ws_accumulated_len = new_size;
+  if (data->data_len > 0 && s_webp) {
+    memcpy(s_webp + data->payload_offset, data->data_ptr, data->data_len);
+  }
+  if (end_offset > s_ws_accumulated_len) {
+    s_ws_accumulated_len = end_offset;
+  }
 
-  bool frame_complete =
-      (data->payload_offset + data->data_len >= data->payload_len);
+  bool frame_complete = (data->payload_len > 0)
+                            ? (s_ws_accumulated_len >=
+                               static_cast<size_t>(data->payload_len))
+                            : (data->payload_offset + data->data_len >=
+                               data->payload_len);
 
   if (data->fin && frame_complete) {
     ESP_LOGD(TAG, "WebP download complete (%zu bytes)", s_ws_accumulated_len);
 
-    gfx_update(s_webp, s_ws_accumulated_len, s_dwell_secs);
+    int counter = gfx_update(s_webp, s_ws_accumulated_len, s_dwell_secs);
+    if (counter < 0) {
+      ESP_LOGE(TAG, "Failed to queue downloaded WebP");
+      free(s_webp);
+    }
 
-    if (!s_first_image_received) {
+    if (counter >= 0 && !s_first_image_received) {
       ESP_LOGI(TAG,
                "First WebSocket image received - interrupting boot animation");
       gfx_interrupt();
