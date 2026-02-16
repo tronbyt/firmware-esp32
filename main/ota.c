@@ -13,11 +13,13 @@
 #include <http_parser.h>
 #include <lwip/netdb.h>
 #include <lwip/sockets.h>
+#include <stdatomic.h>
 
 #include "display.h"
 #include "gfx.h"
 
 static const char *TAG = "OTA";
+static atomic_bool s_ota_in_progress = false;
 
 static bool is_ip_private(const struct sockaddr *addr) {
   if (addr->sa_family == AF_INET) {
@@ -219,9 +221,18 @@ static bool validate_and_rewrite_url(const char *url, char *out_url,
   return true;
 }
 
+bool ota_in_progress(void) { return atomic_load(&s_ota_in_progress); }
+
 void run_ota(const char *url) {
+  bool expected = false;
+  if (!atomic_compare_exchange_strong(&s_ota_in_progress, &expected, true)) {
+    ESP_LOGW(TAG, "OTA already in progress, ignoring request");
+    return;
+  }
+
   char final_url[512] = {0};
   if (!validate_and_rewrite_url(url, final_url, sizeof(final_url))) {
+    atomic_store(&s_ota_in_progress, false);
     return;
   }
 
@@ -269,6 +280,7 @@ void run_ota(const char *url) {
     display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
     display_flip();
     vTaskDelay(pdMS_TO_TICKS(2000));
+    atomic_store(&s_ota_in_progress, false);
     gfx_start();
     return;
   }
@@ -314,6 +326,7 @@ void run_ota(const char *url) {
     display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
     display_flip();
     vTaskDelay(pdMS_TO_TICKS(2000));
+    atomic_store(&s_ota_in_progress, false);
     gfx_start();
   } else {
     err = esp_https_ota_finish(https_ota_handle);
@@ -330,6 +343,7 @@ void run_ota(const char *url) {
       display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
       display_flip();
       vTaskDelay(pdMS_TO_TICKS(2000));
+      atomic_store(&s_ota_in_progress, false);
       gfx_start();
     }
   }
