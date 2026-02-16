@@ -520,6 +520,12 @@ void app_main(void) {
     sta_api_start();
   }
 
+  // Register the AP wildcard AFTER the STA API endpoints so that
+  // /api/* is matched before the catch-all captive-portal redirect.
+  if (nvs_get_ap_mode()) {
+    ap_register_wildcard();
+  }
+
   if (nvs_get_ap_mode()) {
     if (button_boot || !sta_connected) {
       ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");

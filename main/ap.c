@@ -13,6 +13,7 @@
 #include <sys/param.h>
 
 #include "nvs_settings.h"
+#include "sta_api.h"
 #include "wifi.h"
 
 #define TAG "AP"
@@ -309,11 +310,10 @@ esp_err_t ap_start(void) {
                           .user_ctx = NULL};
   httpd_register_uri_handler(s_server, &ncsi_uri);
 
-  httpd_uri_t wildcard_uri = {.uri = "/*",
-                              .method = HTTP_GET,
-                              .handler = captive_portal_handler,
-                              .user_ctx = NULL};
-  httpd_register_uri_handler(s_server, &wildcard_uri);
+  // NOTE: The wildcard catch-all is NOT registered here. Call
+  // ap_register_wildcard() after all other handlers (e.g. STA API)
+  // have been registered, because httpd_find_uri_handler() returns
+  // the first array-order match and we need /api/* to win over /*.
 
   start_dns_server();
 
@@ -322,11 +322,10 @@ esp_err_t ap_start(void) {
 
 httpd_handle_t ap_get_server(void) { return s_server; }
 
-void ap_reregister_wildcard(void) {
+void ap_register_wildcard(void) {
   if (!s_server) {
     return;
   }
-  httpd_unregister_uri_handler(s_server, "/*", HTTP_GET);
   httpd_uri_t wildcard_uri = {.uri = "/*",
                               .method = HTTP_GET,
                               .handler = captive_portal_handler,
@@ -339,9 +338,20 @@ esp_err_t ap_stop(void) {
     return ESP_OK;
   }
   stop_dns_server();
-  esp_err_t err = httpd_stop(s_server);
+
+  bool api_sharing = sta_api_owns_server(s_server);
+  if (api_sharing) {
+    sta_api_stop();  // detach without stopping the server
+  }
+  httpd_stop(s_server);
   s_server = NULL;
-  return err;
+
+  // Restart STA API on its own server now that port 80 is free.
+  if (api_sharing) {
+    ESP_LOGI(TAG, "Restarting STA API on its own server");
+    sta_api_start();
+  }
+  return ESP_OK;
 }
 
 static void ap_shutdown_timer_callback(TimerHandle_t xTimer) {

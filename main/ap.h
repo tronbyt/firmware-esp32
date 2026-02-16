@@ -31,13 +31,12 @@ esp_err_t ap_stop(void);
 httpd_handle_t ap_get_server(void);
 
 /**
- * @brief Move the wildcard URI handler to the end of the handler list.
+ * @brief Register the catch-all wildcard URI handler.
  *
- * Call this after registering additional URI handlers on the AP server
- * so that specific paths (e.g. /api/status) are matched before the
- * catch-all wildcard.
+ * Must be called after all other URI handlers (e.g. STA API) have been
+ * registered so that specific paths are matched before the wildcard.
  */
-void ap_reregister_wildcard(void);
+void ap_register_wildcard(void);
 
 /**
  * @brief Initialize the AP network interface

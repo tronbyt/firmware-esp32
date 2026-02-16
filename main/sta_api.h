@@ -1,6 +1,8 @@
 #pragma once
 
 #include <esp_err.h>
+#include <esp_http_server.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,6 +13,9 @@ esp_err_t sta_api_start(void);
 
 /** Stop the local status API server. */
 esp_err_t sta_api_stop(void);
+
+/** Return true if the STA API is using the given server handle. */
+bool sta_api_owns_server(httpd_handle_t server);
 
 #ifdef __cplusplus
 }

@@ -105,12 +105,6 @@ esp_err_t sta_api_start(void) {
   };
   httpd_register_uri_handler(s_server, &health_uri);
 
-  // If sharing the AP server, move its wildcard handler to the end
-  // so /api/* paths are matched before the catch-all.
-  if (!s_owns_server) {
-    ap_reregister_wildcard();
-  }
-
   return ESP_OK;
 }
 
@@ -125,4 +119,8 @@ esp_err_t sta_api_stop(void) {
   s_server = NULL;
   s_owns_server = false;
   return err;
+}
+
+bool sta_api_owns_server(httpd_handle_t server) {
+  return s_server != NULL && s_server == server;
 }
