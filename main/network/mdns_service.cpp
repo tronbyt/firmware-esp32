@@ -1,4 +1,4 @@
-#include "mdns.h"
+#include "mdns_service.h"
 
 #include <esp_app_desc.h>
 #include <esp_event.h>

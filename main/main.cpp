@@ -11,7 +11,7 @@
 #include "display.h"
 #include "heap_monitor.h"
 #include "http_server.h"
-#include "mdns.h"
+#include "mdns_service.h"
 #include "nvs_settings.h"
 #include "scheduler.h"
 #include "sdkconfig.h"
