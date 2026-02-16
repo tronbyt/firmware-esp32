@@ -14,7 +14,7 @@ extern "C" {
 #define MAX_SSID_LEN 32
 #define MAX_PASSWORD_LEN 64
 #define MAX_HOSTNAME_LEN 32
-#define MAX_URL_LEN 128
+#define MAX_URL_LEN 512
 #define MAX_IP_LEN 64
 #define MAX_SYSLOG_ADDR_LEN 128
 #define MAX_SNTP_SERVER_LEN 64
