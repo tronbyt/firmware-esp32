@@ -525,6 +525,9 @@ void player_task(void*) {
 
     // --- IDLE: block until command ---
     if (state == State::IDLE) {
+      // Drain any stale interrupt flag — irrelevant once idle.
+      ctx.interrupt_requested.store(false, std::memory_order_relaxed);
+
       // If content is already pending (queued while PLAYING), consume it
       // immediately without waiting for a new task notification.
       if (ctx.pending.valid.load(std::memory_order_acquire)) {
@@ -574,10 +577,11 @@ void player_task(void*) {
     uint32_t notified = ulTaskNotifyTake(pdTRUE, wait_ticks);
 
     if (notified) {
-      // Only accept interrupts (valid=false) during dwell.
-      // New images (valid=true) wait until dwell expires.
-      if (!ctx.pending.valid.load(std::memory_order_acquire)) {
-        handle_pending_command();  // interrupt/stop
+      bool interrupt =
+          ctx.interrupt_requested.exchange(false, std::memory_order_acq_rel);
+      if (interrupt ||
+          !ctx.pending.valid.load(std::memory_order_acquire)) {
+        handle_pending_command();
       }
       // else: image queued but dwell not expired — ignore, loop will
       // pick it up after check_dwell_expired() fires above.
@@ -788,18 +792,11 @@ void gfx_start(void) {
 void gfx_shutdown(void) { display_shutdown(); }
 
 void gfx_interrupt(void) {
-  // Clear pending valid (signals stop to handle_pending_command) and release
-  // any queued RAM buffer to avoid leaking frame data on repeated interrupts.
-  raii::MutexGuard lock(ctx.mutex);
-  if (lock && ctx.pending.buf && !is_static_asset(ctx.pending.buf)) {
-    free(ctx.pending.buf);
-  }
-  if (lock) {
-    ctx.pending.buf = nullptr;
-    ctx.pending.len = 0;
-    ctx.pending.embedded_name = nullptr;
-  }
-  ctx.pending.valid.store(false, std::memory_order_release);
+  // Signal the player task to stop current playback immediately.
+  // Do NOT clear pending.valid here — a gfx_update() may have just queued an
+  // image that should be played once the current animation stops.  Stale
+  // pending buffers are cleaned up by the next gfx_update / gfx_play_embedded.
+  ctx.interrupt_requested.store(true, std::memory_order_release);
   if (ctx.task) xTaskNotifyGive(ctx.task);
 }
 
