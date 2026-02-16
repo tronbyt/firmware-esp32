@@ -29,7 +29,7 @@ constexpr int DEFAULT_REFRESH_INTERVAL = 10;
 constexpr int DEFAULT_REFRESH_INTERVAL = CONFIG_REFRESH_INTERVAL_SECONDS;
 #endif
 
-constexpr int TEXT_QUEUE_DEPTH = 4;
+constexpr int TEXT_QUEUE_DEPTH = 8;
 constexpr int CONSUMER_STACK_SIZE = 6144;
 constexpr int CONSUMER_PRIORITY = 4;
 
@@ -251,7 +251,17 @@ void handle_text_message(esp_websocket_event_data_t* data) {
 
   TextMsg msg = {buf, static_cast<size_t>(data->data_len)};
   if (xQueueSend(s_text_queue, &msg, 0) != pdTRUE) {
-    ESP_LOGW("handlers", "Text queue full, dropping message");
+    // Keep latest control messages under burst: drop oldest and retry once.
+    TextMsg dropped{};
+    if (xQueueReceive(s_text_queue, &dropped, 0) == pdTRUE) {
+      free(dropped.data);
+      if (xQueueSend(s_text_queue, &msg, 0) == pdTRUE) {
+        ESP_LOGW("handlers",
+                 "Text queue full, dropped oldest message to keep latest");
+        return;
+      }
+    }
+    ESP_LOGW("handlers", "Text queue full, dropping newest message");
     free(buf);
   }
 }
