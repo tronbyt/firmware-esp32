@@ -32,7 +32,7 @@ def update_firmware_file_with_sha256(file_path: str, sha256: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fix firmware checksum and SHA256")
-    parser.add_argument("esptool_path", help="Path to esptool.py")
+    parser.add_argument("esptool_path", help="Path to esptool")
     parser.add_argument("file_path", help="Path to firmware.bin")
     args = parser.parse_args()
 
