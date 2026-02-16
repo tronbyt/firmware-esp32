@@ -49,6 +49,7 @@ constexpr EventBits_t BIT_IDLE = BIT0;
 //------------------------------------------------------------------------------
 
 enum class State : uint8_t { IDLE, PLAYING };
+enum class InterruptRequest : uint8_t { NONE, STOP_ONLY, PREEMPT_PENDING };
 
 //------------------------------------------------------------------------------
 // Pending Command (written by API, read by task)
@@ -76,7 +77,7 @@ struct PlayerContext {
 
   std::atomic<State> state{State::IDLE};
   std::atomic<bool> paused{false};
-  std::atomic<bool> interrupt_requested{false};
+  std::atomic<InterruptRequest> interrupt_request{InterruptRequest::NONE};
   PendingCmd pending;
   int counter = 0;
   int loaded_counter = 0;
@@ -319,7 +320,7 @@ void handle_decode_error() {
 // Command Handling
 //------------------------------------------------------------------------------
 
-void handle_pending_command() {
+void handle_pending_command(bool emit_stopped_before_replace = false) {
   if (!ctx.pending.valid.load(std::memory_order_acquire)) {
     // No valid pending = stop command (from gfx_interrupt)
     if (ctx.state.load() == State::PLAYING) {
@@ -334,6 +335,11 @@ void handle_pending_command() {
   {
     raii::MutexGuard lock(ctx.mutex);
     if (!lock) return;
+
+    if (emit_stopped_before_replace &&
+        ctx.state.load(std::memory_order_acquire) == State::PLAYING) {
+      emit_stopped_event();
+    }
 
     destroy_decoder();
     free_buffer();
@@ -526,7 +532,8 @@ void player_task(void*) {
     // --- IDLE: block until command ---
     if (state == State::IDLE) {
       // Drain any stale interrupt flag — irrelevant once idle.
-      ctx.interrupt_requested.store(false, std::memory_order_relaxed);
+      ctx.interrupt_request.store(InterruptRequest::NONE,
+                                  std::memory_order_relaxed);
 
       // If content is already pending (queued while PLAYING), consume it
       // immediately without waiting for a new task notification.
@@ -577,10 +584,28 @@ void player_task(void*) {
     uint32_t notified = ulTaskNotifyTake(pdTRUE, wait_ticks);
 
     if (notified) {
-      bool interrupt =
-          ctx.interrupt_requested.exchange(false, std::memory_order_acq_rel);
-      if (interrupt ||
-          !ctx.pending.valid.load(std::memory_order_acquire)) {
+      InterruptRequest req = ctx.interrupt_request.exchange(
+          InterruptRequest::NONE, std::memory_order_acq_rel);
+      if (req == InterruptRequest::STOP_ONLY) {
+        if (ctx.state.load(std::memory_order_acquire) == State::PLAYING) {
+          goto_idle();
+          emit_stopped_event();
+          ESP_LOGI(TAG, "Stopped by interrupt");
+        }
+        continue;
+      }
+      if (req == InterruptRequest::PREEMPT_PENDING) {
+        if (ctx.pending.valid.load(std::memory_order_acquire)) {
+          handle_pending_command(true);
+        } else if (ctx.state.load(std::memory_order_acquire) ==
+                   State::PLAYING) {
+          goto_idle();
+          emit_stopped_event();
+          ESP_LOGI(TAG, "Stopped by interrupt");
+        }
+        continue;
+      }
+      if (!ctx.pending.valid.load(std::memory_order_acquire)) {
         handle_pending_command();
       }
       // else: image queued but dwell not expired — ignore, loop will
@@ -792,11 +817,14 @@ void gfx_start(void) {
 void gfx_shutdown(void) { display_shutdown(); }
 
 void gfx_interrupt(void) {
-  // Signal the player task to stop current playback immediately.
-  // Do NOT clear pending.valid here — a gfx_update() may have just queued an
-  // image that should be played once the current animation stops.  Stale
-  // pending buffers are cleaned up by the next gfx_update / gfx_play_embedded.
-  ctx.interrupt_requested.store(true, std::memory_order_release);
+  ctx.interrupt_request.store(InterruptRequest::STOP_ONLY,
+                              std::memory_order_release);
+  if (ctx.task) xTaskNotifyGive(ctx.task);
+}
+
+void gfx_preempt(void) {
+  ctx.interrupt_request.store(InterruptRequest::PREEMPT_PENDING,
+                              std::memory_order_release);
   if (ctx.task) xTaskNotifyGive(ctx.task);
 }
 

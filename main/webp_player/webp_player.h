@@ -93,8 +93,10 @@ void gfx_stop(void);
 /** Resume from stopped state. */
 void gfx_start(void);
 
-/** Interrupt current animation to load new content immediately. */
+/** Stop current playback and transition to IDLE. */
 void gfx_interrupt(void);
+/** Interrupt current playback and immediately apply pending content if any. */
+void gfx_preempt(void);
 
 /** Block until the gfx task finishes the current animation. */
 void gfx_wait_idle(void);

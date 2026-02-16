@@ -68,7 +68,7 @@ void process_text_message(const char* json_str) {
   cJSON* immediate_item = cJSON_GetObjectItem(root, "immediate");
   if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
     ESP_LOGD(TAG, "Interrupting current animation to load queued image");
-    gfx_interrupt();
+    gfx_preempt();
   }
 
   cJSON* dwell_item = cJSON_GetObjectItem(root, "dwell_secs");
@@ -344,7 +344,7 @@ void handle_binary_message(esp_websocket_event_data_t* data) {
     if (counter >= 0 && !s_first_image_received) {
       ESP_LOGI(TAG,
                "First WebSocket image received - interrupting boot animation");
-      gfx_interrupt();
+      gfx_preempt();
       s_first_image_received = true;
     }
 
