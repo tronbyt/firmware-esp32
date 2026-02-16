@@ -2,10 +2,10 @@ dependencies:
   espressif/esp_websocket_client: 1.6.1
   esp-hub75:
     git: https://github.com/datagutt/esp-hub75.git
-    version: fun2
+    version: main
     path: components/hub75
   libwebp:
     git: https://github.com/datagutt/libwebp.git
-    version: xtensa-pie
+    version: main
   espressif/cjson: "*"
   espressif/mdns: "*"
