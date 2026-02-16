@@ -51,7 +51,7 @@ define build_device
 	rm -f sdkconfig
 	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
 	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
-	cd build && esptool.py --chip $(1) merge-bin -o merged_firmware.bin @flash_args
+	cd build && esptool --chip $(1) merge-bin -o merged_firmware.bin @flash_args
 endef
 
 # Device Specific Targets
