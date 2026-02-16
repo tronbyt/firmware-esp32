@@ -12,10 +12,9 @@ if(NOT DEFINED VAL_REMOTE_URL)
     set(VAL_REMOTE_URL "XplaceholderREMOTEURL___________________________________________________________________________________________________________")
 endif()
 
-idf_component_register(SRCS "main.c" 
-                            "display.cpp" 
-                            "flash.c" 
-                            "gfx.c" 
+idf_component_register(SRCS "main.c"
+                            "display.cpp"
+                            "gfx.c"
                             "ota.c" 
                             "remote.c" 
                             "wifi.c"

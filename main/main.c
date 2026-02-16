@@ -14,7 +14,6 @@
 #include "ap.h"
 #include "display.h"
 #include "esp_sntp.h"
-#include "flash.h"
 #include "gfx.h"
 #include "nvs_settings.h"
 #include "ota.h"
@@ -466,15 +465,7 @@ void app_main(void) {
 
   ESP_LOGI(TAG, "Check for button press");
 
-  // Setup the device flash storage.
-  if (flash_initialize()) {
-    ESP_LOGE(TAG, "failed to initialize flash");
-    return;
-  }
-  ESP_LOGI(TAG, "finished flash init");
-  esp_register_shutdown_handler(&flash_shutdown);
-
-  // Initialize NVS settings
+  // Initialize NVS settings (includes nvs_flash_init with error recovery)
   ESP_ERROR_CHECK(nvs_settings_init());
 
   // Setup WiFi.
