@@ -524,6 +524,14 @@ void player_task(void*) {
 
     // --- IDLE: block until command ---
     if (state == State::IDLE) {
+      // If content is already pending (queued while PLAYING), consume it
+      // immediately without waiting for a new task notification.
+      if (ctx.pending.valid.load(std::memory_order_acquire)) {
+        if (ctx.paused.load()) continue;
+        handle_pending_command();
+        continue;
+      }
+
       ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
       if (ctx.paused.load()) continue;
@@ -672,9 +680,17 @@ int gfx_update(void* webp, size_t len, int32_t dwell_secs) {
   ESP_LOGI(TAG, "Queued image counter=%d size=%zu dwell=%ld",
            counter, len, static_cast<long>(dwell_secs));
 
+  State current_state = ctx.state.load(std::memory_order_acquire);
+
   lock.release();
 
-  xTaskNotifyGive(ctx.task);
+  // In original-fw style WS mode, queued content should not preempt active
+  // dwell unless an explicit interrupt arrives. Only wake immediately when
+  // player is idle.
+  if (current_state == State::IDLE) {
+    xTaskNotifyGive(ctx.task);
+  }
+
   send_queued_notification(counter);
   return counter;
 }
