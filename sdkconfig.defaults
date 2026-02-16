@@ -10,6 +10,9 @@ CONFIG_APP_RETRIEVE_LEN_ELF_SHA=16
 # Optimize for performance (-O2) instead of size (-Os).
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
+# Disable runtime assertions for release performance.
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE=y
+
 # Configure the flasher for 8MB of flash memory.
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 
