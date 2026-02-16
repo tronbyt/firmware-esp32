@@ -18,7 +18,7 @@
 #include "version.h"
 #include "webp_player.h"
 #include "wifi.h"
-#include "ws_client.h"
+#include "sockets.h"
 
 #if CONFIG_BUTTON_PIN >= 0
 #include <driver/gpio.h>
@@ -199,8 +199,12 @@ extern "C" void app_main(void) {
   if (strncmp(image_url, "ws://", 5) == 0 ||
       strncmp(image_url, "wss://", 6) == 0) {
     ESP_LOGI(TAG, "Using websockets with URL: %s", image_url);
-    ws_client_start(image_url);
-    ws_client_run_loop();
+    // Event-driven: sockets_init sets up timers + event handlers, returns immediately
+    sockets_init(image_url);
+    // Keep app_main alive (will be replaced with vTaskDelete in task #12)
+    while (true) {
+      vTaskDelay(portMAX_DELAY);
+    }
   } else {
     http_client_run_loop(image_url);
   }

@@ -1,41 +1,32 @@
-#include "ws_client.h"
+#include "handlers.h"
 
 #include <cstdlib>
 #include <cstring>
 
 #include <cJSON.h>
-#include <esp_crt_bundle.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
-#include <esp_system.h>
-#include <esp_websocket_client.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/event_groups.h>
 #include <freertos/task.h>
 
 #include "display.h"
+#include "messages.h"
 #include "nvs_settings.h"
 #include "ota.h"
 #include "sdkconfig.h"
 #include "syslog.h"
-#include "version.h"
 #include "webp_player.h"
 #include "wifi.h"
 
 namespace {
 
-const char* TAG = "ws_client";
-
-constexpr int WEBSOCKET_PROTOCOL_VERSION = 1;
-constexpr EventBits_t WS_CONNECTED_BIT = BIT0;
+const char* TAG = "handlers";
 
 #ifndef CONFIG_REFRESH_INTERVAL_SECONDS
 constexpr int DEFAULT_REFRESH_INTERVAL = 10;
 #else
 constexpr int DEFAULT_REFRESH_INTERVAL = CONFIG_REFRESH_INTERVAL_SECONDS;
 #endif
-
-esp_websocket_client_handle_t s_ws_handle = nullptr;
-EventGroupHandle_t s_ws_event_group = nullptr;
 
 int32_t s_dwell_secs = DEFAULT_REFRESH_INTERVAL;
 uint8_t* s_webp = nullptr;
@@ -50,72 +41,7 @@ void ota_task_entry(void* param) {
   vTaskDelete(nullptr);
 }
 
-esp_err_t send_client_info() {
-  esp_err_t ret = ESP_OK;
-  uint8_t mac[6];
-  char ssid[33] = {0};
-  char hostname[33] = {0};
-  char syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
-  char sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
-  nvs_get_ssid(ssid, sizeof(ssid));
-  nvs_get_hostname(hostname, sizeof(hostname));
-  nvs_get_syslog_addr(syslog_addr, sizeof(syslog_addr));
-  nvs_get_sntp_server(sntp_server, sizeof(sntp_server));
-  const char* image_url = nvs_get_image_url();
-  if (!image_url) image_url = "";
-
-  cJSON* root = cJSON_CreateObject();
-  if (!root) return ESP_ERR_NO_MEM;
-
-  cJSON* ci = cJSON_AddObjectToObject(root, "client_info");
-  if (!ci) {
-    cJSON_Delete(root);
-    return ESP_FAIL;
-  }
-
-  cJSON_AddStringToObject(ci, "firmware_version", FIRMWARE_VERSION);
-  cJSON_AddStringToObject(ci, "firmware_type", "ESP32");
-  cJSON_AddNumberToObject(ci, "protocol_version", WEBSOCKET_PROTOCOL_VERSION);
-
-  if (wifi_get_mac(mac) == 0) {
-    char mac_str[18];
-    snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    cJSON_AddStringToObject(ci, "mac", mac_str);
-  } else {
-    ESP_LOGW(TAG,
-             "Failed to get MAC address; sending client info without MAC.");
-  }
-
-  cJSON_AddStringToObject(ci, "ssid", ssid);
-  cJSON_AddStringToObject(ci, "hostname", hostname);
-  cJSON_AddStringToObject(ci, "syslog_addr", syslog_addr);
-  cJSON_AddStringToObject(ci, "sntp_server", sntp_server);
-  cJSON_AddStringToObject(ci, "image_url", image_url);
-  cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
-  cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
-  cJSON_AddBoolToObject(ci, "skip_display_version",
-                        nvs_get_skip_display_version());
-  cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
-  cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
-
-  char* json_str = cJSON_PrintUnformatted(root);
-  if (json_str) {
-    ESP_LOGI(TAG, "Sending client info: %s", json_str);
-    int sent = esp_websocket_client_send_text(s_ws_handle, json_str,
-                                              strlen(json_str), portMAX_DELAY);
-    if (sent < 0) {
-      ESP_LOGE(TAG, "Failed to send client info: %d", sent);
-      ret = ESP_FAIL;
-    }
-    free(json_str);
-  } else {
-    ret = ESP_ERR_NO_MEM;
-  }
-
-  cJSON_Delete(root);
-  return ret;
-}
+}  // namespace
 
 void handle_text_message(esp_websocket_event_data_t* data) {
   bool is_complete =
@@ -255,7 +181,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   if (settings_changed) {
     esp_err_t err = nvs_save_settings();
     if (err == ESP_OK) {
-      send_client_info();
+      msg_send_client_info();
     } else {
       ESP_LOGE(TAG, "Failed to save settings: %s", esp_err_to_name(err));
     }
@@ -332,112 +258,5 @@ void handle_binary_message(esp_websocket_event_data_t* data) {
     // Ownership transferred to gfx
     s_webp = nullptr;
     s_ws_accumulated_len = 0;
-  }
-}
-
-void websocket_event_handler(void* handler_args, esp_event_base_t base,
-                             int32_t event_id, void* event_data) {
-  auto* data = static_cast<esp_websocket_event_data_t*>(event_data);
-  switch (event_id) {
-    case WEBSOCKET_EVENT_CONNECTED:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
-      xEventGroupSetBits(s_ws_event_group, WS_CONNECTED_BIT);
-      break;
-    case WEBSOCKET_EVENT_DISCONNECTED:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-      draw_error_indicator_pixel();
-      break;
-    case WEBSOCKET_EVENT_DATA:
-      if (data->op_code == 1 && data->data_len > 0) {
-        handle_text_message(data);
-      } else if (data->op_code == 2 || data->op_code == 0) {
-        handle_binary_message(data);
-      }
-      break;
-    case WEBSOCKET_EVENT_ERROR:
-      ESP_LOGE(TAG, "WEBSOCKET_EVENT_ERROR");
-      if (s_webp) {
-        ESP_LOGW(TAG,
-                 "WebSocket error with incomplete WebP buffer - discarding");
-        free(s_webp);
-        s_webp = nullptr;
-      }
-      draw_error_indicator_pixel();
-      break;
-  }
-}
-
-}  // namespace
-
-esp_err_t ws_client_start(const char* url) {
-  ESP_LOGI(TAG, "Starting WebSocket client with URL: %s", url);
-
-  esp_websocket_client_config_t ws_cfg = {};
-  ws_cfg.uri = url;
-  ws_cfg.task_stack = 8192;
-  ws_cfg.buffer_size = 8192;
-  ws_cfg.crt_bundle_attach = esp_crt_bundle_attach;
-  ws_cfg.reconnect_timeout_ms = 10000;
-  ws_cfg.network_timeout_ms = 10000;
-
-  s_ws_handle = esp_websocket_client_init(&ws_cfg);
-  esp_websocket_register_events(s_ws_handle, WEBSOCKET_EVENT_ANY,
-                                websocket_event_handler, s_ws_handle);
-
-  gfx_set_websocket_handle(s_ws_handle);
-
-  s_ws_event_group = xEventGroupCreate();
-
-  esp_err_t err = esp_websocket_client_start(s_ws_handle);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to start WebSocket client: %d", err);
-    return err;
-  }
-
-  xEventGroupWaitBits(s_ws_event_group, WS_CONNECTED_BIT, pdFALSE, pdTRUE,
-                      pdMS_TO_TICKS(5000));
-
-  return ESP_OK;
-}
-
-void ws_client_stop(void) {
-  if (s_ws_handle) {
-    esp_websocket_client_stop(s_ws_handle);
-    esp_websocket_client_destroy(s_ws_handle);
-    s_ws_handle = nullptr;
-  }
-  if (s_ws_event_group) {
-    vEventGroupDelete(s_ws_event_group);
-    s_ws_event_group = nullptr;
-  }
-}
-
-void ws_client_run_loop(void) {
-  bool was_connected = false;
-
-  while (true) {
-    bool is_connected = esp_websocket_client_is_connected(s_ws_handle);
-
-    if (is_connected) {
-      if (!was_connected) {
-        ESP_LOGI(TAG, "WebSocket connected, sending client info");
-        send_client_info();
-        was_connected = true;
-      }
-    } else {
-      if (was_connected) {
-        was_connected = false;
-        ESP_LOGW(TAG, "WebSocket disconnected");
-      }
-      ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
-      esp_websocket_client_stop(s_ws_handle);
-      esp_err_t err = esp_websocket_client_start(s_ws_handle);
-      if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Reconnection failed with error %d", err);
-      }
-    }
-
-    wifi_health_check();
-    vTaskDelay(pdMS_TO_TICKS(5000));
   }
 }
