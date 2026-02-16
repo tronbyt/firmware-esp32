@@ -4,10 +4,19 @@
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "font5x7.h"
 #include "nvs_settings.h"
 
 static Hub75Driver *_matrix;
+static SemaphoreHandle_t _frame_sync_sem = NULL;
+
+static bool IRAM_ATTR frame_sync_isr(void *arg) {
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR((SemaphoreHandle_t)arg, &xHigherPriorityTaskWoken);
+  return xHigherPriorityTaskWoken == pdTRUE;
+}
 static uint8_t _brightness = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
 static const char *TAG = "display";
 
@@ -232,6 +241,10 @@ int display_initialize(void) {
     _matrix = NULL;
     return 1;
   }
+
+  _frame_sync_sem = xSemaphoreCreateBinary();
+  _matrix->set_frame_callback(frame_sync_isr, _frame_sync_sem);
+
   display_set_brightness((CONFIG_HUB75_BRIGHTNESS * 100) / 255);
 
   return 0;
@@ -265,13 +278,22 @@ void display_set_brightness(uint8_t brightness_pct) {
 }
 
 void display_shutdown(void) {
+  _matrix->set_frame_callback(nullptr, nullptr);
+  vSemaphoreDelete(_frame_sync_sem);
+  _frame_sync_sem = NULL;
+
   _matrix->clear();
   _matrix->end();
   delete _matrix;
   _matrix = NULL;
 }
 
-void display_draw(const uint8_t *pix, int width, int height) {
+bool display_wait_frame(uint32_t timeout_ms) {
+  if (_frame_sync_sem == NULL) return false;
+  return xSemaphoreTake(_frame_sync_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+}
+
+void display_draw_buffer(const uint8_t *pix, int width, int height) {
 #if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
   if (width == 64 && height == 32) {
     // Optimize scale-by-2 drawing (specifically for 64x32 -> 128x64)
@@ -291,7 +313,6 @@ void display_draw(const uint8_t *pix, int width, int height) {
 
     _matrix->draw_pixels(0, 0, 128, 64, (uint8_t *)_scaled_buffer,
                          Hub75PixelFormat::RGB888_32, Hub75ColorOrder::BGR);
-    _matrix->flip_buffer();
     return;
   }
 #endif
@@ -299,6 +320,10 @@ void display_draw(const uint8_t *pix, int width, int height) {
   // Default path: bulk transfer for native resolution
   _matrix->draw_pixels(0, 0, width, height, pix, Hub75PixelFormat::RGB888_32,
                        Hub75ColorOrder::BGR);
+}
+
+void display_draw(const uint8_t *pix, int width, int height) {
+  display_draw_buffer(pix, width, height);
   _matrix->flip_buffer();
 }
 

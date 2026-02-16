@@ -500,7 +500,10 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
         lastWakeTime = xTaskGetTickCount();
       }
 
-      display_draw(pix, animation.canvas_width, animation.canvas_height);
+      // Draw to back buffer, wait for frame boundary, then flip
+      display_draw_buffer(pix, animation.canvas_width, animation.canvas_height);
+      display_wait_frame(50);
+      display_flip();
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
