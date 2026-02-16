@@ -1,9 +1,10 @@
+#include <cstring>
+
 #include <esp_log.h>
 #include <esp_sntp.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <string.h>
 
 #include "ap.h"
 #include "display.h"
@@ -23,17 +24,21 @@
 #include <driver/gpio.h>
 #endif
 
-static const char* TAG = "main";
-static bool button_boot = false;
-static bool config_received = false;
+namespace {
 
-static void config_saved_callback(void) {
+const char* TAG = "main";
+bool button_boot = false;
+bool config_received = false;
+
+void config_saved_callback() {
   config_received = true;
   ESP_LOGI(TAG, "Configuration saved - signaling main task");
 }
 
-void app_main(void) {
-  const char* image_url = NULL;
+}  // namespace
+
+extern "C" void app_main(void) {
+  const char* image_url = nullptr;
 
   ESP_LOGI(TAG, "App Main Start");
 
@@ -181,7 +186,7 @@ void app_main(void) {
 
   while (true) {
     image_url = nvs_get_image_url();
-    if (image_url != NULL && strlen(image_url) > 0) {
+    if (image_url && strlen(image_url) > 0) {
       break;
     }
     ESP_LOGW(TAG, "Image URL is not set. Waiting for configuration...");
