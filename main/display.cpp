@@ -10,6 +10,8 @@
 #include "nvs_settings.h"
 
 static Hub75Driver *_matrix;
+
+#ifdef CONFIG_DISPLAY_FRAME_SYNC
 static SemaphoreHandle_t _frame_sync_sem = NULL;
 
 static bool IRAM_ATTR frame_sync_isr(void *arg) {
@@ -17,6 +19,7 @@ static bool IRAM_ATTR frame_sync_isr(void *arg) {
   xSemaphoreGiveFromISR((SemaphoreHandle_t)arg, &xHigherPriorityTaskWoken);
   return xHigherPriorityTaskWoken == pdTRUE;
 }
+#endif
 static uint8_t _brightness = (CONFIG_HUB75_BRIGHTNESS * 100) / 255;
 static const char *TAG = "display";
 
@@ -242,8 +245,10 @@ int display_initialize(void) {
     return 1;
   }
 
+#ifdef CONFIG_DISPLAY_FRAME_SYNC
   _frame_sync_sem = xSemaphoreCreateBinary();
   _matrix->set_frame_callback(frame_sync_isr, _frame_sync_sem);
+#endif
 
   display_set_brightness((CONFIG_HUB75_BRIGHTNESS * 100) / 255);
 
@@ -278,9 +283,11 @@ void display_set_brightness(uint8_t brightness_pct) {
 }
 
 void display_shutdown(void) {
+#ifdef CONFIG_DISPLAY_FRAME_SYNC
   _matrix->set_frame_callback(nullptr, nullptr);
   vSemaphoreDelete(_frame_sync_sem);
   _frame_sync_sem = NULL;
+#endif
 
   _matrix->clear();
   _matrix->end();
@@ -289,8 +296,12 @@ void display_shutdown(void) {
 }
 
 bool display_wait_frame(uint32_t timeout_ms) {
+#ifdef CONFIG_DISPLAY_FRAME_SYNC
   if (_frame_sync_sem == NULL) return false;
   return xSemaphoreTake(_frame_sync_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+#else
+  return false;
+#endif
 }
 
 void display_draw_buffer(const uint8_t *pix, int width, int height) {
