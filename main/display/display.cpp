@@ -25,17 +25,27 @@ static const char *TAG = "display";
 
 #if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
 static uint32_t *_scaled_buffer = NULL;
+static bool _scaled_buffer_in_psram = false;
 #endif
 
 int display_initialize(void) {
 #if CONFIG_HUB75_PANEL_WIDTH == 128 && CONFIG_HUB75_PANEL_HEIGHT == 64
   if (_scaled_buffer == NULL) {
-    _scaled_buffer = (uint32_t *)heap_caps_malloc(
-        128 * 64 * 4, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    constexpr size_t kScaledBufferBytes = 128 * 64 * sizeof(uint32_t);
+    _scaled_buffer = static_cast<uint32_t*>(heap_caps_malloc(
+        kScaledBufferBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    _scaled_buffer_in_psram = false;
     if (_scaled_buffer == NULL) {
-      ESP_LOGE(TAG, "Failed to allocate scaled buffer in PSRAM");
+      _scaled_buffer = static_cast<uint32_t*>(heap_caps_malloc(
+          kScaledBufferBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+      _scaled_buffer_in_psram = (_scaled_buffer != NULL);
+    }
+    if (_scaled_buffer == NULL) {
+      ESP_LOGE(TAG, "Failed to allocate scaled 128x64 buffer");
       return 1;
     }
+    ESP_LOGI(TAG, "Scaled buffer allocated in %s",
+             _scaled_buffer_in_psram ? "PSRAM" : "internal RAM");
   }
 #endif
 
