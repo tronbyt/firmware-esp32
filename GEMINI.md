@@ -89,4 +89,4 @@ Used for:
 - Use **Kconfig** for structural changes that affect the binary code or memory layout.
 - Use **secrets.json** for parameters that vary between deployments or need to be user-configurable without recompiling (via NVS fallback).
 - The firmware is written in C/C++.
-- The code is formatted using the rules in .clang-fornat.
+- The code is formatted using the rules in .clang-format.
