@@ -194,6 +194,68 @@ void process_text_message(const char* json_str) {
   cJSON_Delete(root);
 }
 
+void consumer_task(void*) {
+  TextMsg msg;
+  while (true) {
+    if (xQueueReceive(s_text_queue, &msg, portMAX_DELAY) == pdTRUE) {
+      process_text_message(msg.data);
+      free(msg.data);
+    }
+  }
+}
+
+}  // namespace
+
+void handlers_init() {
+  if (s_text_queue) return;
+
+  s_text_queue = xQueueCreate(TEXT_QUEUE_DEPTH, sizeof(TextMsg));
+  xTaskCreate(consumer_task, "txt_handler", CONSUMER_STACK_SIZE, nullptr,
+              CONSUMER_PRIORITY, &s_consumer_task);
+  ESP_LOGI("handlers", "Text message queue initialized");
+}
+
+void handlers_deinit() {
+  if (s_consumer_task) {
+    vTaskDelete(s_consumer_task);
+    s_consumer_task = nullptr;
+  }
+
+  if (s_text_queue) {
+    TextMsg msg;
+    while (xQueueReceive(s_text_queue, &msg, 0) == pdTRUE) {
+      free(msg.data);
+    }
+    vQueueDelete(s_text_queue);
+    s_text_queue = nullptr;
+  }
+}
+
+void handle_text_message(esp_websocket_event_data_t* data) {
+  bool is_complete =
+      (data->payload_offset + data->data_len >= data->payload_len);
+  if (!is_complete) return;
+
+  if (!s_text_queue) {
+    ESP_LOGW("handlers", "Queue not initialized, dropping text message");
+    return;
+  }
+
+  auto* buf = static_cast<char*>(malloc(data->data_len + 1));
+  if (!buf) {
+    ESP_LOGE("handlers", "Failed to allocate text message buffer");
+    return;
+  }
+  memcpy(buf, data->data_ptr, data->data_len);
+  buf[data->data_len] = '\0';
+
+  TextMsg msg = {buf, static_cast<size_t>(data->data_len)};
+  if (xQueueSend(s_text_queue, &msg, 0) != pdTRUE) {
+    ESP_LOGW("handlers", "Text queue full, dropping message");
+    free(buf);
+  }
+}
+
 void handle_binary_message(esp_websocket_event_data_t* data) {
   if (data->op_code == 2 && data->payload_offset == 0) {
     if (s_webp) {

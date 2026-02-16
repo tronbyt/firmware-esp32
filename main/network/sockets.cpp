@@ -226,6 +226,7 @@ void wifi_event_handler(void*, esp_event_base_t base, int32_t id, void*) {
 // ---------------------------------------------------------------------------
 
 void sockets_init(const char* url) {
+  handlers_init();
   ctx.url = strdup(url);
 
   // Create reconnect timer
@@ -292,6 +293,8 @@ void sockets_deinit() {
   }
 
   ctx.state = State::Disconnected;
+
+  handlers_deinit();
 }
 
 bool sockets_is_connected() {
