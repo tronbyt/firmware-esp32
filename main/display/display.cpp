@@ -40,7 +40,7 @@ int display_initialize(void) {
 #endif
 
   // Get swap_colors setting
-  bool swap_colors = nvs_get_swap_colors();
+  bool swap_colors = config_get().swap_colors;
 
   // Initialize pin values based on hardware and swap_colors setting
   ESP_LOGI(TAG, "Initializing display with swap_colors=%s",

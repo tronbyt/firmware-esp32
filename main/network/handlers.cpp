@@ -7,6 +7,7 @@
 #include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <freertos/task.h>
 
 #include "display.h"
@@ -28,11 +29,23 @@ constexpr int DEFAULT_REFRESH_INTERVAL = 10;
 constexpr int DEFAULT_REFRESH_INTERVAL = CONFIG_REFRESH_INTERVAL_SECONDS;
 #endif
 
+constexpr int TEXT_QUEUE_DEPTH = 4;
+constexpr int CONSUMER_STACK_SIZE = 6144;
+constexpr int CONSUMER_PRIORITY = 4;
+
+struct TextMsg {
+  char* data;
+  size_t len;
+};
+
 int32_t s_dwell_secs = DEFAULT_REFRESH_INTERVAL;
 uint8_t* s_webp = nullptr;
 size_t s_ws_accumulated_len = 0;
 bool s_oversize_detected = false;
 bool s_first_image_received = false;
+
+QueueHandle_t s_text_queue = nullptr;
+TaskHandle_t s_consumer_task = nullptr;
 
 void ota_task_entry(void* param) {
   auto* url = static_cast<char*>(param);
@@ -41,22 +54,8 @@ void ota_task_entry(void* param) {
   vTaskDelete(nullptr);
 }
 
-}  // namespace
-
-void handle_text_message(esp_websocket_event_data_t* data) {
-  bool is_complete =
-      (data->payload_offset + data->data_len >= data->payload_len);
-  if (!is_complete) return;
-
-  auto* json_str = static_cast<char*>(malloc(data->data_len + 1));
-  if (!json_str) {
-    ESP_LOGE(TAG, "Failed to allocate memory for JSON parsing");
-    return;
-  }
-  memcpy(json_str, data->data_ptr, data->data_len);
-  json_str[data->data_len] = '\0';
+void process_text_message(const char* json_str) {
   cJSON* root = cJSON_Parse(json_str);
-  free(json_str);
 
   if (!root) {
     ESP_LOGW(TAG, "Failed to parse WebSocket text message as JSON");
@@ -64,6 +63,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   }
 
   bool settings_changed = false;
+  auto cfg = config_get();
 
   cJSON* immediate_item = cJSON_GetObjectItem(root, "immediate");
   if (cJSON_IsBool(immediate_item) && cJSON_IsTrue(immediate_item)) {
@@ -103,7 +103,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* swap_colors_item = cJSON_GetObjectItem(root, "swap_colors");
   if (cJSON_IsBool(swap_colors_item)) {
     bool val = cJSON_IsTrue(swap_colors_item);
-    nvs_set_swap_colors(val);
+    cfg.swap_colors = val;
     ESP_LOGI(TAG, "Updated swap_colors to %d", val);
     settings_changed = true;
   }
@@ -111,7 +111,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* wifi_ps_item = cJSON_GetObjectItem(root, "wifi_power_save");
   if (cJSON_IsNumber(wifi_ps_item)) {
     auto val = static_cast<wifi_ps_type_t>(wifi_ps_item->valueint);
-    nvs_set_wifi_power_save(val);
+    cfg.wifi_power_save = val;
     ESP_LOGI(TAG, "Updated wifi_power_save to %d", val);
     settings_changed = true;
     wifi_apply_power_save();
@@ -120,7 +120,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* skip_ver_item = cJSON_GetObjectItem(root, "skip_display_version");
   if (cJSON_IsBool(skip_ver_item)) {
     bool val = cJSON_IsTrue(skip_ver_item);
-    nvs_set_skip_display_version(val);
+    cfg.skip_display_version = val;
     ESP_LOGI(TAG, "Updated skip_display_version to %d", val);
     settings_changed = true;
   }
@@ -128,7 +128,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* ap_mode_item = cJSON_GetObjectItem(root, "ap_mode");
   if (cJSON_IsBool(ap_mode_item)) {
     bool val = cJSON_IsTrue(ap_mode_item);
-    nvs_set_ap_mode(val);
+    cfg.ap_mode = val;
     ESP_LOGI(TAG, "Updated ap_mode to %d", val);
     settings_changed = true;
   }
@@ -136,7 +136,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* prefer_ipv6_item = cJSON_GetObjectItem(root, "prefer_ipv6");
   if (cJSON_IsBool(prefer_ipv6_item)) {
     bool val = cJSON_IsTrue(prefer_ipv6_item);
-    nvs_set_prefer_ipv6(val);
+    cfg.prefer_ipv6 = val;
     ESP_LOGI(TAG, "Updated prefer_ipv6 to %d", val);
     settings_changed = true;
   }
@@ -144,8 +144,8 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* hostname_item = cJSON_GetObjectItem(root, "hostname");
   if (cJSON_IsString(hostname_item) && hostname_item->valuestring) {
     const char* new_hostname = hostname_item->valuestring;
-    if (strlen(new_hostname) > 0 && strlen(new_hostname) <= 32) {
-      nvs_set_hostname(new_hostname);
+    if (strlen(new_hostname) > 0 && strlen(new_hostname) <= MAX_HOSTNAME_LEN) {
+      snprintf(cfg.hostname, sizeof(cfg.hostname), "%s", new_hostname);
       wifi_set_hostname(new_hostname);
       ESP_LOGI(TAG, "Updated hostname to %s", new_hostname);
       settings_changed = true;
@@ -157,7 +157,7 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* syslog_addr_item = cJSON_GetObjectItem(root, "syslog_addr");
   if (cJSON_IsString(syslog_addr_item) && syslog_addr_item->valuestring) {
     const char* new_addr = syslog_addr_item->valuestring;
-    nvs_set_syslog_addr(new_addr);
+    snprintf(cfg.syslog_addr, sizeof(cfg.syslog_addr), "%s", new_addr);
     syslog_update_config(new_addr);
     ESP_LOGI(TAG, "Updated syslog_addr to %s", new_addr);
     settings_changed = true;
@@ -166,25 +166,22 @@ void handle_text_message(esp_websocket_event_data_t* data) {
   cJSON* sntp_server_item = cJSON_GetObjectItem(root, "sntp_server");
   if (cJSON_IsString(sntp_server_item) && sntp_server_item->valuestring) {
     const char* new_server = sntp_server_item->valuestring;
-    nvs_set_sntp_server(new_server);
+    snprintf(cfg.sntp_server, sizeof(cfg.sntp_server), "%s", new_server);
     ESP_LOGI(TAG, "Updated sntp_server to %s", new_server);
     settings_changed = true;
   }
 
   cJSON* image_url_item = cJSON_GetObjectItem(root, "image_url");
   if (cJSON_IsString(image_url_item) && image_url_item->valuestring) {
-    nvs_set_image_url(image_url_item->valuestring);
+    snprintf(cfg.image_url, sizeof(cfg.image_url), "%s",
+             image_url_item->valuestring);
     ESP_LOGI(TAG, "Updated image_url to %s", image_url_item->valuestring);
     settings_changed = true;
   }
 
   if (settings_changed) {
-    esp_err_t err = nvs_save_settings();
-    if (err == ESP_OK) {
-      msg_send_client_info();
-    } else {
-      ESP_LOGE(TAG, "Failed to save settings: %s", esp_err_to_name(err));
-    }
+    config_set(&cfg);
+    msg_send_client_info();
   }
 
   cJSON* reboot_item = cJSON_GetObjectItem(root, "reboot");

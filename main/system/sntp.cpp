@@ -16,8 +16,8 @@ void app_sntp_config(void) {
   ESP_LOGI(TAG, "Configuring SNTP");
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
 
-  char server[MAX_SNTP_SERVER_LEN + 1] = {0};
-  nvs_get_sntp_server(server, sizeof(server));
+  auto cfg = config_get();
+  const char* server = cfg.sntp_server;
 
   esp_sntp_setservername(1, "pool.ntp.org");
   esp_sntp_setservername(2, "time.google.com");

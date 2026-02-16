@@ -1,11 +1,11 @@
 #include "nvs_settings.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
 #include "esp_log.h"
-#include "esp_wifi_types.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
@@ -27,17 +27,8 @@ constexpr const char* NVS_KEY_SKIP_VERSION = "skip_ver";
 constexpr const char* NVS_KEY_AP_MODE = "ap_mode";
 constexpr const char* NVS_KEY_PREFER_IPV6 = "prefer_ipv6";
 
-char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
-char s_wifi_password[MAX_PASSWORD_LEN + 1] = {0};
-char s_hostname[MAX_HOSTNAME_LEN + 1] = {0};
-char s_syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
-char s_sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
-char s_image_url[MAX_URL_LEN + 1] = {0};
-bool s_swap_colors = false;
-wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
-bool s_skip_display_version = false;
-bool s_ap_mode = true;
-bool s_prefer_ipv6 = false;
+system_config_t s_config = {};
+SemaphoreHandle_t s_mutex = nullptr;
 
 #ifndef WIFI_SSID
 #define WIFI_SSID ""
@@ -49,9 +40,38 @@ bool s_prefer_ipv6 = false;
 #define REMOTE_URL ""
 #endif
 
+/// Write all fields of s_config to NVS. Caller must hold s_mutex.
+esp_err_t persist_to_nvs() {
+  nvs_handle_t nvs_handle;
+  esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+  if (err != ESP_OK) return err;
+
+  nvs_set_str(nvs_handle, NVS_KEY_SSID, s_config.ssid);
+  nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_config.password);
+  nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_config.hostname);
+  nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_config.syslog_addr);
+  nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_config.sntp_server);
+  nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_config.image_url);
+
+  nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_config.swap_colors ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE,
+             static_cast<uint8_t>(s_config.wifi_power_save));
+  nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION,
+             s_config.skip_display_version ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_config.ap_mode ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_config.prefer_ipv6 ? 1 : 0);
+
+  err = nvs_commit(nvs_handle);
+  nvs_close(nvs_handle);
+  return err;
+}
+
 }  // namespace
 
 esp_err_t nvs_settings_init(void) {
+  s_mutex = xSemaphoreCreateMutex();
+  if (!s_mutex) return ESP_ERR_NO_MEM;
+
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
       ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -60,286 +80,149 @@ esp_err_t nvs_settings_init(void) {
   }
   if (ret != ESP_OK) return ret;
 
-  nvs_handle_t nvs_handle;
-  ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+  memset(&s_config, 0, sizeof(s_config));
 
+  // Kconfig defaults
 #ifdef CONFIG_SWAP_COLORS
-  s_swap_colors = true;
-#else
-  s_swap_colors = false;
+  s_config.swap_colors = true;
 #endif
 
 #ifdef CONFIG_ENABLE_WIFI_POWER_SAVE
-  s_wifi_power_save = WIFI_PS_MIN_MODEM;
+  s_config.wifi_power_save = WIFI_PS_MIN_MODEM;
 #else
-  s_wifi_power_save = WIFI_PS_NONE;
+  s_config.wifi_power_save = WIFI_PS_NONE;
 #endif
 
 #ifdef CONFIG_SKIP_DISPLAY_VERSION
-  s_skip_display_version = true;
-#else
-  s_skip_display_version = false;
+  s_config.skip_display_version = true;
 #endif
 
 #ifdef CONFIG_ENABLE_AP_MODE
-  s_ap_mode = true;
-#else
-  s_ap_mode = false;
+  s_config.ap_mode = true;
 #endif
 
 #ifdef CONFIG_PREFER_IPV6
-  s_prefer_ipv6 = true;
-#else
-  s_prefer_ipv6 = false;
+  s_config.prefer_ipv6 = true;
 #endif
 
+  // Load from NVS (overrides Kconfig defaults)
+  nvs_handle_t nvs_handle;
+  ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+
   if (ret == ESP_OK) {
-    size_t required_size = sizeof(s_wifi_ssid);
-    if (nvs_get_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid, &required_size) !=
-        ESP_OK) {
-      s_wifi_ssid[0] = '\0';
-    }
+    size_t required_size;
 
-    required_size = sizeof(s_wifi_password);
-    if (nvs_get_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password,
+    required_size = sizeof(s_config.ssid);
+    if (nvs_get_str(nvs_handle, NVS_KEY_SSID, s_config.ssid,
                     &required_size) != ESP_OK) {
-      s_wifi_password[0] = '\0';
+      s_config.ssid[0] = '\0';
     }
 
-    required_size = sizeof(s_hostname);
-    if (nvs_get_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname, &required_size) !=
-        ESP_OK) {
-      s_hostname[0] = '\0';
-    }
-
-    required_size = sizeof(s_syslog_addr);
-    if (nvs_get_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr,
+    required_size = sizeof(s_config.password);
+    if (nvs_get_str(nvs_handle, NVS_KEY_PASSWORD, s_config.password,
                     &required_size) != ESP_OK) {
-      s_syslog_addr[0] = '\0';
+      s_config.password[0] = '\0';
     }
 
-    required_size = sizeof(s_sntp_server);
-    if (nvs_get_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server,
+    required_size = sizeof(s_config.hostname);
+    if (nvs_get_str(nvs_handle, NVS_KEY_HOSTNAME, s_config.hostname,
                     &required_size) != ESP_OK) {
-      s_sntp_server[0] = '\0';
+      s_config.hostname[0] = '\0';
     }
 
-    required_size = sizeof(s_image_url);
-    if (nvs_get_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url,
+    required_size = sizeof(s_config.syslog_addr);
+    if (nvs_get_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_config.syslog_addr,
                     &required_size) != ESP_OK) {
-      s_image_url[0] = '\0';
+      s_config.syslog_addr[0] = '\0';
+    }
+
+    required_size = sizeof(s_config.sntp_server);
+    if (nvs_get_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_config.sntp_server,
+                    &required_size) != ESP_OK) {
+      s_config.sntp_server[0] = '\0';
+    }
+
+    required_size = sizeof(s_config.image_url);
+    if (nvs_get_str(nvs_handle, NVS_KEY_IMAGE_URL, s_config.image_url,
+                    &required_size) != ESP_OK) {
+      s_config.image_url[0] = '\0';
     }
 
     uint8_t val_u8;
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &val_u8) == ESP_OK) {
-      s_swap_colors = (val_u8 != 0);
+      s_config.swap_colors = (val_u8 != 0);
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, &val_u8) == ESP_OK) {
-      s_wifi_power_save = static_cast<wifi_ps_type_t>(val_u8);
+      s_config.wifi_power_save = static_cast<wifi_ps_type_t>(val_u8);
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_SKIP_VERSION, &val_u8) == ESP_OK) {
-      s_skip_display_version = (val_u8 != 0);
+      s_config.skip_display_version = (val_u8 != 0);
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_AP_MODE, &val_u8) == ESP_OK) {
-      s_ap_mode = (val_u8 != 0);
+      s_config.ap_mode = (val_u8 != 0);
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_PREFER_IPV6, &val_u8) == ESP_OK) {
-      s_prefer_ipv6 = (val_u8 != 0);
+      s_config.prefer_ipv6 = (val_u8 != 0);
     }
 
     nvs_close(nvs_handle);
   }
 
+  // Apply secrets.json defaults if NVS has no SSID
   bool save_defaults = false;
-  if (strlen(s_wifi_ssid) == 0) {
+  if (strlen(s_config.ssid) == 0) {
     char placeholder_ssid[MAX_SSID_LEN + 1] = WIFI_SSID;
     char placeholder_password[MAX_PASSWORD_LEN + 1] = WIFI_PASSWORD;
     char placeholder_url[MAX_URL_LEN + 1] = REMOTE_URL;
 
     if (strstr(placeholder_ssid, "Xplaceholder") == nullptr &&
         strlen(placeholder_ssid) > 0) {
-      strncpy(s_wifi_ssid, placeholder_ssid, MAX_SSID_LEN);
-      s_wifi_ssid[MAX_SSID_LEN] = '\0';
+      snprintf(s_config.ssid, sizeof(s_config.ssid), "%s", placeholder_ssid);
 
       if (strstr(placeholder_password, "Xplaceholder") == nullptr) {
-        strncpy(s_wifi_password, placeholder_password, MAX_PASSWORD_LEN);
-        s_wifi_password[MAX_PASSWORD_LEN] = '\0';
+        snprintf(s_config.password, sizeof(s_config.password), "%s",
+                 placeholder_password);
       } else {
-        s_wifi_password[0] = '\0';
+        s_config.password[0] = '\0';
       }
       save_defaults = true;
     }
 
-    if (strlen(s_image_url) == 0 &&
+    if (strlen(s_config.image_url) == 0 &&
         strstr(placeholder_url, "Xplaceholder") == nullptr &&
         strlen(placeholder_url) > 0) {
-      strncpy(s_image_url, placeholder_url, MAX_URL_LEN);
-      s_image_url[MAX_URL_LEN] = '\0';
+      snprintf(s_config.image_url, sizeof(s_config.image_url), "%s",
+               placeholder_url);
     }
   }
 
-  if (save_defaults && strlen(s_wifi_ssid) > 0 && strlen(s_wifi_password) > 0) {
-    nvs_save_settings();
+  if (save_defaults && strlen(s_config.ssid) > 0 &&
+      strlen(s_config.password) > 0) {
+    persist_to_nvs();
   }
 
   ESP_LOGI(TAG, "Settings initialized. SSID: %s, URL: %s, AP Mode: %d",
-           s_wifi_ssid, s_image_url, s_ap_mode);
+           s_config.ssid, s_config.image_url, s_config.ap_mode);
 
   return ESP_OK;
 }
 
-esp_err_t nvs_get_ssid(char* ssid, size_t max_len) {
-  if (!ssid) return ESP_ERR_INVALID_ARG;
-  strncpy(ssid, s_wifi_ssid, max_len);
-  ssid[max_len - 1] = '\0';
-  return ESP_OK;
+system_config_t config_get(void) {
+  system_config_t copy;
+  xSemaphoreTake(s_mutex, portMAX_DELAY);
+  memcpy(&copy, &s_config, sizeof(system_config_t));
+  xSemaphoreGive(s_mutex);
+  return copy;
 }
 
-esp_err_t nvs_get_password(char* password, size_t max_len) {
-  if (!password) return ESP_ERR_INVALID_ARG;
-  strncpy(password, s_wifi_password, max_len);
-  password[max_len - 1] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_get_hostname(char* hostname, size_t max_len) {
-  if (!hostname) return ESP_ERR_INVALID_ARG;
-  strncpy(hostname, s_hostname, max_len);
-  hostname[max_len - 1] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_get_syslog_addr(char* addr, size_t max_len) {
-  if (!addr) return ESP_ERR_INVALID_ARG;
-  strncpy(addr, s_syslog_addr, max_len);
-  addr[max_len - 1] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_get_sntp_server(char* server, size_t max_len) {
-  if (!server) return ESP_ERR_INVALID_ARG;
-  strncpy(server, s_sntp_server, max_len);
-  server[max_len - 1] = '\0';
-  return ESP_OK;
-}
-
-const char* nvs_get_image_url(void) {
-  return (strlen(s_image_url) > 0) ? s_image_url : nullptr;
-}
-
-bool nvs_get_swap_colors(void) { return s_swap_colors; }
-wifi_ps_type_t nvs_get_wifi_power_save(void) { return s_wifi_power_save; }
-bool nvs_get_skip_display_version(void) { return s_skip_display_version; }
-bool nvs_get_ap_mode(void) { return s_ap_mode; }
-bool nvs_get_prefer_ipv6(void) { return s_prefer_ipv6; }
-
-esp_err_t nvs_set_ssid(const char* ssid) {
-  if (!ssid) return ESP_ERR_INVALID_ARG;
-  if (strlen(ssid) > MAX_SSID_LEN) return ESP_ERR_INVALID_SIZE;
-  strncpy(s_wifi_ssid, ssid, MAX_SSID_LEN);
-  s_wifi_ssid[MAX_SSID_LEN] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_password(const char* password) {
-  if (!password) return ESP_ERR_INVALID_ARG;
-  if (strlen(password) > MAX_PASSWORD_LEN) return ESP_ERR_INVALID_SIZE;
-  strncpy(s_wifi_password, password, MAX_PASSWORD_LEN);
-  s_wifi_password[MAX_PASSWORD_LEN] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_hostname(const char* hostname) {
-  if (!hostname) return ESP_ERR_INVALID_ARG;
-  if (strlen(hostname) > MAX_HOSTNAME_LEN) return ESP_ERR_INVALID_SIZE;
-  strncpy(s_hostname, hostname, MAX_HOSTNAME_LEN);
-  s_hostname[MAX_HOSTNAME_LEN] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_syslog_addr(const char* addr) {
-  if (!addr) {
-    s_syslog_addr[0] = '\0';
-    return ESP_OK;
-  }
-  if (strlen(addr) > MAX_SYSLOG_ADDR_LEN) return ESP_ERR_INVALID_SIZE;
-  strncpy(s_syslog_addr, addr, MAX_SYSLOG_ADDR_LEN);
-  s_syslog_addr[MAX_SYSLOG_ADDR_LEN] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_sntp_server(const char* server) {
-  if (!server) return ESP_ERR_INVALID_ARG;
-  if (strlen(server) > MAX_SNTP_SERVER_LEN) return ESP_ERR_INVALID_SIZE;
-  strncpy(s_sntp_server, server, MAX_SNTP_SERVER_LEN);
-  s_sntp_server[MAX_SNTP_SERVER_LEN] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_image_url(const char* image_url) {
-  if (!image_url) {
-    s_image_url[0] = '\0';
-    return ESP_OK;
-  }
-  if (strlen(image_url) > MAX_URL_LEN) return ESP_ERR_INVALID_SIZE;
-  strncpy(s_image_url, image_url, MAX_URL_LEN);
-  s_image_url[MAX_URL_LEN] = '\0';
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_swap_colors(bool swap_colors) {
-  s_swap_colors = swap_colors;
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save) {
-  s_wifi_power_save = power_save;
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_skip_display_version(bool skip) {
-  s_skip_display_version = skip;
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_ap_mode(bool ap_mode) {
-  s_ap_mode = ap_mode;
-  return ESP_OK;
-}
-
-esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6) {
-  s_prefer_ipv6 = prefer_ipv6;
-  return ESP_OK;
-}
-
-esp_err_t nvs_save_settings(void) {
-  nvs_handle_t nvs_handle;
-  esp_err_t err;
-
-  err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-  if (err != ESP_OK) return err;
-
-  nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
-  nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
-  nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname);
-  nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr);
-  nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server);
-  nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
-
-  nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE,
-             static_cast<uint8_t>(s_wifi_power_save));
-  nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION,
-             s_skip_display_version ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
-
-  err = nvs_commit(nvs_handle);
-  nvs_close(nvs_handle);
-  return err;
+void config_set(const system_config_t* cfg) {
+  xSemaphoreTake(s_mutex, portMAX_DELAY);
+  memcpy(&s_config, cfg, sizeof(system_config_t));
+  persist_to_nvs();
+  xSemaphoreGive(s_mutex);
 }

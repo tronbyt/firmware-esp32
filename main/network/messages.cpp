@@ -28,16 +28,7 @@ esp_err_t msg_send_client_info() {
 
   esp_err_t ret = ESP_OK;
   uint8_t mac[6];
-  char ssid[33] = {0};
-  char hostname[33] = {0};
-  char syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
-  char sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
-  nvs_get_ssid(ssid, sizeof(ssid));
-  nvs_get_hostname(hostname, sizeof(hostname));
-  nvs_get_syslog_addr(syslog_addr, sizeof(syslog_addr));
-  nvs_get_sntp_server(sntp_server, sizeof(sntp_server));
-  const char* image_url = nvs_get_image_url();
-  if (!image_url) image_url = "";
+  auto cfg = config_get();
 
   cJSON* root = cJSON_CreateObject();
   if (!root) return ESP_ERR_NO_MEM;
@@ -62,17 +53,17 @@ esp_err_t msg_send_client_info() {
              "Failed to get MAC address; sending client info without MAC.");
   }
 
-  cJSON_AddStringToObject(ci, "ssid", ssid);
-  cJSON_AddStringToObject(ci, "hostname", hostname);
-  cJSON_AddStringToObject(ci, "syslog_addr", syslog_addr);
-  cJSON_AddStringToObject(ci, "sntp_server", sntp_server);
-  cJSON_AddStringToObject(ci, "image_url", image_url);
-  cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
-  cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
+  cJSON_AddStringToObject(ci, "ssid", cfg.ssid);
+  cJSON_AddStringToObject(ci, "hostname", cfg.hostname);
+  cJSON_AddStringToObject(ci, "syslog_addr", cfg.syslog_addr);
+  cJSON_AddStringToObject(ci, "sntp_server", cfg.sntp_server);
+  cJSON_AddStringToObject(ci, "image_url", cfg.image_url);
+  cJSON_AddBoolToObject(ci, "swap_colors", cfg.swap_colors);
+  cJSON_AddNumberToObject(ci, "wifi_power_save", cfg.wifi_power_save);
   cJSON_AddBoolToObject(ci, "skip_display_version",
-                        nvs_get_skip_display_version());
-  cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
-  cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
+                        cfg.skip_display_version);
+  cJSON_AddBoolToObject(ci, "ap_mode", cfg.ap_mode);
+  cJSON_AddBoolToObject(ci, "prefer_ipv6", cfg.prefer_ipv6);
 
   char* json_str = cJSON_PrintUnformatted(root);
   if (json_str) {

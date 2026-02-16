@@ -577,7 +577,7 @@ int gfx_initialize(const char* img_url) {
 
   if (display_initialize()) return 1;
 
-  if (!nvs_get_skip_display_version()) {
+  if (!config_get().skip_display_version) {
     display_version_info(img_url);
   }
 

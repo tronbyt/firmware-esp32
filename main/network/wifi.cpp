@@ -74,7 +74,7 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base,
                              WIFI_CONNECTED_BIT | WIFI_CONNECTED_IPV6_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
 
-        if (nvs_get_ap_mode() &&
+        if (config_get().ap_mode &&
             s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS &&
             !s_connection_given_up) {
           ESP_LOGW(TAG,
@@ -136,7 +136,7 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base,
 int wifi_initialize(const char* ssid, const char* password) {
   ESP_LOGI(TAG, "Initializing WiFi");
 
-  if (!nvs_get_ap_mode()) {
+  if (!config_get().ap_mode) {
     ESP_LOGI(TAG, "AP mode disabled via settings");
   }
 
@@ -148,23 +148,24 @@ int wifi_initialize(const char* ssid, const char* password) {
   app_sntp_config();
 
   s_sta_netif = esp_netif_create_default_wifi_sta();
-  if (nvs_get_ap_mode()) {
+  auto settings = config_get();
+  if (settings.ap_mode) {
     ap_init_netif();
   }
 
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+  wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
+  ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
 
   char hostname[MAX_HOSTNAME_LEN + 1];
-  nvs_get_hostname(hostname, sizeof(hostname));
+  snprintf(hostname, sizeof(hostname), "%s", settings.hostname);
   if (strlen(hostname) == 0) {
     uint8_t mac[6];
     esp_wifi_get_mac(WIFI_IF_STA, mac);
     snprintf(hostname, sizeof(hostname), "tronbyt-%02x%02x%02x", mac[3],
              mac[4], mac[5]);
     ESP_LOGI(TAG, "Generated default hostname: %s", hostname);
-    nvs_set_hostname(hostname);
-    nvs_save_settings();
+    snprintf(settings.hostname, sizeof(settings.hostname), "%s", hostname);
+    config_set(&settings);
   }
   wifi_set_hostname(hostname);
 
@@ -175,11 +176,9 @@ int wifi_initialize(const char* ssid, const char* password) {
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6,
                                              &wifi_event_handler, nullptr));
 
-  char saved_ssid[33] = {0};
-  nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
-  bool has_credentials = (strlen(saved_ssid) > 0);
+  bool has_credentials = (strlen(settings.ssid) > 0);
 
-  if (nvs_get_ap_mode()) {
+  if (settings.ap_mode) {
     ap_configure();
   } else {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
@@ -187,12 +186,12 @@ int wifi_initialize(const char* ssid, const char* password) {
 
   if (has_credentials) {
     wifi_config_t sta_config = {};
-    nvs_get_ssid(reinterpret_cast<char*>(sta_config.sta.ssid),
-                 sizeof(sta_config.sta.ssid));
-    nvs_get_password(reinterpret_cast<char*>(sta_config.sta.password),
-                     sizeof(sta_config.sta.password));
+    snprintf(reinterpret_cast<char*>(sta_config.sta.ssid),
+             sizeof(sta_config.sta.ssid), "%s", settings.ssid);
+    snprintf(reinterpret_cast<char*>(sta_config.sta.password),
+             sizeof(sta_config.sta.password), "%s", settings.password);
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
-    ESP_LOGI(TAG, "Configured STA with SSID: %s", saved_ssid);
+    ESP_LOGI(TAG, "Configured STA with SSID: %s", settings.ssid);
   }
 
   ESP_ERROR_CHECK(esp_wifi_start());
@@ -210,7 +209,7 @@ int wifi_initialize(const char* ssid, const char* password) {
 #endif
 
   if (!has_credentials) {
-    if (nvs_get_ap_mode()) {
+    if (settings.ap_mode) {
       ESP_LOGI(
           TAG,
           "No valid WiFi credentials available, starting in AP mode only");
@@ -279,9 +278,7 @@ bool wifi_wait_for_connection(uint32_t timeout_ms) {
     return true;
   }
 
-  char saved_ssid[33] = {0};
-  nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
-  if (strlen(saved_ssid) == 0) {
+  if (strlen(config_get().ssid) == 0) {
     ESP_LOGI(TAG, "No saved config, won't connect.");
     return false;
   }
@@ -344,9 +341,7 @@ void wifi_health_check(void) {
     esp_restart();
   }
 
-  char saved_ssid[33] = {0};
-  nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
-  if (strlen(saved_ssid) > 0) {
+  if (strlen(config_get().ssid) > 0) {
     ESP_LOGI(TAG, "Reconnecting in Health check...");
     esp_err_t err = esp_wifi_connect();
     if (err != ESP_OK) {
@@ -359,7 +354,7 @@ void wifi_health_check(void) {
 }
 
 void wifi_apply_power_save(void) {
-  int power_save_mode = nvs_get_wifi_power_save();
+  wifi_ps_type_t power_save_mode = config_get().wifi_power_save;
   ESP_LOGI(TAG, "Setting WiFi Power Save Mode to %d...", power_save_mode);
-  esp_wifi_set_ps(static_cast<wifi_ps_type_t>(power_save_mode));
+  esp_wifi_set_ps(power_save_mode);
 }

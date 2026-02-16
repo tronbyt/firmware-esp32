@@ -99,7 +99,8 @@ int syslog_vprintf(const char* fmt, va_list args) {
                    "%Y-%m-%dT%H:%M:%S.000Z", &timeinfo);
         }
 
-        nvs_get_hostname(s_hostname, sizeof(s_hostname));
+        snprintf(s_hostname, sizeof(s_hostname), "%s",
+                 config_get().hostname);
         if (strlen(s_hostname) == 0) strcpy(s_hostname, "-");
 
         int pkt_len =

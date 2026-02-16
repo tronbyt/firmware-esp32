@@ -10,7 +10,6 @@
 extern "C" {
 #endif
 
-// Maximum string lengths
 #define MAX_SSID_LEN 32
 #define MAX_PASSWORD_LEN 64
 #define MAX_HOSTNAME_LEN 32
@@ -19,37 +18,28 @@ extern "C" {
 #define MAX_SYSLOG_ADDR_LEN 128
 #define MAX_SNTP_SERVER_LEN 64
 
-// Initialize NVS settings
+typedef struct {
+  char ssid[MAX_SSID_LEN + 1];
+  char password[MAX_PASSWORD_LEN + 1];
+  char hostname[MAX_HOSTNAME_LEN + 1];
+  char syslog_addr[MAX_SYSLOG_ADDR_LEN + 1];
+  char sntp_server[MAX_SNTP_SERVER_LEN + 1];
+  char image_url[MAX_URL_LEN + 1];
+  bool swap_colors;
+  wifi_ps_type_t wifi_power_save;
+  bool skip_display_version;
+  bool ap_mode;
+  bool prefer_ipv6;
+} system_config_t;
+
+/// Initialize NVS and load settings into the config struct.
 esp_err_t nvs_settings_init(void);
 
-// Getters
-esp_err_t nvs_get_ssid(char *ssid, size_t max_len);
-esp_err_t nvs_get_password(char *password, size_t max_len);
-esp_err_t nvs_get_hostname(char *hostname, size_t max_len);
-esp_err_t nvs_get_syslog_addr(char *addr, size_t max_len);
-esp_err_t nvs_get_sntp_server(char *server, size_t max_len);
-const char *nvs_get_image_url(void);
-bool nvs_get_swap_colors(void);
-wifi_ps_type_t nvs_get_wifi_power_save(void);
-bool nvs_get_skip_display_version(void);
-bool nvs_get_ap_mode(void);
-bool nvs_get_prefer_ipv6(void);
+/// Return a thread-safe copy of the current configuration.
+system_config_t config_get(void);
 
-// Setters
-esp_err_t nvs_set_ssid(const char *ssid);
-esp_err_t nvs_set_password(const char *password);
-esp_err_t nvs_set_hostname(const char *hostname);
-esp_err_t nvs_set_syslog_addr(const char *addr);
-esp_err_t nvs_set_sntp_server(const char *server);
-esp_err_t nvs_set_image_url(const char *image_url);
-esp_err_t nvs_set_swap_colors(bool swap_colors);
-esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save);
-esp_err_t nvs_set_skip_display_version(bool skip);
-esp_err_t nvs_set_ap_mode(bool ap_mode);
-esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6);
-
-// Save all modified settings to NVS
-esp_err_t nvs_save_settings(void);
+/// Apply a new configuration and persist it to NVS.
+void config_set(const system_config_t* cfg);
 
 #ifdef __cplusplus
 }

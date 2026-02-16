@@ -38,8 +38,6 @@ void config_saved_callback() {
 }  // namespace
 
 extern "C" void app_main(void) {
-  const char* image_url = nullptr;
-
   ESP_LOGI(TAG, "App Main Start");
 
 #if CONFIG_BUTTON_PIN >= 0
@@ -73,7 +71,8 @@ extern "C" void app_main(void) {
   }
   esp_register_shutdown_handler(&wifi_shutdown);
 
-  image_url = nvs_get_image_url();
+  auto cfg = config_get();
+  const char* image_url = (cfg.image_url[0] != '\0') ? cfg.image_url : nullptr;
 
   if (gfx_initialize(image_url)) {
     ESP_LOGE(TAG, "failed to initialize gfx");
@@ -81,7 +80,7 @@ extern "C" void app_main(void) {
   }
   esp_register_shutdown_handler(&display_shutdown);
 
-  if (nvs_get_ap_mode()) {
+  if (cfg.ap_mode) {
     ESP_LOGI(TAG, "Starting AP Web Server...");
     ap_start();
   }
@@ -101,7 +100,7 @@ extern "C" void app_main(void) {
   if (sta_connected) {
     ESP_LOGI(TAG, "WiFi connected successfully!");
 
-    if (nvs_get_prefer_ipv6()) {
+    if (config_get().prefer_ipv6) {
       ESP_LOGI(TAG, "IPv6 preference enabled, waiting for global address...");
       if (wifi_wait_for_ipv6(5000)) {
         ESP_LOGI(TAG, "IPv6 Ready!");
@@ -116,20 +115,21 @@ extern "C" void app_main(void) {
       esp_sntp_init();
     }
 
-    char syslog_addr[MAX_SYSLOG_ADDR_LEN + 1];
-    if (nvs_get_syslog_addr(syslog_addr, sizeof(syslog_addr)) == ESP_OK &&
-        strlen(syslog_addr) > 0) {
-      syslog_init(syslog_addr);
+    {
+      auto syslog_cfg = config_get();
+      if (strlen(syslog_cfg.syslog_addr) > 0) {
+        syslog_init(syslog_cfg.syslog_addr);
+      }
     }
 
     sta_api_start();
   }
 
-  if (nvs_get_ap_mode()) {
+  if (cfg.ap_mode) {
     ap_register_wildcard();
   }
 
-  if (nvs_get_ap_mode()) {
+  if (cfg.ap_mode) {
     if (button_boot || !sta_connected) {
       ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
       ESP_LOGI(TAG, "Loading Config WEBP");
@@ -153,7 +153,7 @@ extern "C" void app_main(void) {
   }
 
   if (button_boot) {
-    if (!nvs_get_ap_mode()) {
+    if (!cfg.ap_mode) {
       ESP_LOGW(TAG,
                "Boot button pressed but AP mode disabled; skipping "
                "configuration wait");
@@ -180,12 +180,13 @@ extern "C" void app_main(void) {
     }
   }
 
-  if (nvs_get_ap_mode()) {
+  if (cfg.ap_mode) {
     ap_start_shutdown_timer();
   }
 
   while (true) {
-    image_url = nvs_get_image_url();
+    cfg = config_get();
+    image_url = (cfg.image_url[0] != '\0') ? cfg.image_url : nullptr;
     if (image_url && strlen(image_url) > 0) {
       break;
     }

@@ -256,7 +256,8 @@ void stop_dns_server() {
 }
 
 esp_err_t root_handler(httpd_req_t* req) {
-  const char* image_url = nvs_get_image_url();
+  auto cfg = config_get();
+  const char* image_url = (cfg.image_url[0] != '\0') ? cfg.image_url : nullptr;
   ESP_LOGI(TAG, "Serving root page (chunked)");
 
   httpd_resp_set_type(req, "text/html");
@@ -282,7 +283,7 @@ esp_err_t root_handler(httpd_req_t* req) {
     if ((ret = httpd_resp_send_chunk(req, s_html_part3_start,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
-    if (nvs_get_swap_colors()) {
+    if (cfg.swap_colors) {
       if ((ret = httpd_resp_send_chunk(req, "checked",
                                        HTTPD_RESP_USE_STRLEN)) != ESP_OK)
         break;
@@ -400,11 +401,18 @@ esp_err_t save_handler(httpd_req_t* req) {
   ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s, Swap Colors: %s", ssid,
            image_url, swap_colors ? "true" : "false");
 
-  nvs_set_ssid(ssid);
-  nvs_set_password(password);
-  nvs_set_image_url(strlen(image_url) < 6 ? nullptr : image_url);
-  nvs_set_swap_colors(swap_colors);
-  nvs_save_settings();
+  {
+    auto cfg = config_get();
+    snprintf(cfg.ssid, sizeof(cfg.ssid), "%s", ssid);
+    snprintf(cfg.password, sizeof(cfg.password), "%s", password);
+    if (strlen(image_url) >= 6) {
+      snprintf(cfg.image_url, sizeof(cfg.image_url), "%s", image_url);
+    } else {
+      cfg.image_url[0] = '\0';
+    }
+    cfg.swap_colors = swap_colors;
+    config_set(&cfg);
+  }
 
   free(buf);
 
