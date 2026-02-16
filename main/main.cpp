@@ -1,7 +1,6 @@
 #include <cstring>
 
 #include <esp_log.h>
-#include <esp_sntp.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -15,7 +14,7 @@
 #include "nvs_settings.h"
 #include "scheduler.h"
 #include "sdkconfig.h"
-#include "sntp.h"
+#include "ntp.h"
 #include "sockets.h"
 #include "sta_api.h"
 #include "syslog.h"
@@ -117,9 +116,7 @@ extern "C" void app_main(void) {
       }
     }
 
-    if (!esp_sntp_enabled()) {
-      esp_sntp_init();
-    }
+    ntp_init();
 
     {
       auto syslog_cfg = config_get();

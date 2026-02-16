@@ -27,7 +27,6 @@
 
 #include "ap.h"
 #include "nvs_settings.h"
-#include "sntp.h"
 
 namespace {
 
@@ -144,8 +143,6 @@ int wifi_initialize(const char* ssid, const char* password) {
 
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-  app_sntp_config();
 
   s_sta_netif = esp_netif_create_default_wifi_sta();
   auto settings = config_get();
