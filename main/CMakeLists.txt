@@ -24,6 +24,7 @@ idf_component_register(SRCS "main.c"
                             "syslog.c"
                             "sntp.c"
                             "heap_monitor.c"
+                            "sta_api.c"
                        INCLUDE_DIRS ".")
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)

@@ -20,6 +20,7 @@
 #include "remote.h"
 #include "sdkconfig.h"
 #include "sntp.h"
+#include "sta_api.h"
 #include "syslog.h"
 #include "version.h"
 #include "wifi.h"
@@ -514,6 +515,9 @@ void app_main(void) {
         strlen(syslog_addr) > 0) {
       syslog_init(syslog_addr);
     }
+
+    // Start local REST API for status/health queries
+    sta_api_start();
   }
 
   if (nvs_get_ap_mode()) {
