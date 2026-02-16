@@ -9,13 +9,7 @@
 #include "nvs_settings.h"
 #include "sdkconfig.h"
 
-namespace {
-
-const char* TAG = "mdns";
-
-bool s_running = false;
-
-const char* board_model() {
+const char* mdns_board_model() {
 #if defined(CONFIG_BOARD_TIDBYT_GEN1)
   return "tidbyt-gen1";
 #elif defined(CONFIG_BOARD_TIDBYT_GEN2)
@@ -33,6 +27,12 @@ const char* board_model() {
 #endif
 }
 
+namespace {
+
+const char* TAG = "mdns";
+
+bool s_running = false;
+
 void start_mdns() {
   if (s_running) return;
 
@@ -48,7 +48,7 @@ void start_mdns() {
   const esp_app_desc_t* app = esp_app_get_description();
 
   mdns_txt_item_t txt[] = {
-      {"model", board_model()},
+      {"model", mdns_board_model()},
       {"version", app->version},
   };
 

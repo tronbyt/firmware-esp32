@@ -20,6 +20,15 @@ void invoke_registrars() {
   }
 }
 
+esp_err_t cors_options_handler(httpd_req_t *req) {
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Methods",
+                     "GET,POST,OPTIONS");
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+  httpd_resp_send(req, nullptr, 0);
+  return ESP_OK;
+}
+
 void event_handler(void *arg, esp_event_base_t base, int32_t id,
                    void *event_data) {
   if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
@@ -55,6 +64,15 @@ void http_server_start(void) {
   }
 
   ESP_LOGI(TAG, "HTTP server started on port %d", config.server_port);
+
+  const httpd_uri_t options_uri = {
+      .uri = "/api/*",
+      .method = HTTP_OPTIONS,
+      .handler = cors_options_handler,
+      .user_ctx = nullptr,
+  };
+  httpd_register_uri_handler(s_server, &options_uri);
+
   invoke_registrars();
 }
 

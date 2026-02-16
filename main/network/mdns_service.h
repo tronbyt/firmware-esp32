@@ -8,6 +8,9 @@ extern "C" {
 /// mDNS starts when an IP is acquired and stops on disconnect.
 void mdns_service_init(void);
 
+/// Return the board model string (e.g. "tronbyt-s3").
+const char* mdns_board_model(void);
+
 #ifdef __cplusplus
 }
 #endif
