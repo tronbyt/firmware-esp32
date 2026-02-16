@@ -710,14 +710,13 @@ int gfx_update(void* webp, size_t len, int32_t dwell_secs) {
   ESP_LOGI(TAG, "Queued image counter=%d size=%zu dwell=%ld",
            counter, len, static_cast<long>(dwell_secs));
 
-  State current_state = ctx.state.load(std::memory_order_acquire);
-
   lock.release();
 
-  // In original-fw style WS mode, queued content should not preempt active
-  // dwell unless an explicit interrupt arrives. Only wake immediately when
-  // player is idle.
-  if (current_state == State::IDLE) {
+  // Always notify after enqueue to avoid races where state flips to IDLE
+  // between queueing and the task's next wait. This does not force preemption:
+  // PLAYING state still keeps queued images until dwell expires unless an
+  // explicit preempt request arrives.
+  if (ctx.task) {
     xTaskNotifyGive(ctx.task);
   }
 
