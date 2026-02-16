@@ -8,3 +8,4 @@ dependencies:
     git: https://github.com/datagutt/libwebp.git
     version: xtensa-pie
   espressif/cjson: "*"
+  espressif/mdns: "*"
