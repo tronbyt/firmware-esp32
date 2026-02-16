@@ -8,7 +8,6 @@
 #define DISPLAY_MAX_BRIGHTNESS 100
 #define DISPLAY_MIN_BRIGHTNESS 0
 
-extern volatile int32_t isAnimating;  // Declare the variable
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,7 +26,6 @@ void display_text(const char* text, int x, int y, uint8_t r, uint8_t g,
                   uint8_t b, int scale);
 void display_flip(void);
 bool display_wait_frame(uint32_t timeout_ms);
-// int32_t isAnimating = 0;  // Initialize with a valid value
 
 #ifdef __cplusplus
 }

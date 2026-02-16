@@ -38,7 +38,6 @@
 #endif
 
 static const char* TAG = "main";
-volatile int32_t isAnimating = 1;
 static int32_t app_dwell_secs = CONFIG_REFRESH_INTERVAL_SECONDS;
 // main buffer downloaded webp data
 static uint8_t* webp;
@@ -177,7 +176,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                   cJSON_IsTrue(immediate_item)) {
                 ESP_LOGD(TAG,
                          "Interrupting current animation to load queued image");
-                isAnimating = -1;
+                gfx_interrupt();
               }
 
               // Check for "dwell_secs"
@@ -413,7 +412,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
             ESP_LOGI(
                 TAG,
                 "First WebSocket image received - interrupting boot animation");
-            isAnimating = -1;
+            gfx_interrupt();
             first_ws_image_received = true;
           }
 
@@ -749,18 +748,14 @@ void app_main(void) {
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
 
-        // Wait for the current animation to finish (isAnimating will be 0)
-        if (isAnimating > 0) {
+        // Wait for the current animation to finish
+        if (gfx_is_animating()) {
           ESP_LOGI(TAG, "Waiting for current webp to finish");
-          while (isAnimating > 0) {
-            vTaskDelay(pdMS_TO_TICKS(1));
-          }
+          gfx_wait_idle();
         }
 
         // Wait for gfx task to load the newly queued image before fetching the
-        // next one This ensures the image has begun displaying before we fetch
-        // again
-        // ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)", queued_counter);
+        // next one
         int timeout = 0;
         while (gfx_get_loaded_counter() != queued_counter && timeout < 20000) {
           vTaskDelay(pdMS_TO_TICKS(10));
@@ -770,12 +765,6 @@ void app_main(void) {
           ESP_LOGE(TAG, "Timeout waiting for gfx task to load image");
         } else {
           ESP_LOGI(TAG, "Gfx task loaded image counter %d ms", queued_counter);
-        }
-
-        // ESP_LOGD(TAG, "Setting isAnimating to 1");
-        // Only start animation if OTA is not in progress
-        if (isAnimating != -1) {
-          isAnimating = 1;
         }
       }
       wifi_health_check();

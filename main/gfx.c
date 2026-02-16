@@ -2,9 +2,11 @@
 #include <esp_log.h>
 #include <esp_websocket_client.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/event_groups.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 #include <http_parser.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <webp/demux.h>
@@ -21,25 +23,27 @@ static const char *TAG = "gfx";
 #define GFX_TASK_PRIO 2
 #define GFX_TASK_STACK_SIZE 4092
 
+// Event group bit: set when gfx task is idle (not animating)
+#define GFX_BIT_IDLE BIT0
+
 struct gfx_state {
   TaskHandle_t task;
   SemaphoreHandle_t mutex;
+  EventGroupHandle_t event_group;
   void *buf;
   size_t len;
   int32_t dwell_secs;
   int counter;
-  int loaded_counter;  // Counter that tracks which image has been loaded by gfx
-                       // task
-  esp_websocket_client_handle_t
-      ws_handle;  // Websocket handle for sending notifications
+  int loaded_counter;
+  esp_websocket_client_handle_t ws_handle;
   volatile bool paused;
+  atomic_bool interrupted;
 };
 
 static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t *isAnimating);
+static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs);
 static void send_websocket_notification(int counter);
 
 static bool is_static_asset(const void *ptr) {
@@ -76,6 +80,12 @@ int gfx_initialize(const char *img_url) {
     ESP_LOGE(TAG, "Could not create gfx mutex");
     return 1;
   }
+  _state->event_group = xEventGroupCreate();
+  if (_state->event_group == NULL) {
+    ESP_LOGE(TAG, "Could not create gfx event group");
+    return 1;
+  }
+  atomic_store(&_state->interrupted, false);
   ESP_LOGI(TAG, "done with gfx init");
 
   // Initialize the display
@@ -175,13 +185,13 @@ int gfx_initialize(const char *img_url) {
 
   // Launch the graphics loop in separate task
   BaseType_t ret =
-      xTaskCreatePinnedToCore(gfx_loop,              // pvTaskCode
-                              "gfx_loop",            // pcName
-                              GFX_TASK_STACK_SIZE,   // usStackDepth
-                              (void *)&isAnimating,  // pvParameters
-                              GFX_TASK_PRIO,         // uxPriority
-                              &_state->task,         // pxCreatedTask
-                              GFX_TASK_CORE          // xCoreID
+      xTaskCreatePinnedToCore(gfx_loop,             // pvTaskCode
+                              "gfx_loop",           // pcName
+                              GFX_TASK_STACK_SIZE,  // usStackDepth
+                              NULL,                 // pvParameters
+                              GFX_TASK_PRIO,        // uxPriority
+                              &_state->task,        // pxCreatedTask
+                              GFX_TASK_CORE         // xCoreID
       );
   if (ret != pdPASS) {
     ESP_LOGE(TAG, "Could not create gfx task");
@@ -330,7 +340,7 @@ int gfx_display_asset(const char *asset_type) {
   // logic in gfx_update/gfx_loop ensures it is not freed.
 
   // Interrupt current animation to display asset immediately
-  isAnimating = -1;
+  gfx_interrupt();
 
   // Display the asset with a 5-second dwell time so it stays visible
   // We cast const away because gfx_update takes void*, but we know we won't
@@ -354,7 +364,7 @@ void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
 
 void gfx_stop(void) {
   if (_state) {
-    isAnimating = -1;  // Signal current draw to stop
+    atomic_store(&_state->interrupted, true);
     _state->paused = true;
     ESP_LOGI(TAG, "Graphics loop paused");
   }
@@ -362,7 +372,7 @@ void gfx_stop(void) {
 
 void gfx_start(void) {
   if (_state) {
-    isAnimating = 0;
+    atomic_store(&_state->interrupted, false);
     _state->paused = false;
     ESP_LOGI(TAG, "Graphics loop resumed");
   }
@@ -370,17 +380,34 @@ void gfx_start(void) {
 
 void gfx_shutdown(void) { display_shutdown(); }
 
+void gfx_interrupt(void) {
+  if (_state) {
+    atomic_store(&_state->interrupted, true);
+  }
+}
+
+void gfx_wait_idle(void) {
+  if (!_state) return;
+  xEventGroupWaitBits(_state->event_group, GFX_BIT_IDLE, pdFALSE, pdTRUE,
+                      portMAX_DELAY);
+}
+
+bool gfx_is_animating(void) {
+  if (!_state) return false;
+  return (xEventGroupGetBits(_state->event_group) & GFX_BIT_IDLE) == 0;
+}
+
 static void gfx_loop(void *args) {
   ESP_LOGI(TAG, "gfx_loop ENTERED");
   void *webp = NULL;
   size_t len = 0;
   int32_t dwell_secs = 0;
   int counter = -1;
-  int32_t *isAnimating = (int32_t *)args;
   ESP_LOGI(TAG, "Graphics loop running on core %d", xPortGetCoreID());
 
   for (;;) {
     if (_state->paused) {
+      xEventGroupSetBits(_state->event_group, GFX_BIT_IDLE);
       vTaskDelay(pdMS_TO_TICKS(100));
       continue;
     }
@@ -404,7 +431,10 @@ static void gfx_loop(void *args) {
       _state->buf = NULL;  // gfx_loop now owns the buffer
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
-      if (*isAnimating == -1 && !_state->paused) *isAnimating = 1;
+
+      // Clear interrupt flag and mark as animating
+      atomic_store(&_state->interrupted, false);
+      xEventGroupClearBits(_state->event_group, GFX_BIT_IDLE);
 
       // Send websocket notification that we're now displaying this image
       send_websocket_notification(counter);
@@ -416,11 +446,11 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, isAnimating)) {
+      if (draw_webp(webp, len, dwell_secs)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-        *isAnimating = 0;
+        xEventGroupSetBits(_state->event_group, GFX_BIT_IDLE);
         // Free the invalid buffer to prevent re-drawing it
         if (webp && !is_static_asset(webp)) {
           free(webp);
@@ -430,28 +460,27 @@ static void gfx_loop(void *args) {
       }
       // keep webp around to loop until the next image arrives
     } else {
+      xEventGroupSetBits(_state->event_group, GFX_BIT_IDLE);
       vTaskDelay(pdMS_TO_TICKS(100));
     }
   }
 }
 
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t *isAnimating) {
-  // Set up WebP decoder
-  // ESP_LOGI(TAG, "starting draw_webp");
-  int app_dwell_secs = dwell_secs;
+static inline bool gfx_should_stop(void) {
+  return atomic_load(&_state->interrupted) || _state->paused;
+}
 
+static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs) {
+  int app_dwell_secs = dwell_secs;
   int64_t dwell_us;
 
   if (app_dwell_secs <= 0) {
     ESP_LOGW(TAG, "dwell_secs is 0. Looping one more time while we wait.");
-    dwell_us = 1 * 1000000;  // default to 1s if it's zero so we loop again or
-                             // show the image for 1 more second.
+    dwell_us = 1 * 1000000;
   } else {
     ESP_LOGD(TAG, "dwell_secs: %d", app_dwell_secs);
     dwell_us = app_dwell_secs * 1000000;
   }
-  // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
 
   WebPData webpData;
   WebPDataInit(&webpData);
@@ -473,83 +502,66 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
     ESP_LOGE(TAG, "Could not get WebP animation");
     draw_error_indicator_pixel();
-    WebPAnimDecoderDelete(decoder);  // Clean up decoder before returning
+    WebPAnimDecoderDelete(decoder);
     return 1;
   }
-  // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
+
   int64_t start_us = esp_timer_get_time();
 
-  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 && !_state->paused) {
+  while (esp_timer_get_time() - start_us < dwell_us && !gfx_should_stop()) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
-    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 && !_state->paused) {
+    while (WebPAnimDecoderHasMoreFrames(decoder) && !gfx_should_stop()) {
       uint8_t *pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
 
       if (delay > 0) {
-        // Wait for the previous frame's duration to expire.
-        // Since we decoded *during* this time, we only sleep for the remainder.
         xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
       } else {
-        // First frame or no delay: yield briefly to let other tasks run
         vTaskDelay(pdMS_TO_TICKS(1));
         lastWakeTime = xTaskGetTickCount();
       }
 
 #ifdef CONFIG_DISPLAY_FRAME_SYNC
-      // Draw to back buffer, wait for frame boundary, then flip
       display_draw_buffer(pix, animation.canvas_width, animation.canvas_height);
       display_wait_frame(50);
       display_flip();
 #else
       display_draw(pix, animation.canvas_width, animation.canvas_height);
 #endif
-      // Guarantee a yield every frame to feed the watchdog. When decode
-      // time exceeds the animation frame delay, xTaskDelayUntil above
-      // returns immediately; likewise display_wait_frame returns instantly
-      // if the ISR already signalled the semaphore. Without this, the
-      // inner loop can starve IDLE1 for seconds on heavy animations.
       vTaskDelay(1);
 
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
 
-    // reset decoder to start from the beginning
     WebPAnimDecoderReset(decoder);
 
     if (delay > 0) {
       xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
     } else {
-      vTaskDelay(
-          pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
+      vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    // In case of a single frame, sleep for app_dwell_secs
+    // For single-frame images, wait for dwell duration in 100ms chunks
     if (animation.frame_count == 1) {
-      // For static images, we need to check isAnimating periodically during the
-      // dwell time Break the dwell time into 100ms chunks so we can respond to
-      // immediate commands
       int64_t static_start_us = esp_timer_get_time();
       while (esp_timer_get_time() - static_start_us < dwell_us) {
-        if (*isAnimating == -1 || _state->paused) {
-          // Immediate command received, break out of dwell time
-          break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
+        if (gfx_should_stop()) break;
+        vTaskDelay(pdMS_TO_TICKS(100));
       }
       break;
     }
   }
   WebPAnimDecoderDelete(decoder);
 
-  // ESP_LOGI(TAG, "Setting isAnimating to 0");
-  if (*isAnimating != -1) {
-    *isAnimating = 0;
+  // Signal idle unless we were interrupted (caller will handle that)
+  if (!atomic_load(&_state->interrupted)) {
+    xEventGroupSetBits(_state->event_group, GFX_BIT_IDLE);
   }
   return 0;
 }
