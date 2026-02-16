@@ -517,7 +517,10 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs) {
     while (WebPAnimDecoderHasMoreFrames(decoder) && !gfx_should_stop()) {
       uint8_t *pix;
       int timestamp;
-      WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
+      if (!WebPAnimDecoderGetNext(decoder, &pix, &timestamp)) {
+        ESP_LOGE(TAG, "WebPAnimDecoderGetNext failed (OOM or corrupt frame)");
+        break;
+      }
 
       if (delay > 0) {
         xTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(delay));
