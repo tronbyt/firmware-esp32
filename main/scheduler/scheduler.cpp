@@ -263,7 +263,16 @@ void http_apply_prefetch() {
   ctx.brightness_pct = ctx.prefetch.brightness_pct;
 
   int32_t dwell = ctx.prefetch.dwell_secs;
-  gfx_update(ctx.prefetch.webp, ctx.prefetch.len, dwell);
+  int counter = gfx_update(ctx.prefetch.webp, ctx.prefetch.len, dwell);
+  if (counter < 0) {
+    ESP_LOGE(TAG, "Failed to queue HTTP-fetched WebP");
+    free(ctx.prefetch.webp);
+    ctx.prefetch.webp = nullptr;
+    ctx.prefetch.clear();
+    start_retry_timer();
+    transition_to(State::IDLE);
+    return;
+  }
   // Ownership transferred
   ctx.prefetch.webp = nullptr;
   ctx.prefetch.clear();
