@@ -7,8 +7,10 @@
 #include <freertos/task.h>
 
 #include "ap.h"
+#include "console.h"
 #include "display.h"
 #include "heap_monitor.h"
+#include "mdns.h"
 #include "nvs_settings.h"
 #include "scheduler.h"
 #include "sdkconfig.h"
@@ -62,6 +64,7 @@ extern "C" void app_main(void) {
   ESP_LOGI(TAG, "Check for button press");
 
   ESP_ERROR_CHECK(nvs_settings_init());
+  console_init();
   heap_monitor_init();
 
   ESP_LOGI(TAG, "Initializing WiFi manager...");
@@ -70,6 +73,7 @@ extern "C" void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&wifi_shutdown);
+  mdns_service_init();
 
   auto cfg = config_get();
   const char* image_url = (cfg.image_url[0] != '\0') ? cfg.image_url : nullptr;
