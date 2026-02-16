@@ -12,20 +12,9 @@ if(NOT DEFINED VAL_REMOTE_URL)
     set(VAL_REMOTE_URL "XplaceholderREMOTEURL___________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________")
 endif()
 
-idf_component_register(SRCS "main.c"
-                            "display.cpp"
-                            "gfx.c"
-                            "ota.c" 
-                            "remote.c" 
-                            "wifi.c"
-                            "ap.c"
-                            "nvs_settings.c"
-                            "dns_wrapper.c"
-                            "syslog.c"
-                            "sntp.c"
-                            "heap_monitor.c"
-                            "sta_api.c"
-                       INCLUDE_DIRS ".")
+file(GLOB_RECURSE MAIN_SRCS "*.cpp" "*.c")
+idf_component_register(SRCS ${MAIN_SRCS}
+                       INCLUDE_DIRS "." "display" "gfx" "network" "config" "system")
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 

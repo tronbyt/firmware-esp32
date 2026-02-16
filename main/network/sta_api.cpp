@@ -12,11 +12,13 @@
 #include "version.h"
 #include "wifi.h"
 
-static const char* TAG = "sta_api";
-static httpd_handle_t s_server = NULL;
-static bool s_owns_server = false;
+namespace {
 
-static esp_err_t status_handler(httpd_req_t* req) {
+const char* TAG = "sta_api";
+httpd_handle_t s_server = nullptr;
+bool s_owns_server = false;
+
+esp_err_t status_handler(httpd_req_t* req) {
   cJSON* root = cJSON_CreateObject();
   if (!root) {
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "out of memory");
@@ -35,9 +37,12 @@ static esp_err_t status_handler(httpd_req_t* req) {
 
   heap_snapshot_t snap;
   heap_monitor_get_snapshot(&snap);
-  cJSON_AddNumberToObject(root, "free_heap", (double)snap.internal_free);
-  cJSON_AddNumberToObject(root, "free_spiram", (double)snap.spiram_free);
-  cJSON_AddNumberToObject(root, "min_free_heap", (double)snap.internal_min);
+  cJSON_AddNumberToObject(root, "free_heap",
+                          static_cast<double>(snap.internal_free));
+  cJSON_AddNumberToObject(root, "free_spiram",
+                          static_cast<double>(snap.spiram_free));
+  cJSON_AddNumberToObject(root, "min_free_heap",
+                          static_cast<double>(snap.internal_min));
   cJSON_AddNumberToObject(root, "images_loaded", gfx_get_loaded_counter());
 
   char* json = cJSON_PrintUnformatted(root);
@@ -53,7 +58,7 @@ static esp_err_t status_handler(httpd_req_t* req) {
   return ESP_OK;
 }
 
-static esp_err_t health_handler(httpd_req_t* req) {
+esp_err_t health_handler(httpd_req_t* req) {
   bool connected = wifi_is_connected();
   const char* resp =
       connected ? "{\"status\":\"ok\"}" : "{\"status\":\"degraded\"}";
@@ -62,6 +67,8 @@ static esp_err_t health_handler(httpd_req_t* req) {
   httpd_resp_sendstr(req, resp);
   return ESP_OK;
 }
+
+}  // namespace
 
 esp_err_t sta_api_start(void) {
   if (s_server) {
@@ -116,11 +123,11 @@ esp_err_t sta_api_stop(void) {
   if (s_owns_server) {
     err = httpd_stop(s_server);
   }
-  s_server = NULL;
+  s_server = nullptr;
   s_owns_server = false;
   return err;
 }
 
 bool sta_api_owns_server(httpd_handle_t server) {
-  return s_server != NULL && s_server == server;
+  return s_server != nullptr && s_server == server;
 }
