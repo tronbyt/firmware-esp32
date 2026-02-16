@@ -60,6 +60,8 @@ struct PendingCmd {
   size_t len = 0;
   int32_t dwell_secs = 0;
   int counter = 0;
+  gfx_source_type_t source_type = GFX_SOURCE_RAM;
+  const char* embedded_name = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -83,6 +85,8 @@ struct PlayerContext {
   size_t webp_len = 0;
   int32_t dwell_secs = 0;
   int active_counter = -1;
+  gfx_source_type_t source_type = GFX_SOURCE_RAM;
+  const char* embedded_name = nullptr;
 
   // Decoder
   WebPAnimDecoder* decoder = nullptr;
@@ -175,13 +179,24 @@ void free_buffer() {
 //------------------------------------------------------------------------------
 
 void emit_playing_event() {
+  gfx_playing_evt_t evt = {};
+  evt.source_type = ctx.source_type;
+  evt.embedded_name = ctx.embedded_name;
+  evt.duration_ms = (ctx.dwell_secs > 0)
+                        ? static_cast<uint32_t>(ctx.dwell_secs) * 1000
+                        : 0;
+  evt.frame_count = ctx.anim_info.frame_count;
   esp_event_post(GFX_PLAYER_EVENTS, GFX_PLAYER_EVT_PLAYING,
-                 nullptr, 0, 0);
+                 &evt, sizeof(evt), 0);
 }
 
 void emit_error_event() {
+  gfx_error_evt_t evt = {};
+  evt.source_type = ctx.source_type;
+  evt.embedded_name = ctx.embedded_name;
+  evt.error_code = -1;
   esp_event_post(GFX_PLAYER_EVENTS, GFX_PLAYER_EVT_ERROR,
-                 nullptr, 0, 0);
+                 &evt, sizeof(evt), 0);
 }
 
 void emit_stopped_event() {
@@ -307,9 +322,12 @@ void handle_pending_command() {
     ctx.dwell_secs = ctx.pending.dwell_secs;
     ctx.active_counter = ctx.pending.counter;
     ctx.loaded_counter = ctx.pending.counter;
+    ctx.source_type = ctx.pending.source_type;
+    ctx.embedded_name = ctx.pending.embedded_name;
 
     ctx.pending.buf = nullptr;
     ctx.pending.len = 0;
+    ctx.pending.embedded_name = nullptr;
     ctx.pending.valid.store(false, std::memory_order_release);
   }
 
@@ -540,6 +558,8 @@ int gfx_initialize(const char* img_url) {
   ctx.webp_len = ASSET_BOOT_WEBP_LEN;
   ctx.dwell_secs = 0;
   ctx.active_counter = 0;
+  ctx.source_type = GFX_SOURCE_EMBEDDED;
+  ctx.embedded_name = "boot";
 
   ctx.mutex = xSemaphoreCreateMutex();
   if (!ctx.mutex) {
@@ -606,6 +626,8 @@ int gfx_update(void* webp, size_t len, int32_t dwell_secs) {
   ctx.pending.len = len;
   ctx.pending.dwell_secs = dwell_secs;
   ctx.pending.counter = counter;
+  ctx.pending.source_type = GFX_SOURCE_RAM;
+  ctx.pending.embedded_name = nullptr;
   ctx.pending.valid.store(true, std::memory_order_release);
 
   ESP_LOGI(TAG, "Queued image counter=%d size=%zu dwell=%ld",
@@ -625,38 +647,70 @@ int gfx_get_loaded_counter(void) {
   return ctx.loaded_counter;
 }
 
-int gfx_display_asset(const char* asset_type) {
-  const uint8_t* asset_data = nullptr;
-  size_t asset_len = 0;
+int gfx_play_embedded(const char* name, bool immediate) {
+  struct EmbeddedSprite {
+    const char* name;
+    const uint8_t* data;
+    size_t len;
+  };
+  static const EmbeddedSprite sprites[] = {
+      {"boot", ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN},
+      {"config", ASSET_CONFIG_WEBP, ASSET_CONFIG_WEBP_LEN},
+      {"error_404", ASSET_404_WEBP, ASSET_404_WEBP_LEN},
+      {"no_connect", ASSET_NOCONNECT_WEBP, ASSET_NOCONNECT_WEBP_LEN},
+      {"oversize", ASSET_OVERSIZE_WEBP, ASSET_OVERSIZE_WEBP_LEN},
+  };
 
-  if (strcmp(asset_type, "config") == 0) {
-    asset_data = ASSET_CONFIG_WEBP;
-    asset_len = ASSET_CONFIG_WEBP_LEN;
-  } else if (strcmp(asset_type, "error_404") == 0) {
-    asset_data = ASSET_404_WEBP;
-    asset_len = ASSET_404_WEBP_LEN;
-  } else if (strcmp(asset_type, "no_connect") == 0) {
-    asset_data = ASSET_NOCONNECT_WEBP;
-    asset_len = ASSET_NOCONNECT_WEBP_LEN;
-  } else if (strcmp(asset_type, "oversize") == 0) {
-    ESP_LOGI(TAG, "DISPLAYING OVERSIZE GRAPHIC");
-    asset_data = ASSET_OVERSIZE_WEBP;
-    asset_len = ASSET_OVERSIZE_WEBP_LEN;
-  } else {
-    ESP_LOGE(TAG, "Unknown asset type: %s", asset_type);
+  const EmbeddedSprite* sprite = nullptr;
+  for (const auto& s : sprites) {
+    if (strcmp(name, s.name) == 0) {
+      sprite = &s;
+      break;
+    }
+  }
+
+  if (!sprite) {
+    ESP_LOGE(TAG, "Unknown embedded sprite: %s", name);
     return 1;
   }
 
-  gfx_interrupt();
+  if (immediate) {
+    gfx_interrupt();
+  }
 
-  int result = gfx_update(
-      const_cast<void*>(static_cast<const void*>(asset_data)),
-      asset_len, 5);
-  if (result < 0) {
-    ESP_LOGE(TAG, "Failed to display %s asset", asset_type);
+  raii::MutexGuard lock(ctx.mutex);
+  if (!lock) {
+    ESP_LOGE(TAG, "Could not take mutex");
     return 1;
   }
+
+  // Free unconsumed pending buffer
+  if (ctx.pending.valid.load() && ctx.pending.buf &&
+      !is_static_asset(ctx.pending.buf)) {
+    free(ctx.pending.buf);
+  }
+
+  ctx.counter++;
+  int counter = ctx.counter;
+
+  ctx.pending.buf =
+      const_cast<void*>(static_cast<const void*>(sprite->data));
+  ctx.pending.len = sprite->len;
+  ctx.pending.dwell_secs = 0;  // Embedded sprites loop forever
+  ctx.pending.counter = counter;
+  ctx.pending.source_type = GFX_SOURCE_EMBEDDED;
+  ctx.pending.embedded_name = sprite->name;
+  ctx.pending.valid.store(true, std::memory_order_release);
+
+  ESP_LOGI(TAG, "Queued embedded sprite '%s' counter=%d", name, counter);
+
+  lock.release();
+  xTaskNotifyGive(ctx.task);
   return 0;
+}
+
+int gfx_display_asset(const char* asset_type) {
+  return gfx_play_embedded(asset_type, true);
 }
 
 void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g,
