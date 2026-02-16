@@ -45,6 +45,7 @@ static struct gfx_state *_state = NULL;
 static void gfx_loop(void *arg);
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs);
 static void send_websocket_notification(int counter);
+void gfx_interrupt(void);
 
 static bool is_static_asset(const void *ptr) {
   if (ptr == ASSET_BOOT_WEBP) return true;
