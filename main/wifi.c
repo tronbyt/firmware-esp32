@@ -297,8 +297,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         esp_wifi_connect();
         break;
       case WIFI_EVENT_STA_CONNECTED:
-        ESP_LOGI(TAG, "Connected to AP, creating IPv6 link local address");
-        esp_netif_create_ip6_linklocal(s_sta_netif);
+        // Only create an IPv6 link-local when the user has opted in.
+        // Sending an RS triggers an RA containing RDNSS IPv6 addresses;
+        // ESP-IDF stores those in dns[0], overwriting the DHCP IPv4 DNS
+        // and causing getaddrinfo() to fail at boot.
+        if (nvs_get_prefer_ipv6()) {
+          ESP_LOGI(TAG, "Connected to AP, creating IPv6 link local address");
+          esp_netif_create_ip6_linklocal(s_sta_netif);
+        }
         break;
       case WIFI_EVENT_STA_DISCONNECTED:
         // Increment reconnection counter
