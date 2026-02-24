@@ -673,9 +673,7 @@ void app_main(void) {
     use_websocket = true;
 
     char ws_headers[64 + MAX_API_KEY_LEN] = {0};
-    char api_key[MAX_API_KEY_LEN + 1];
-    if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&
-        strlen(api_key) > 0) {
+    if (strlen(api_key) > 0) {
       snprintf(ws_headers, sizeof(ws_headers), "Authorization: Bearer %s\r\n",
                api_key);
       ESP_LOGD(TAG, "Using Authorization Bearer header for WebSocket");

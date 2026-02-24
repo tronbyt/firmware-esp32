@@ -325,7 +325,11 @@ esp_err_t nvs_set_image_url(const char *image_url) {
       ESP_LOGI(TAG, "Extracted API key from URL");
     }
     if (key_end) {
-      memmove(key_start, key_end + 1, strlen(key_end + 1) + 1);
+      char *question_mark = strchr(s_image_url, '?');
+      if (question_mark == key_start) {
+        *key_end = '?';
+      }
+      memmove(key_start, key_end, strlen(key_end) + 1);
     } else {
       if (key_start > s_image_url && *(key_start - 1) == '?') {
         key_start--;
