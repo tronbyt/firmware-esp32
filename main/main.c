@@ -325,8 +325,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               if (cJSON_IsString(image_url_item) &&
                   (image_url_item->valuestring != NULL)) {
                 nvs_set_image_url(image_url_item->valuestring);
-                ESP_LOGI(TAG, "Updated image_url to %s",
-                         image_url_item->valuestring);
+                ESP_LOGI(TAG, "Updated image_url to %s", nvs_get_image_url());
                 settings_changed = true;
               }
 
@@ -654,6 +653,13 @@ void app_main(void) {
   // image_url is now valid and usable here
   ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
 
+  char api_key[MAX_API_KEY_LEN + 1];
+  if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&
+      strlen(api_key) > 0) {
+    size_t key_len = strlen(api_key);
+    ESP_LOGI(TAG, "API key: ...%s", api_key + key_len - 4);
+  }
+
   ESP_LOGI(TAG, "Free heap: %" PRIu32, esp_get_free_heap_size());
   ESP_LOGI(TAG, "Free PSRAM: %" PRIu32,
            heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
@@ -672,6 +678,7 @@ void app_main(void) {
         strlen(api_key) > 0) {
       snprintf(ws_headers, sizeof(ws_headers), "Authorization: Bearer %s\r\n",
                api_key);
+      ESP_LOGD(TAG, "Using Authorization Bearer header for WebSocket");
     }
 
     esp_websocket_client_config_t ws_cfg = {

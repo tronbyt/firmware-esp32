@@ -218,6 +218,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
       strlen(api_key) > 0) {
     char auth_header[64 + MAX_API_KEY_LEN];
     snprintf(auth_header, sizeof(auth_header), "Bearer %s", api_key);
+    ESP_LOGD(TAG, "Using Authorization Bearer header");
     if (esp_http_client_set_header(http, "Authorization", auth_header) !=
         ESP_OK) {
       ESP_LOGE(TAG, "Failed to set Authorization header");
