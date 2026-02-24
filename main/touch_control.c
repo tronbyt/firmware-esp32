@@ -142,22 +142,6 @@ touch_event_t touch_control_check(void) {
     g_touch.last_baseline_update = now;
   }
 
-#if TOUCH_DEBUG_ENABLED
-  static uint32_t last_debug = 0;
-
-  // Every 5 seconds, show touch debug info
-  if (now - last_debug > 5000) {
-    ESP_LOGI(TAG, "=== TOUCH DEBUG (adaptive baseline) ===");
-    ESP_LOGI(TAG, "Current: %d, Adaptive baseline: %.0f, Delta: %d",
-             value, g_touch.adaptive_baseline, delta);
-    ESP_LOGI(TAG, "Touch threshold: %d drop, Touched: %s",
-             TOUCH_DROP_THRESHOLD, is_touched ? "YES" : "NO");
-    ESP_LOGI(TAG, "State: %d", g_touch.state);
-    ESP_LOGI(TAG, "========================================");
-    last_debug = now;
-  }
-#endif
-
   touch_event_t event = TOUCH_EVENT_NONE;
 
   switch (g_touch.state) {
@@ -165,7 +149,7 @@ touch_event_t touch_control_check(void) {
       if (is_touched) {
         g_touch.state = STATE_TOUCHING;
         g_touch.touch_start_time = now;
-        g_touch.is_late_tap = false;  // Fresh tap from idle
+        g_touch.is_late_tap = false;
       }
       break;
 
@@ -176,8 +160,6 @@ touch_event_t touch_control_check(void) {
         if (duration >= TOUCH_HOLD_MS) {
           g_touch.state = STATE_IDLE;
         } else if (g_touch.is_late_tap) {
-          // Late tap (came after double-tap window expired) - swallow it
-          ESP_LOGI(TAG, "Late tap swallowed (%ldms) - no skip", duration);
           g_touch.state = STATE_IDLE;
         } else if (duration >= MIN_TAP_DURATION_MS) {
           g_touch.release_time = now;
@@ -191,7 +173,6 @@ touch_event_t touch_control_check(void) {
           event = TOUCH_EVENT_HOLD;
           g_touch.state = STATE_HOLD_FIRED;
           g_touch.last_event_time = now;
-          ESP_LOGI(TAG, "HOLD detected");
         }
       }
       break;
@@ -200,26 +181,20 @@ touch_event_t touch_control_check(void) {
       if (is_touched) {
         uint32_t gap = now - g_touch.release_time;
         if (gap <= DOUBLE_TAP_WINDOW_MS) {
-          // Second tap in time - double-tap!
           event = TOUCH_EVENT_DOUBLE_TAP;
           g_touch.last_event_time = now;
           g_touch.is_late_tap = false;
-          ESP_LOGI(TAG, "DOUBLE-TAP detected");
         } else {
-          // Second tap came too late - mark it so it gets swallowed on release
           g_touch.is_late_tap = true;
-          ESP_LOGI(TAG, "Late second tap (gap %ldms > %dms)", gap, DOUBLE_TAP_WINDOW_MS);
         }
         g_touch.state = STATE_TOUCHING;
         g_touch.touch_start_time = now;
       } else {
         uint32_t wait_time = now - g_touch.release_time;
         if (wait_time > DOUBLE_TAP_WINDOW_MS) {
-          // No second tap came - this was a single tap
           event = TOUCH_EVENT_TAP;
           g_touch.last_event_time = now;
           g_touch.state = STATE_IDLE;
-          ESP_LOGI(TAG, "TAP detected (single)");
         }
       }
       break;
