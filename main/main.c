@@ -665,14 +665,23 @@ void app_main(void) {
       strncmp(image_url, "wss://", 6) == 0) {
     ESP_LOGI(TAG, "Using websockets with URL: %s", image_url);
     use_websocket = true;
-    // setup ws event handlers
-    const esp_websocket_client_config_t ws_cfg = {
+
+    char ws_headers[64 + MAX_API_KEY_LEN] = {0};
+    char api_key[MAX_API_KEY_LEN + 1];
+    if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&
+        strlen(api_key) > 0) {
+      snprintf(ws_headers, sizeof(ws_headers), "Authorization: Bearer %s\r\n",
+               api_key);
+    }
+
+    esp_websocket_client_config_t ws_cfg = {
         .uri = image_url,
         .task_stack = 8192,
         .buffer_size = 8192,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .reconnect_timeout_ms = 10000,
         .network_timeout_ms = 10000,
+        .headers = strlen(ws_headers) > 0 ? ws_headers : NULL,
     };
     ws_handle = esp_websocket_client_init(&ws_cfg);
     esp_websocket_register_events(ws_handle, WEBSOCKET_EVENT_ANY,

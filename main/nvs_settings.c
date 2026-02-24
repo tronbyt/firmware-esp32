@@ -25,6 +25,7 @@
 #define NVS_KEY_SKIP_VERSION "skip_ver"
 #define NVS_KEY_AP_MODE "ap_mode"
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
+#define NVS_KEY_API_KEY "api_key"
 
 // Internal storage
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
@@ -38,6 +39,7 @@ static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
 static bool s_skip_display_version = false;
 static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
+static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 
 // Hardcoded defaults (from secrets.json via CMake)
 #ifndef WIFI_SSID
@@ -153,6 +155,12 @@ esp_err_t nvs_settings_init(void) {
       s_prefer_ipv6 = (val_u8 != 0);
     }
 
+    required_size = sizeof(s_api_key);
+    if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key,
+                    &required_size) != ESP_OK) {
+      s_api_key[0] = '\0';
+    }
+
     nvs_close(nvs_handle);
   }
 
@@ -181,11 +189,7 @@ esp_err_t nvs_settings_init(void) {
     if (strlen(s_image_url) == 0 &&
         strstr(placeholder_url, "Xplaceholder") == NULL &&
         strlen(placeholder_url) > 0) {
-      strncpy(s_image_url, placeholder_url, MAX_URL_LEN);
-      s_image_url[MAX_URL_LEN] = '\0';
-      // If we have credentials, we save everything. If we don't have
-      // credentials but have URL, we might want to save URL too? But existing
-      // logic only saved if SSID/PASS were valid.
+      nvs_set_image_url(placeholder_url);
     }
   }
 
@@ -248,6 +252,13 @@ bool nvs_get_ap_mode(void) { return s_ap_mode; }
 
 bool nvs_get_prefer_ipv6(void) { return s_prefer_ipv6; }
 
+esp_err_t nvs_get_api_key(char *api_key, size_t max_len) {
+  if (!api_key) return ESP_ERR_INVALID_ARG;
+  strncpy(api_key, s_api_key, max_len);
+  api_key[max_len - 1] = '\0';
+  return ESP_OK;
+}
+
 esp_err_t nvs_set_ssid(const char *ssid) {
   if (!ssid) return ESP_ERR_INVALID_ARG;
   if (strlen(ssid) > MAX_SSID_LEN) return ESP_ERR_INVALID_SIZE;
@@ -299,6 +310,40 @@ esp_err_t nvs_set_image_url(const char *image_url) {
   if (strlen(image_url) > MAX_URL_LEN) return ESP_ERR_INVALID_SIZE;
   strncpy(s_image_url, image_url, MAX_URL_LEN);
   s_image_url[MAX_URL_LEN] = '\0';
+
+  char *key_start = strstr(s_image_url, "&key=");
+  if (!key_start) {
+    key_start = strstr(s_image_url, "?key=");
+  }
+  if (key_start) {
+    char *key_value = key_start + 5;
+    char *key_end = strchr(key_value, '&');
+    size_t key_len = key_end ? (size_t)(key_end - key_value) : strlen(key_value);
+    if (key_len > 0 && key_len <= MAX_API_KEY_LEN) {
+      strncpy(s_api_key, key_value, key_len);
+      s_api_key[key_len] = '\0';
+    }
+    if (key_end) {
+      memmove(key_start, key_end + 1, strlen(key_end + 1) + 1);
+    } else {
+      if (key_start > s_image_url && *(key_start - 1) == '?') {
+        key_start--;
+      }
+      *key_start = '\0';
+    }
+  }
+
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_api_key(const char *api_key) {
+  if (!api_key) {
+    s_api_key[0] = '\0';
+    return ESP_OK;
+  }
+  if (strlen(api_key) > MAX_API_KEY_LEN) return ESP_ERR_INVALID_SIZE;
+  strncpy(s_api_key, api_key, MAX_API_KEY_LEN);
+  s_api_key[MAX_API_KEY_LEN] = '\0';
   return ESP_OK;
 }
 
@@ -340,6 +385,7 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr);
   nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server);
   nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
+  nvs_set_str(nvs_handle, NVS_KEY_API_KEY, s_api_key);
 
   nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);
