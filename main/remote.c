@@ -9,6 +9,7 @@
 #include <stdlib.h>
 
 #include "gfx.h"
+#include "nvs_settings.h"
 #include "sdkconfig.h"
 #include "version.h"
 
@@ -210,7 +211,18 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
   if (esp_http_client_set_header(http, "X-Firmware-Version",
                                  FIRMWARE_VERSION) != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set firmware version header");
-    // Not a critical error; continue anyway
+  }
+
+  char api_key[MAX_API_KEY_LEN + 1];
+  if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&
+      strlen(api_key) > 0) {
+    char auth_header[64 + MAX_API_KEY_LEN];
+    snprintf(auth_header, sizeof(auth_header), "Bearer %s", api_key);
+    ESP_LOGD(TAG, "Using Authorization Bearer header");
+    if (esp_http_client_set_header(http, "Authorization", auth_header) !=
+        ESP_OK) {
+      ESP_LOGE(TAG, "Failed to set Authorization header");
+    }
   }
 
   // Do the request
