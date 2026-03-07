@@ -686,6 +686,8 @@ void app_main(void) {
         .crt_bundle_attach = esp_crt_bundle_attach,
         .reconnect_timeout_ms = 10000,
         .network_timeout_ms = 10000,
+        .ping_interval_sec = 30,
+        .pingpong_timeout_sec = 60,
         .headers = strlen(ws_headers) > 0 ? ws_headers : NULL,
     };
     ws_handle = esp_websocket_client_init(&ws_cfg);
@@ -711,6 +713,7 @@ void app_main(void) {
                         pdMS_TO_TICKS(5000));
 
     bool was_connected = false;
+    int ws_disconnect_count = 0;
     for (;;) {
       bool is_connected = esp_websocket_client_is_connected(ws_handle);
 
@@ -720,16 +723,24 @@ void app_main(void) {
           send_client_info();
           was_connected = true;
         }
+        ws_disconnect_count = 0;
       } else {
         if (was_connected) {
           was_connected = false;
-          ESP_LOGW(TAG, "WebSocket Disconnected");
+          ESP_LOGW(TAG, "WebSocket disconnected");
         }
-        ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
-        esp_websocket_client_stop(ws_handle);
-        esp_err_t err = esp_websocket_client_start(ws_handle);
-        if (err != ESP_OK) {
-          ESP_LOGE(TAG, "Reconnection failed with error %d", err);
+        ws_disconnect_count++;
+        // Let the library's auto-reconnect handle short disconnections.
+        // Only force a stop/start cycle after 60 seconds (12 * 5s).
+        if (ws_disconnect_count >= 12) {
+          ESP_LOGW(TAG, "WebSocket disconnected for 60s, forcing reconnect");
+          esp_websocket_client_stop(ws_handle);
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          esp_err_t err = esp_websocket_client_start(ws_handle);
+          if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Reconnection failed with error %d", err);
+          }
+          ws_disconnect_count = 0;
         }
       }
 
