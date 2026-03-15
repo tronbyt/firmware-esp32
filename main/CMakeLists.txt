@@ -31,7 +31,8 @@ if(CONFIG_BOARD_TIDBYT_GEN2)
 endif()
 
 idf_component_register(SRCS ${SRCS}
-                       INCLUDE_DIRS ".")
+                       INCLUDE_DIRS "."
+                       "${CMAKE_SOURCE_DIR}/managed_components/esp32-hub75-matrixpanel-dma/src")
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 

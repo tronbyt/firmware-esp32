@@ -109,9 +109,11 @@
 #define HEIGHT 32
 #endif
 
-static MatrixPanel_I2S_DMA *_matrix;
+MatrixPanel_I2S_DMA *_matrix = NULL;
 static uint8_t _brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
+
+MatrixPanel_I2S_DMA *display_get_matrix(void) { return _matrix; }
 
 int display_initialize(void) {
   // Get swap_colors setting

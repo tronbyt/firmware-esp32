@@ -455,7 +455,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
 }
 
 void app_main(void) {
-  const char* image_url = NULL;
+  // const char* image_url = NULL;
 
   // delete here for 5 seconds to allow for serial port to connect.
   ESP_LOGI(TAG, "App Main Start");
@@ -491,19 +491,7 @@ void app_main(void) {
   ESP_LOGI(TAG, "finished flash init");
   esp_register_shutdown_handler(&flash_shutdown);
 
-  // Initialize NVS settings
-  ESP_ERROR_CHECK(nvs_settings_init());
-
-  // Setup WiFi.
-  ESP_LOGI(TAG, "Initializing WiFi manager...");
-  // Pass empty strings to force AP mode
-  if (wifi_initialize("", "")) {
-    ESP_LOGE(TAG, "failed to initialize WiFi");
-    return;
-  }
-  esp_register_shutdown_handler(&wifi_shutdown);
-
-  image_url = nvs_get_image_url();
+  // Skip WiFi/NVS for now - go straight to pendulum animation
 
   // Setup the display directly (skip gfx_initialize since dp_run handles
   // drawing)
@@ -512,19 +500,6 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&display_shutdown);
-
-#ifdef CONFIG_BOARD_TIDBYT_GEN2
-  // Initialize touch controls (GPIO33 on Tidbyt Gen2)
-  ESP_LOGI(TAG, "Initializing touch control...");
-  esp_err_t touch_ret = touch_control_init();
-  if (touch_ret == ESP_OK) {
-    ESP_LOGI(TAG, "Touch control ready on GPIO33");
-    touch_control_debug_all_pads();
-  } else {
-    ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
-             esp_err_to_name(touch_ret));
-  }
-#endif
 
   ESP_LOGI(TAG, "Starting double pendulum animation");
   dp_run();
