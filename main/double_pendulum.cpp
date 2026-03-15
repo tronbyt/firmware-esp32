@@ -2,6 +2,7 @@
 
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <esp_log.h>
+#include <esp_random.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <math.h>
@@ -19,7 +20,7 @@ static const char* TAG = "double_pendulum";
 #define ARM1_LENGTH 12
 #define ARM2_LENGTH 10
 
-#define FRAME_DELAY_MS 50
+#define FRAME_DELAY_MS 10
 
 static dp::state current_state;
 static dp::system pendulum_system;
@@ -96,11 +97,14 @@ static void draw_line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g,
 }
 
 static void draw_bob(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
-  for (int dy = -1; dy <= 1; dy++) {
-    for (int dx = -1; dx <= 1; dx++) {
+  // Draw a more circular bob with radius 2 pixels
+  for (int dy = -2; dy <= 2; dy++) {
+    for (int dx = -2; dx <= 2; dx++) {
       int px = x + dx;
       int py = y + dy;
-      if (px >= 0 && px < DISPLAY_WIDTH && py >= 0 && py < DISPLAY_HEIGHT) {
+      // Check if point is within circle radius 2
+      if (dx * dx + dy * dy <= 4 &&  // radius squared = 4
+          px >= 0 && px < DISPLAY_WIDTH && py >= 0 && py < DISPLAY_HEIGHT) {
         display_get_matrix()->drawPixelRGB888(px, py, r, g, b);
       }
     }
@@ -115,16 +119,30 @@ void dp_init(void) {
   pendulum_system.length.first = 1.0;
   pendulum_system.length.second = 1.0;
 
-  current_state.theta.first = 170.0 * 3.14159 / 180.0;
-  current_state.theta.second = 150.0 * 3.14159 / 180.0;
+  // Start with lower energy - angles closer to vertical (hanging down)
+  // But add some randomness to avoid always starting the same way
+  // Range: 10-80 degrees from vertical (so mostly down but with some swing)
+  double angle1_offset = 70.0 + (esp_random() % 30);  // 10-80 degrees
+  double angle2_offset = 100.0 + (esp_random() % 30);  // 10-80 degrees
+
+  // Randomly choose direction (left or right) for each arm
+  if (esp_random() % 2) angle1_offset = -angle1_offset;
+  if (esp_random() % 2) angle2_offset = -angle2_offset;
+
+  // Convert from vertical: 0 degrees = straight down, 90 degrees = horizontal
+  current_state.theta.first = angle1_offset * 3.14159 / 180.0;
+  current_state.theta.second = angle2_offset * 3.14159 / 180.0;
   current_state.omega.first = 0.0;
   current_state.omega.second = 0.0;
 
   sim_time = 0.0;
-  hue_counter = 0;
+  hue_counter = esp_random() % 255;  // Start at random hue
 
-  ESP_LOGI(TAG, "Initial angles: theta1=%.2f rad, theta2=%.2f rad",
-           current_state.theta.first, current_state.theta.second);
+  ESP_LOGI(TAG,
+           "Initial angles: theta1=%.2f rad (%.1f° from vertical), theta2=%.2f "
+           "rad (%.1f° from vertical)",
+           current_state.theta.first, angle1_offset, current_state.theta.second,
+           angle2_offset);
 }
 
 void dp_run(void) {
