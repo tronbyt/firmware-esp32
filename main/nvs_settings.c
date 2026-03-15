@@ -26,6 +26,12 @@
 #define NVS_KEY_AP_MODE "ap_mode"
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
 #define NVS_KEY_API_KEY "api_key"
+// Double pendulum settings
+#define NVS_KEY_PENDULUM_SPEED "pend_speed"
+#define NVS_KEY_PENDULUM_ARM1_LENGTH "pend_arm1"
+#define NVS_KEY_PENDULUM_ARM2_LENGTH "pend_arm2"
+#define NVS_KEY_PENDULUM_MASS1 "pend_mass1"
+#define NVS_KEY_PENDULUM_MASS2 "pend_mass2"
 
 // Internal storage
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
@@ -41,6 +47,13 @@ static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 
+// Double pendulum settings
+static float s_pendulum_speed = PENDULUM_SPEED;
+static float s_pendulum_arm1_length = PENDULUM_ARM1_LENGTH;
+static float s_pendulum_arm2_length = PENDULUM_ARM2_LENGTH;
+static float s_pendulum_mass1 = PENDULUM_MASS1;
+static float s_pendulum_mass2 = PENDULUM_MASS2;
+
 // Hardcoded defaults (from secrets.json via CMake)
 #ifndef WIFI_SSID
 #define WIFI_SSID ""
@@ -51,6 +64,13 @@ static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 #ifndef REMOTE_URL
 #define REMOTE_URL ""
 #endif
+
+// Double pendulum settings defaults - hardcoded values
+#define PENDULUM_SPEED 0.01f        // Default physics step size
+#define PENDULUM_ARM1_LENGTH 12.0f  // Default arm 1 length in pixels
+#define PENDULUM_ARM2_LENGTH 10.0f  // Default arm 2 length in pixels
+#define PENDULUM_MASS1 1.0f         // Default mass 1
+#define PENDULUM_MASS2 1.0f         // Default mass 2
 
 esp_err_t nvs_settings_init(void) {
   esp_err_t ret = nvs_flash_init();
@@ -127,6 +147,37 @@ esp_err_t nvs_settings_init(void) {
       s_sntp_server[0] = '\0';
     }
 
+    // Load pendulum settings
+    required_size = sizeof(s_pendulum_speed);
+    if (nvs_get_blob(nvs_handle, NVS_KEY_PENDULUM_SPEED, &s_pendulum_speed,
+                     &required_size) != ESP_OK) {
+      s_pendulum_speed = PENDULUM_SPEED;  // Default
+    }
+
+    required_size = sizeof(s_pendulum_arm1_length);
+    if (nvs_get_blob(nvs_handle, NVS_KEY_PENDULUM_ARM1_LENGTH,
+                     &s_pendulum_arm1_length, &required_size) != ESP_OK) {
+      s_pendulum_arm1_length = PENDULUM_ARM1_LENGTH;  // Default
+    }
+
+    required_size = sizeof(s_pendulum_arm2_length);
+    if (nvs_get_blob(nvs_handle, NVS_KEY_PENDULUM_ARM2_LENGTH,
+                     &s_pendulum_arm2_length, &required_size) != ESP_OK) {
+      s_pendulum_arm2_length = PENDULUM_ARM2_LENGTH;  // Default
+    }
+
+    required_size = sizeof(s_pendulum_mass1);
+    if (nvs_get_blob(nvs_handle, NVS_KEY_PENDULUM_MASS1, &s_pendulum_mass1,
+                     &required_size) != ESP_OK) {
+      s_pendulum_mass1 = PENDULUM_MASS1;  // Default
+    }
+
+    required_size = sizeof(s_pendulum_mass2);
+    if (nvs_get_blob(nvs_handle, NVS_KEY_PENDULUM_MASS2, &s_pendulum_mass2,
+                     &required_size) != ESP_OK) {
+      s_pendulum_mass2 = PENDULUM_MASS2;  // Default
+    }
+
     required_size = sizeof(s_image_url);
     if (nvs_get_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url,
                     &required_size) != ESP_OK) {
@@ -156,8 +207,8 @@ esp_err_t nvs_settings_init(void) {
     }
 
     required_size = sizeof(s_api_key);
-    if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key,
-                    &required_size) != ESP_OK) {
+    if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key, &required_size) !=
+        ESP_OK) {
       s_api_key[0] = '\0';
     }
 
@@ -318,7 +369,8 @@ esp_err_t nvs_set_image_url(const char *image_url) {
   if (key_start) {
     char *key_value = key_start + 5;
     char *key_end = strchr(key_value, '&');
-    size_t key_len = key_end ? (size_t)(key_end - key_value) : strlen(key_value);
+    size_t key_len =
+        key_end ? (size_t)(key_end - key_value) : strlen(key_value);
     if (key_len > 0 && key_len <= MAX_API_KEY_LEN) {
       strncpy(s_api_key, key_value, key_len);
       s_api_key[key_len] = '\0';
@@ -377,6 +429,59 @@ esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6) {
   return ESP_OK;
 }
 
+// Double pendulum settings getters
+float nvs_get_pendulum_speed(void) { return s_pendulum_speed; }
+
+float nvs_get_pendulum_arm1_length(void) { return s_pendulum_arm1_length; }
+
+float nvs_get_pendulum_arm2_length(void) { return s_pendulum_arm2_length; }
+
+float nvs_get_pendulum_mass1(void) { return s_pendulum_mass1; }
+
+float nvs_get_pendulum_mass2(void) { return s_pendulum_mass2; }
+
+// Double pendulum settings setters
+esp_err_t nvs_set_pendulum_speed(float speed) {
+  if (speed <= 0.0f || speed > 1.0f) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_pendulum_speed = speed;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_pendulum_arm1_length(float length) {
+  if (length <= 0.0f || length > 50.0f) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_pendulum_arm1_length = length;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_pendulum_arm2_length(float length) {
+  if (length <= 0.0f || length > 50.0f) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_pendulum_arm2_length = length;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_pendulum_mass1(float mass) {
+  if (mass <= 0.0f || mass > 10.0f) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_pendulum_mass1 = mass;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_pendulum_mass2(float mass) {
+  if (mass <= 0.0f || mass > 10.0f) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_pendulum_mass2 = mass;
+  return ESP_OK;
+}
+
+// Save all modified settings to NVS
 esp_err_t nvs_save_settings(void) {
   nvs_handle_t nvs_handle;
   esp_err_t err;
@@ -391,6 +496,16 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server);
   nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
   nvs_set_str(nvs_handle, NVS_KEY_API_KEY, s_api_key);
+  nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_SPEED, &s_pendulum_speed,
+               sizeof(s_pendulum_speed));
+  nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_ARM1_LENGTH,
+               &s_pendulum_arm1_length, sizeof(s_pendulum_arm1_length));
+  nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_ARM2_LENGTH,
+               &s_pendulum_arm2_length, sizeof(s_pendulum_arm2_length));
+  nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_MASS1, &s_pendulum_mass1,
+               sizeof(s_pendulum_mass1));
+  nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_MASS2, &s_pendulum_mass2,
+               sizeof(s_pendulum_mass2));
 
   nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);

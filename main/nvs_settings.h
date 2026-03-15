@@ -37,6 +37,13 @@ bool nvs_get_skip_display_version(void);
 bool nvs_get_ap_mode(void);
 bool nvs_get_prefer_ipv6(void);
 
+// Double pendulum settings
+float nvs_get_pendulum_speed(void);
+float nvs_get_pendulum_arm1_length(void);
+float nvs_get_pendulum_arm2_length(void);
+float nvs_get_pendulum_mass1(void);
+float nvs_get_pendulum_mass2(void);
+
 // Setters
 esp_err_t nvs_set_ssid(const char *ssid);
 esp_err_t nvs_set_password(const char *password);
