@@ -13,7 +13,7 @@ if(NOT DEFINED VAL_REMOTE_URL)
 endif()
 
 # Conditionally include touch_control.c only for Tidbyt Gen2
-set(SRCS "main.c"
+set(SRCS "double_pendulum.cpp" "main.c"
          "display.cpp"
          "flash.c"
          "gfx.c"
