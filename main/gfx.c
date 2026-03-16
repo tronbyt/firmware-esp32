@@ -39,17 +39,8 @@ static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t *isAnimating);
+                     volatile int32_t *isAnimating);
 static void send_websocket_notification(int counter);
-
-static bool is_static_asset(const void *ptr) {
-  if (ptr == ASSET_BOOT_WEBP) return true;
-  if (ptr == ASSET_CONFIG_WEBP) return true;
-  if (ptr == ASSET_404_WEBP) return true;
-  if (ptr == ASSET_OVERSIZE_WEBP) return true;
-  if (ptr == ASSET_NOCONNECT_WEBP) return true;
-  return false;
-}
 
 int gfx_initialize(const char *img_url) {
   // Only initialize once
@@ -66,17 +57,19 @@ int gfx_initialize(const char *img_url) {
   ESP_LOGI(TAG, "Allocating buffer of size: %d", ASSET_BOOT_WEBP_LEN);
 
   _state = calloc(1, sizeof(struct gfx_state));
-  _state->len = ASSET_BOOT_WEBP_LEN;
   _state->paused = false;
-  ESP_LOGI(TAG, "calloc buff");
-  _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
-  ESP_LOGI(TAG, "done calloc, copying");
-  if (_state->buf == NULL) {
-    ESP_LOGE("gfx", "Memory allocation failed!");
-    return 1;
+  if (!nvs_get_skip_boot_animation()) {
+    _state->len = ASSET_BOOT_WEBP_LEN;
+    ESP_LOGI(TAG, "calloc buff");
+    _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
+    ESP_LOGI(TAG, "done calloc, copying");
+    if (_state->buf == NULL) {
+      ESP_LOGE("gfx", "Memory allocation failed!");
+      return 1;
+    }
+    memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
+    ESP_LOGI(TAG, "done, copying");
   }
-  memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
-  ESP_LOGI(TAG, "done, copying");
 
   _state->mutex = xSemaphoreCreateMutex();
   if (_state->mutex == NULL) {
@@ -88,6 +81,10 @@ int gfx_initialize(const char *img_url) {
   // Initialize the display
   if (display_initialize()) {
     return 1;
+  }
+
+  if (nvs_get_skip_boot_animation()) {
+    display_clear();
   }
 
   // Display version if not skipped
@@ -434,7 +431,7 @@ static void gfx_loop(void *args) {
 }
 
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t *isAnimating) {
+                     volatile int32_t *isAnimating) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;

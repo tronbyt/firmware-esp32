@@ -121,6 +121,8 @@ static esp_err_t send_client_info(void) {
       cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
       cJSON_AddBoolToObject(ci, "skip_display_version",
                             nvs_get_skip_display_version());
+      cJSON_AddBoolToObject(ci, "skip_boot_animation",
+                            nvs_get_skip_boot_animation());
       cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
 
@@ -257,6 +259,16 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 bool val = cJSON_IsTrue(skip_ver_item);
                 nvs_set_skip_display_version(val);
                 ESP_LOGI(TAG, "Updated skip_display_version to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for "skip_boot_animation"
+              cJSON* skip_boot_item =
+                  cJSON_GetObjectItem(root, "skip_boot_animation");
+              if (cJSON_IsBool(skip_boot_item)) {
+                bool val = cJSON_IsTrue(skip_boot_item);
+                nvs_set_skip_boot_animation(val);
+                ESP_LOGI(TAG, "Updated skip_boot_animation to %d", val);
                 settings_changed = true;
               }
 

@@ -163,6 +163,7 @@ esp_err_t syslog_init(const char* addr) {
     s_port = 514;
   }
   strncpy(s_host, host_buf, sizeof(s_host) - 1);
+  s_host[sizeof(s_host) - 1] = '\0';
 
   // Resolve hostname
   struct addrinfo hints = {

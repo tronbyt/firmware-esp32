@@ -28,7 +28,10 @@ void app_sntp_config(void) {
   } else {
     // 2. Use DHCP (if enabled)
     ESP_LOGI(TAG, "Using SNTP from DHCP (fallback: pool.ntp.org)");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     sntp_servermode_dhcp(1);
+#pragma GCC diagnostic pop
     esp_sntp_setservername(0, "pool.ntp.org");
   }
 }

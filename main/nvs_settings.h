@@ -34,6 +34,7 @@ esp_err_t nvs_get_api_key(char *api_key, size_t max_len);
 bool nvs_get_swap_colors(void);
 wifi_ps_type_t nvs_get_wifi_power_save(void);
 bool nvs_get_skip_display_version(void);
+bool nvs_get_skip_boot_animation(void);
 bool nvs_get_ap_mode(void);
 bool nvs_get_prefer_ipv6(void);
 
@@ -48,6 +49,7 @@ esp_err_t nvs_set_api_key(const char *api_key);
 esp_err_t nvs_set_swap_colors(bool swap_colors);
 esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save);
 esp_err_t nvs_set_skip_display_version(bool skip);
+esp_err_t nvs_set_skip_boot_animation(bool skip);
 esp_err_t nvs_set_ap_mode(bool ap_mode);
 esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6);
 
