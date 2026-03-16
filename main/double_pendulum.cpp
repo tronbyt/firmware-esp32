@@ -9,6 +9,7 @@
 
 #include "display.h"
 #include "double_pendulum.h"
+#include "nvs_settings.h"
 
 static const char* TAG = "double_pendulum";
 
@@ -17,8 +18,6 @@ static const char* TAG = "double_pendulum";
 
 #define PIVOT_X 32
 #define PIVOT_Y 6
-#define ARM1_LENGTH 12
-#define ARM2_LENGTH 10
 
 #define FRAME_DELAY_MS 10
 
@@ -27,10 +26,19 @@ static dp::system pendulum_system;
 static double sim_time = 0.0;
 static uint8_t hue_counter = 0;
 
-#define TRAIL_LENGTH 100
-static int trail_x[TRAIL_LENGTH];
-static int trail_y[TRAIL_LENGTH];
+#define TRAIL_LENGTH_MAX 200
+
+static int trail_x[TRAIL_LENGTH_MAX];
+static int trail_y[TRAIL_LENGTH_MAX];
+static uint8_t trail_hue[TRAIL_LENGTH_MAX];
 static int trail_head = 0;
+static int current_trail_length = 200;
+static float current_arm1_length = 12.0f;
+static float current_arm2_length = 10.0f;
+static bool current_trail_color_cycle = true;
+static float current_pendulum_speed = 0.01f;
+static int current_brightness = 128;
+static int current_leg_color = 0xFFFFFF;
 
 static void hsv_to_rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t* r, uint8_t* g,
                        uint8_t* b) {
@@ -119,12 +127,26 @@ static void draw_bob(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
 void dp_init(void) {
   ESP_LOGI(TAG, "Initializing double pendulum");
 
-  pendulum_system.mass.first = 1.0;
-  pendulum_system.mass.second = 1.0;
-  pendulum_system.length.first = 1.0;
-  pendulum_system.length.second = 1.0;
+  // Get settings from NVS
+  float arm1_len = nvs_get_pendulum_arm1_length();
+  float arm2_len = nvs_get_pendulum_arm2_length();
+  current_trail_length = nvs_get_trail_length();
+  current_pendulum_speed = nvs_get_pendulum_speed();
+  current_trail_color_cycle = nvs_get_trail_color_cycle();
+  current_brightness = nvs_get_brightness();
+  current_leg_color = nvs_get_leg_color();
+  if (current_trail_length > TRAIL_LENGTH_MAX) {
+    current_trail_length = TRAIL_LENGTH_MAX;
+  }
 
-  for (int i = 0; i < TRAIL_LENGTH; i++) {
+  pendulum_system.mass.first = nvs_get_pendulum_mass1();
+  pendulum_system.mass.second = nvs_get_pendulum_mass2();
+  current_arm1_length = arm1_len;
+  current_arm2_length = arm2_len;
+  pendulum_system.length.first = arm1_len / 10.0f;  // Scale to simulation units
+  pendulum_system.length.second = arm2_len / 10.0f;
+
+  for (int i = 0; i < TRAIL_LENGTH_MAX; i++) {
     trail_x[i] = -1;
     trail_y[i] = -1;
   }
@@ -162,14 +184,50 @@ void dp_run(void) {
   dp_init();
 
   while (1) {
-    current_state = dp::advance(current_state, pendulum_system, 0.01);
+    // Check if settings were updated via config portal
+    if (nvs_settings_get_and_clear_reload_flag()) {
+      ESP_LOGI(TAG, "Reloading settings from NVS");
+      current_trail_length = nvs_get_trail_length();
+      current_pendulum_speed = nvs_get_pendulum_speed();
+      current_trail_color_cycle = nvs_get_trail_color_cycle();
+      current_brightness = nvs_get_brightness();
+      current_leg_color = nvs_get_leg_color();
+      current_arm1_length = nvs_get_pendulum_arm1_length();
+      current_arm2_length = nvs_get_pendulum_arm2_length();
+      pendulum_system.length.first = current_arm1_length / 10.0f;
+      pendulum_system.length.second = current_arm2_length / 10.0f;
+      pendulum_system.mass.first = nvs_get_pendulum_mass1();
+      pendulum_system.mass.second = nvs_get_pendulum_mass2();
+      if (current_trail_length > TRAIL_LENGTH_MAX) {
+        current_trail_length = TRAIL_LENGTH_MAX;
+      }
+      // Reset trail and pendulum state
+      for (int i = 0; i < TRAIL_LENGTH_MAX; i++) {
+        trail_x[i] = -1;
+        trail_y[i] = -1;
+      }
+      trail_head = 0;
+      // Reinitialize pendulum with new parameters
+      double angle1_offset = 70.0 + (esp_random() % 30);
+      double angle2_offset = 100.0 + (esp_random() % 30);
+      if (esp_random() % 2) angle1_offset = -angle1_offset;
+      if (esp_random() % 2) angle2_offset = -angle2_offset;
+      current_state.theta.first = angle1_offset * 3.14159 / 180.0;
+      current_state.theta.second = angle2_offset * 3.14159 / 180.0;
+      current_state.omega.first = 0.0;
+      current_state.omega.second = 0.0;
+      sim_time = 0.0;
+    }
+
+    current_state =
+        dp::advance(current_state, pendulum_system, current_pendulum_speed);
     sim_time += 0.01;
 
-    double x1 = PIVOT_X + ARM1_LENGTH * sin(current_state.theta.first);
-    double y1 = PIVOT_Y + ARM1_LENGTH * cos(current_state.theta.first);
+    double x1 = PIVOT_X + current_arm1_length * sin(current_state.theta.first);
+    double y1 = PIVOT_Y + current_arm1_length * cos(current_state.theta.first);
 
-    double x2 = x1 + ARM2_LENGTH * sin(current_state.theta.second);
-    double y2 = y1 + ARM2_LENGTH * cos(current_state.theta.second);
+    double x2 = x1 + current_arm2_length * sin(current_state.theta.second);
+    double y2 = y1 + current_arm2_length * cos(current_state.theta.second);
 
     int ix1 = (int)(x1 + 0.5);
     int iy1 = (int)(y1 + 0.5);
@@ -178,17 +236,29 @@ void dp_run(void) {
 
     display_clear();
 
+    MatrixPanel_I2S_DMA* matrix = display_get_matrix();
+    if (!matrix) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+
     // Draw trail as individual pixels (smoother curve than connecting lines)
-    for (int i = 0; i < TRAIL_LENGTH; i++) {
-      int idx = (trail_head - i - 1 + TRAIL_LENGTH) % TRAIL_LENGTH;
+    for (int i = 0; i < current_trail_length; i++) {
+      int idx = (trail_head - i - 1 + TRAIL_LENGTH_MAX) % TRAIL_LENGTH_MAX;
       if (trail_x[idx] >= 0 && trail_y[idx] >= 0) {
-        uint8_t alpha = (uint8_t)((TRAIL_LENGTH - i) * 200 / TRAIL_LENGTH);
+        uint8_t alpha =
+            (uint8_t)((current_trail_length - i) * 200 / current_trail_length);
         uint8_t r, g, b;
-        hsv_to_rgb((hue_counter - i * 2) & 0xFF, 255, alpha, &r, &g, &b);
+        uint8_t hue = current_trail_color_cycle ? (hue_counter - i * 2) & 0xFF
+                                                : trail_hue[idx];
+        hsv_to_rgb(hue, 255, alpha, &r, &g, &b);
+        // Apply brightness
+        r = r * current_brightness / 255;
+        g = g * current_brightness / 255;
+        b = b * current_brightness / 255;
         if (trail_x[idx] >= 0 && trail_x[idx] < DISPLAY_WIDTH &&
             trail_y[idx] >= 0 && trail_y[idx] < DISPLAY_HEIGHT) {
-          display_get_matrix()->drawPixelRGB888(trail_x[idx], trail_y[idx], r,
-                                                g, b);
+          matrix->drawPixelRGB888(trail_x[idx], trail_y[idx], r, g, b);
         }
       }
     }
@@ -196,15 +266,45 @@ void dp_run(void) {
     // Update trail
     trail_x[trail_head] = ix2;
     trail_y[trail_head] = iy2;
-    trail_head = (trail_head + 1) % TRAIL_LENGTH;
+    trail_hue[trail_head] = hue_counter;
+    trail_head = (trail_head + 1) % TRAIL_LENGTH_MAX;
 
-    draw_line(PIVOT_X, PIVOT_Y, ix1, iy1, 255, 255, 255);
-    draw_line(ix1, iy1, ix2, iy2, 255, 255, 255);
+    // Apply brightness to leg color
+    uint8_t leg_r =
+        ((current_leg_color >> 16) & 0xFF) * current_brightness / 255;
+    uint8_t leg_g =
+        ((current_leg_color >> 8) & 0xFF) * current_brightness / 255;
+    uint8_t leg_b = (current_leg_color & 0xFF) * current_brightness / 255;
 
-    draw_bob(ix1, iy1, 0, 255, 255);
+    draw_line(PIVOT_X, PIVOT_Y, ix1, iy1, leg_r, leg_g, leg_b);
+    draw_line(ix1, iy1, ix2, iy2, leg_r, leg_g, leg_b);
+
+    // Top bob - smaller (2x2 pixels instead of 3x3)
+    uint8_t top_r = 0 * current_brightness / 255;
+    uint8_t top_g = 255 * current_brightness / 255;
+    uint8_t top_b = 255 * current_brightness / 255;
+    if (ix1 >= 0 && ix1 < DISPLAY_WIDTH && iy1 >= 0 && iy1 < DISPLAY_HEIGHT) {
+      matrix->drawPixelRGB888(ix1, iy1, top_r, top_g, top_b);
+    }
+    if (ix1 + 1 >= 0 && ix1 + 1 < DISPLAY_WIDTH && iy1 >= 0 &&
+        iy1 < DISPLAY_HEIGHT) {
+      matrix->drawPixelRGB888(ix1 + 1, iy1, top_r, top_g, top_b);
+    }
+    if (ix1 >= 0 && ix1 < DISPLAY_WIDTH && iy1 + 1 >= 0 &&
+        iy1 + 1 < DISPLAY_HEIGHT) {
+      matrix->drawPixelRGB888(ix1, iy1 + 1, top_r, top_g, top_b);
+    }
+    if (ix1 + 1 >= 0 && ix1 + 1 < DISPLAY_WIDTH && iy1 + 1 >= 0 &&
+        iy1 + 1 < DISPLAY_HEIGHT) {
+      matrix->drawPixelRGB888(ix1 + 1, iy1 + 1, top_r, top_g, top_b);
+    }
 
     uint8_t r, g, b;
     hsv_to_rgb(hue_counter, 255, 255, &r, &g, &b);
+    // Apply brightness to bottom bob
+    r = r * current_brightness / 255;
+    g = g * current_brightness / 255;
+    b = b * current_brightness / 255;
     draw_bob(ix2, iy2, r, g, b);
 
     hue_counter++;

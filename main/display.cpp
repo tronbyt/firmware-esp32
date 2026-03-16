@@ -267,7 +267,11 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
   _matrix->flipDMABuffer();
 }
 
-void display_clear(void) { _matrix->clearScreen(); }
+void display_clear(void) {
+  if (_matrix != NULL) {
+    _matrix->clearScreen();
+  }
+}
 
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
   if (_matrix != NULL) {

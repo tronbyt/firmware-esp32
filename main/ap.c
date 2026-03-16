@@ -41,6 +41,7 @@ static const char *s_html_part1 =
     "label { display: block; margin-bottom: 5px; font-weight: bold; }"
     "input[type='text'], input[type='password'] { width: 100%; padding: 8px; "
     "box-sizing: border-box; }"
+    ".slider { width: 100%; }"
     "button { background-color: #4CAF50; color: white; padding: 10px 15px; "
     "border: none; cursor: pointer; }"
     "button:hover { background-color: #45a049; }"
@@ -51,7 +52,11 @@ static const char *s_html_part1 =
     "<div class='form-container'>"
     "<h1>Tronbyt WiFi Setup</h1>"
     "<form action='/save' method='post' "
-    "enctype='application/x-www-form-urlencoded'>"
+    "enctype='application/x-www-form-urlencoded' "
+    "onsubmit='saveSettings(event)'>"
+    "<div id='save_msg' "
+    "style='display:none;padding:10px;margin-bottom:10px;background:#4CAF50;"
+    "color:white;border-radius:5px;'>Settings saved!</div>"
     "<div class='form-group'>"
     "<label for='ssid'>WiFi Network Name (2.4Ghz Only) :</label>"
     "<input type='text' id='ssid' name='ssid' maxlength='32'>"
@@ -69,21 +74,152 @@ static const char *s_html_part2 =
     "'>"
     "</div>";
 
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
 static const char *s_html_part3_start =
     "<div class='form-group'>"
-    "<label>"
-    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' ";
+    "<label>";
 
 static const char *s_html_part3_end =
     ">"
     " Swap Colors (Gen1/S3 only - requires reboot)"
     "</label>"
-    "</div>";
-#endif
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='trail_len'>Trail Length: <span "
+    "id='trail_len_val'>200</span></label>"
+    "<input type='range' id='trail_len' name='trail_len' min='10' max='500' "
+    "value='200' "
+    "oninput='document.getElementById(\"trail_len_val\").innerText=this.value' "
+    "onchange='saveSlider(\"trail_len\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='pend_speed'>Pendulum Speed: <span "
+    "id='pend_speed_val'>10</span></label>"
+    "<input type='range' id='pend_speed' name='pend_speed' min='1' max='100' "
+    "value='10' "
+    "oninput='document.getElementById(\"pend_speed_val\").innerText=this.value'"
+    " "
+    "onchange='saveSlider(\"pend_speed\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='pend_arm1'>Arm 1 Length: <span "
+    "id='pend_arm1_val'>12</span></label>"
+    "<input type='range' id='pend_arm1' name='pend_arm1' min='5' max='25' "
+    "value='12' "
+    "oninput='document.getElementById(\"pend_arm1_val\").innerText=this.value' "
+    "onchange='saveSlider(\"pend_arm1\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='pend_arm2'>Arm 2 Length: <span "
+    "id='pend_arm2_val'>10</span></label>"
+    "<input type='range' id='pend_arm2' name='pend_arm2' min='5' max='25' "
+    "value='10' "
+    "oninput='document.getElementById(\"pend_arm2_val\").innerText=this.value' "
+    "onchange='saveSlider(\"pend_arm2\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='swap_colors' name='swap_colors' value='1' "
+    "onchange='saveSlider(\"swap_colors\",this.checked?1:0)'>"
+    " Swap Colors (requires reboot)"
+    "</label>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='trail_len'>Trail Length: <span "
+    "id='trail_len_val'>200</span></label>"
+    "<input type='range' id='trail_len' name='trail_len' min='10' max='500' "
+    "value='200' "
+    "class='slider' "
+    "oninput='document.getElementById(\"trail_len_val\").innerText=this.value' "
+    "onchange='saveSlider(\"trail_len\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='pend_speed'>Pendulum Speed: <span "
+    "id='pend_speed_val'>10</span></label>"
+    "<input type='range' id='pend_speed' name='pend_speed' min='1' max='50' "
+    "value='10' "
+    "class='slider' "
+    "oninput='document.getElementById(\"pend_speed_val\").innerText=this.value'"
+    " "
+    "onchange='saveSlider(\"pend_speed\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='pend_arm1'>Arm 1 Length: <span "
+    "id='pend_arm1_val'>12</span></label>"
+    "<input type='range' id='pend_arm1' name='pend_arm1' min='5' max='25' "
+    "value='12' "
+    "class='slider' "
+    "oninput='document.getElementById(\"pend_arm1_val\").innerText=this.value' "
+    "onchange='saveSlider(\"pend_arm1\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='pend_arm2'>Arm 2 Length: <span "
+    "id='pend_arm2_val'>10</span></label>"
+    "<input type='range' id='pend_arm2' name='pend_arm2' min='5' max='25' "
+    "value='10' "
+    "class='slider' "
+    "oninput='document.getElementById(\"pend_arm2_val\").innerText=this.value' "
+    "onchange='saveSlider(\"pend_arm2\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='trail_cycle' name='trail_cycle' value='1' "
+    "onchange='saveSlider(\"trail_cycle\",this.checked?1:0)'>"
+    " Trail Color Cycles"
+    "</label>"
+    "</div>"
+    "<hr>"
+    "<h3>Display Settings</h3>"
+    "<div class='form-group'>"
+    "<label for='brightness'>Brightness: <span "
+    "id='brightness_val'>128</span></label>"
+    "<input type='range' id='brightness' name='brightness' min='1' max='255' "
+    "value='128' "
+    "class='slider' "
+    "oninput='document.getElementById(\"brightness_val\").innerText=this.value'"
+    " "
+    "onchange='saveSlider(\"brightness\",this.value)'>"
+    "</div>"
+    "<hr>"
+    "<h3>Display Settings</h3>"
+    "<div class='form-group'>"
+    "<label for='brightness'>Brightness: <span "
+    "id='brightness_val'>128</span></label>"
+    "<input type='range' id='brightness' name='brightness' min='1' max='255' "
+    "value='128' "
+    "oninput='document.getElementById(\"brightness_val\").innerText=this.value'"
+    " "
+    "onchange='saveSlider(\"brightness\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='leg_color'>Leg Color:</label>"
+    "<input type='color' id='leg_color' name='leg_color' value='#ffffff' "
+    "onchange='saveSlider(\"leg_color\",parseInt(this.value.substring(1),16))'>"
+    "</div>"
+    "<script>function resetDefaults(){"
+    "saveSlider('trail_len',200);"
+    "document.getElementById('trail_len').value=200;"
+    "document.getElementById('trail_len_val').innerText=200;"
+    "saveSlider('pend_speed',10);"
+    "document.getElementById('pend_speed').value=10;"
+    "document.getElementById('pend_speed_val').innerText=10;"
+    "document.getElementById('pend_arm1').value=12;"
+    "document.getElementById('pend_arm1_val').innerText=12;"
+    "saveSlider('pend_arm2',10);"
+    "document.getElementById('pend_arm2').value=10;"
+    "document.getElementById('pend_arm2_val').innerText=10;"
+    "saveSlider('trail_cycle',0);"
+    "document.getElementById('trail_cycle').checked=false;"
+    "saveSlider('brightness',128);"
+    "document.getElementById('brightness').value=128;"
+    "document.getElementById('brightness_val').innerText=128;"
+    "saveSlider('leg_color',16777215);"
+    "document.getElementById('leg_color').value='#ffffff';"
+    "}</script>";
 
 static const char *s_html_part4 =
     "<button type='submit'>Save and Connect</button>"
+    " "
+    "<button type='button' onclick='resetDefaults()'>Reset to Defaults</button>"
     "</form>"
     "<hr>"
     "<h3>Firmware Update</h3>"
@@ -93,6 +229,27 @@ static const char *s_html_part4 =
     "<button id='upd_btn' onclick='uploadFirmware()'>Update Firmware</button>"
     "<div id='progress' style='margin-top: 10px;'></div>"
     "<script>"
+    "function saveSlider(name,val){"
+    "var x=new XMLHttpRequest();"
+    "x.open('POST','/set?'+name+'='+val,true);"
+    "x.onload=function(){if(x.status==200){"
+    "var msg=document.getElementById('save_msg');"
+    "msg.style.display='block';"
+    "msg.innerText=name+' saved!';"
+    "setTimeout(function(){msg.style.display='none';},1500);"
+    "}};x.send();"
+    "}"
+    "function saveSettings(e) {"
+    "e.preventDefault();"
+    "var x=new XMLHttpRequest();"
+    "x.open('POST','/save',true);"
+    "x.onload=function(){if(x.status==200){"
+    "var msg=document.getElementById('save_msg');"
+    "msg.style.display='block';"
+    "setTimeout(function(){msg.style.display='none';},3000);"
+    "}};x.onerror=function(){alert('Error saving');};"
+    "x.send(new FormData(e.target));"
+    "}"
     "function uploadFirmware() {"
     "var f=document.getElementById('fw_file').files[0];"
     "if(!f){alert('Select file');return;}"
@@ -121,20 +278,21 @@ static const char *s_success_html =
     "<!DOCTYPE html>"
     "<html>"
     "<head>"
-    "<title>WiFi Configuration Saved</title>"
+    "<title>Settings Saved</title>"
     "<meta name='viewport' content='width=device-width, initial-scale=1'>"
     "<style>"
     "body { font-family: Arial, sans-serif; margin: 0; padding: 20px; "
     "text-align: center; }"
     "h1 { color: #4CAF50; }"
     "p { margin-bottom: 20px; }"
+    "a { display: inline-block; padding: 10px 20px; background: #4CAF50; "
+    "color: white; text-decoration: none; border-radius: 5px; }"
     "</style>"
     "</head>"
     "<body>"
-    "<h1>Configuration Saved!</h1>"
-    "<p>WiFi credentials and image URL have been saved.</p>"
-    "<p>The device will now reboot and attempt to connect to the WiFi "
-    "network.</p>"
+    "<h1>Settings Saved!</h1>"
+    "<p>Pendulum settings have been applied.</p>"
+    "<p><a href='/'>Back to Settings</a></p>"
     "<p>You can close this page.</p>"
     "</body>"
     "</html>";
@@ -142,6 +300,7 @@ static const char *s_success_html =
 // Forward declarations
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
+static esp_err_t set_value_handler(httpd_req_t *req);
 static esp_err_t update_handler(httpd_req_t *req);
 static esp_err_t captive_portal_handler(httpd_req_t *req);
 static void url_decode(char *str);
@@ -284,6 +443,12 @@ esp_err_t ap_start(void) {
                           .user_ctx = NULL};
   httpd_register_uri_handler(s_server, &save_uri);
 
+  httpd_uri_t set_uri = {.uri = "/set",
+                         .method = HTTP_POST,
+                         .handler = set_value_handler,
+                         .user_ctx = NULL};
+  httpd_register_uri_handler(s_server, &set_uri);
+
   httpd_uri_t update_uri = {.uri = "/update",
                             .method = HTTP_POST,
                             .handler = update_handler,
@@ -361,8 +526,7 @@ static esp_err_t root_handler(httpd_req_t *req) {
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
 
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
-    // Send Swap Colors Checkbox (Conditional)
+    // Send Swap Colors Checkbox and Pendulum Settings
     if ((ret = httpd_resp_send_chunk(req, s_html_part3_start,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
@@ -374,7 +538,6 @@ static esp_err_t root_handler(httpd_req_t *req) {
     if ((ret = httpd_resp_send_chunk(req, s_html_part3_end,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
-#endif
 
     // Send Part 4 (End)
     if ((ret = httpd_resp_send_chunk(req, s_html_part4,
@@ -459,6 +622,11 @@ static esp_err_t save_handler(httpd_req_t *req) {
   char password[200] = {0};
   char image_url[400] = {0};
   char swap_val[2] = {0};
+  char trail_len_str[10] = {0};
+  char pend_speed_str[10] = {0};
+  char pend_arm1_str[10] = {0};
+  char pend_arm2_str[10] = {0};
+  char trail_cycle_val[2] = {0};
   bool swap_colors = false;
 
   // Use httpd_query_key_value to parse form data
@@ -481,29 +649,149 @@ static esp_err_t save_handler(httpd_req_t *req) {
     swap_colors = (strcmp(swap_val, "1") == 0);
   }
 
+  if (httpd_query_key_value(buf, "trail_len", trail_len_str,
+                            sizeof(trail_len_str)) == ESP_OK) {
+    int trail_len = atoi(trail_len_str);
+    if (trail_len >= 10 && trail_len <= 500) {
+      nvs_set_trail_length(trail_len);
+      ESP_LOGI(TAG, "Set trail length to %d", trail_len);
+    }
+  }
+
+  if (httpd_query_key_value(buf, "pend_speed", pend_speed_str,
+                            sizeof(pend_speed_str)) == ESP_OK) {
+    int pend_speed = atoi(pend_speed_str);
+    if (pend_speed >= 1 && pend_speed <= 100) {
+      nvs_set_pendulum_speed(pend_speed / 1000.0f);
+      ESP_LOGI(TAG, "Set pendulum speed to %d", pend_speed);
+    }
+  }
+
+  if (httpd_query_key_value(buf, "pend_arm1", pend_arm1_str,
+                            sizeof(pend_arm1_str)) == ESP_OK) {
+    int pend_arm1 = atoi(pend_arm1_str);
+    if (pend_arm1 >= 5 && pend_arm1 <= 25) {
+      nvs_set_pendulum_arm1_length((float)pend_arm1);
+      ESP_LOGI(TAG, "Set arm1 length to %d", pend_arm1);
+    }
+  }
+
+  if (httpd_query_key_value(buf, "pend_arm2", pend_arm2_str,
+                            sizeof(pend_arm2_str)) == ESP_OK) {
+    int pend_arm2 = atoi(pend_arm2_str);
+    if (pend_arm2 >= 5 && pend_arm2 <= 25) {
+      nvs_set_pendulum_arm2_length((float)pend_arm2);
+      ESP_LOGI(TAG, "Set arm2 length to %d", pend_arm2);
+    }
+  }
+
+  // Always set trail color cycle (default to false if checkbox not present)
+  bool trail_cycle = false;
+  if (httpd_query_key_value(buf, "trail_cycle", trail_cycle_val,
+                            sizeof(trail_cycle_val)) == ESP_OK) {
+    trail_cycle = (strcmp(trail_cycle_val, "1") == 0);
+  }
+  nvs_set_trail_color_cycle(trail_cycle);
+  ESP_LOGI(TAG, "Set trail color cycle to %d", trail_cycle);
+
   url_decode(ssid);
   url_decode(password);
   url_decode(image_url);
 
-  ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s, Swap Colors: %s", ssid,
-           image_url, swap_colors ? "true" : "false");
+  ESP_LOGI(TAG,
+           "Saving: SSID=%s, trail_len=%s, pend_speed=%s, pend_arm1=%s, "
+           "pend_arm2=%s, trail_cycle=%s",
+           ssid, trail_len_str, pend_speed_str, pend_arm1_str, pend_arm2_str,
+           trail_cycle_val);
 
   nvs_set_ssid(ssid);
   nvs_set_password(password);
   nvs_set_image_url(strlen(image_url) < 6 ? NULL : image_url);
   nvs_set_swap_colors(swap_colors);
+
+  ESP_LOGI(TAG, "Calling nvs_save_settings...");
   nvs_save_settings();
+  nvs_settings_set_reload_flag();
+  ESP_LOGI(TAG, "NVS settings saved, no reboot needed...");
 
   free(buf);
 
   httpd_resp_set_type(req, "text/html");
   httpd_resp_send(req, s_success_html, strlen(s_success_html));
 
-  // Delay to allow response to be sent, then reboot
-  ESP_LOGI(TAG, "Configuration saved - rebooting in 1 second...");
-  vTaskDelay(pdMS_TO_TICKS(1000));
-  esp_restart();
+  // Don't reboot - settings will be applied without restart
+  return ESP_OK;
+}
 
+static esp_err_t set_value_handler(httpd_req_t *req) {
+  char buf[64] = {0};
+  int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+  if (ret <= 0) {
+    // Try reading from query string instead
+    ret = httpd_req_get_url_query_str(req, buf, sizeof(buf));
+    if (ret != ESP_OK) {
+      return ESP_FAIL;
+    }
+  } else {
+    buf[ret] = '\0';
+  }
+
+  char value[32] = {0};
+  if (httpd_query_key_value(buf, "trail_len", value, sizeof(value)) == ESP_OK) {
+    int val = atoi(value);
+    if (val >= 10 && val <= 500) {
+      nvs_set_trail_length(val);
+      ESP_LOGI(TAG, "Set trail_len to %d", val);
+    }
+  }
+  if (httpd_query_key_value(buf, "pend_speed", value, sizeof(value)) ==
+      ESP_OK) {
+    int val = atoi(value);
+    if (val >= 1 && val <= 50) {
+      nvs_set_pendulum_speed(val / 1000.0f);
+      ESP_LOGI(TAG, "Set pend_speed to %d", val);
+    }
+  }
+  if (httpd_query_key_value(buf, "pend_arm1", value, sizeof(value)) == ESP_OK) {
+    int val = atoi(value);
+    if (val >= 5 && val <= 25) {
+      nvs_set_pendulum_arm1_length((float)val);
+      ESP_LOGI(TAG, "Set pend_arm1 to %d", val);
+    }
+  }
+  if (httpd_query_key_value(buf, "pend_arm2", value, sizeof(value)) == ESP_OK) {
+    int val = atoi(value);
+    if (val >= 5 && val <= 25) {
+      nvs_set_pendulum_arm2_length((float)val);
+      ESP_LOGI(TAG, "Set pend_arm2 to %d", val);
+    }
+  }
+  if (httpd_query_key_value(buf, "trail_cycle", value, sizeof(value)) ==
+      ESP_OK) {
+    bool val = (strcmp(value, "1") == 0);
+    nvs_set_trail_color_cycle(val);
+    ESP_LOGI(TAG, "Set trail_cycle to %d", val);
+  }
+  if (httpd_query_key_value(buf, "brightness", value, sizeof(value)) ==
+      ESP_OK) {
+    int val = atoi(value);
+    if (val >= 1 && val <= 255) {
+      nvs_set_brightness(val);
+      ESP_LOGI(TAG, "Set brightness to %d", val);
+    }
+  }
+  if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
+    int val = strtol(value, NULL, 16);
+    if (val >= 0 && val <= 0xFFFFFF) {
+      nvs_set_leg_color(val);
+      ESP_LOGI(TAG, "Set leg_color to %d", val);
+    }
+  }
+
+  nvs_save_settings();
+  nvs_settings_set_reload_flag();
+
+  httpd_resp_send(req, "OK", 2);
   return ESP_OK;
 }
 

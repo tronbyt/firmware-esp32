@@ -491,7 +491,28 @@ void app_main(void) {
   ESP_LOGI(TAG, "finished flash init");
   esp_register_shutdown_handler(&flash_shutdown);
 
-  // Skip WiFi/NVS for now - go straight to pendulum animation
+  // Initialize NVS settings
+  if (nvs_settings_init() != ESP_OK) {
+    ESP_LOGE(TAG, "failed to initialize NVS");
+    return;
+  }
+
+  // Check if we should start config portal
+  char saved_ssid[33] = {0};
+  nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+  bool has_credentials = (strlen(saved_ssid) > 0);
+
+  // Start WiFi (this will also start config portal if ap_mode is enabled or no
+  // credentials)
+  if (wifi_initialize(saved_ssid, "") != 0) {
+    ESP_LOGE(TAG, "failed to initialize wifi");
+    return;
+  }
+
+  // Start config portal always at boot
+  ESP_LOGI(TAG, "Starting config portal");
+  ap_start();
+  ap_start_shutdown_timer();
 
   // Setup the display directly (skip gfx_initialize since dp_run handles
   // drawing)

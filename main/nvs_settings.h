@@ -43,6 +43,10 @@ float nvs_get_pendulum_arm1_length(void);
 float nvs_get_pendulum_arm2_length(void);
 float nvs_get_pendulum_mass1(void);
 float nvs_get_pendulum_mass2(void);
+int nvs_get_trail_length(void);
+bool nvs_get_trail_color_cycle(void);
+int nvs_get_brightness(void);
+int nvs_get_leg_color(void);
 
 // Setters
 esp_err_t nvs_set_ssid(const char *ssid);
@@ -57,6 +61,17 @@ esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save);
 esp_err_t nvs_set_skip_display_version(bool skip);
 esp_err_t nvs_set_ap_mode(bool ap_mode);
 esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6);
+esp_err_t nvs_set_trail_length(int length);
+esp_err_t nvs_set_trail_color_cycle(bool cycle);
+esp_err_t nvs_set_brightness(int brightness);
+esp_err_t nvs_set_leg_color(int color);
+void nvs_settings_set_reload_flag(void);
+bool nvs_settings_get_and_clear_reload_flag(void);
+esp_err_t nvs_set_pendulum_speed(float speed);
+esp_err_t nvs_set_pendulum_arm1_length(float length);
+esp_err_t nvs_set_pendulum_arm2_length(float length);
+esp_err_t nvs_set_pendulum_mass1(float mass);
+esp_err_t nvs_set_pendulum_mass2(float mass);
 
 // Save all modified settings to NVS
 esp_err_t nvs_save_settings(void);

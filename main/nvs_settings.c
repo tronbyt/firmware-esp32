@@ -32,6 +32,10 @@
 #define NVS_KEY_PENDULUM_ARM2_LENGTH "pend_arm2"
 #define NVS_KEY_PENDULUM_MASS1 "pend_mass1"
 #define NVS_KEY_PENDULUM_MASS2 "pend_mass2"
+#define NVS_KEY_TRAIL_LENGTH "trail_len"
+#define NVS_KEY_TRAIL_COLOR_CYCLE "trail_col"
+#define NVS_KEY_BRIGHTNESS "brightness"
+#define NVS_KEY_LEG_COLOR "leg_color"
 
 // Internal storage
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
@@ -47,30 +51,26 @@ static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 
-// Double pendulum settings
-static float s_pendulum_speed = PENDULUM_SPEED;
-static float s_pendulum_arm1_length = PENDULUM_ARM1_LENGTH;
-static float s_pendulum_arm2_length = PENDULUM_ARM2_LENGTH;
-static float s_pendulum_mass1 = PENDULUM_MASS1;
-static float s_pendulum_mass2 = PENDULUM_MASS2;
-
-// Hardcoded defaults (from secrets.json via CMake)
-#ifndef WIFI_SSID
-#define WIFI_SSID ""
-#endif
-#ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD ""
-#endif
-#ifndef REMOTE_URL
-#define REMOTE_URL ""
-#endif
-
 // Double pendulum settings defaults - hardcoded values
 #define PENDULUM_SPEED 0.01f        // Default physics step size
 #define PENDULUM_ARM1_LENGTH 12.0f  // Default arm 1 length in pixels
 #define PENDULUM_ARM2_LENGTH 10.0f  // Default arm 2 length in pixels
 #define PENDULUM_MASS1 1.0f         // Default mass 1
 #define PENDULUM_MASS2 1.0f         // Default mass 2
+#define TRAIL_LENGTH_DEFAULT 200    // Default trail length
+
+// Double pendulum settings
+static float s_pendulum_speed = PENDULUM_SPEED;
+static float s_pendulum_arm1_length = PENDULUM_ARM1_LENGTH;
+static float s_pendulum_arm2_length = PENDULUM_ARM2_LENGTH;
+static float s_pendulum_mass1 = PENDULUM_MASS1;
+static float s_pendulum_mass2 = PENDULUM_MASS2;
+static int s_trail_length = TRAIL_LENGTH_DEFAULT;
+static bool s_trail_color_cycle = false;
+static int s_brightness = 128;
+static int s_leg_color = 0xFFFFFF;
+
+// Hardcoded defaults (from secrets.json via CMake)
 
 esp_err_t nvs_settings_init(void) {
   esp_err_t ret = nvs_flash_init();
@@ -176,6 +176,42 @@ esp_err_t nvs_settings_init(void) {
     if (nvs_get_blob(nvs_handle, NVS_KEY_PENDULUM_MASS2, &s_pendulum_mass2,
                      &required_size) != ESP_OK) {
       s_pendulum_mass2 = PENDULUM_MASS2;  // Default
+    }
+
+    // Read trail length
+    int32_t trail_len;
+    if (nvs_get_i32(nvs_handle, NVS_KEY_TRAIL_LENGTH, &trail_len) != ESP_OK ||
+        trail_len < 10 || trail_len > 500) {
+      s_trail_length = TRAIL_LENGTH_DEFAULT;
+    } else {
+      s_trail_length = (int)trail_len;
+    }
+
+    // Read trail color cycle setting
+    uint8_t trail_color_val;
+    if (nvs_get_u8(nvs_handle, NVS_KEY_TRAIL_COLOR_CYCLE, &trail_color_val) ==
+        ESP_OK) {
+      s_trail_color_cycle = (trail_color_val != 0);
+    } else {
+      s_trail_color_cycle = false;  // Default: don't cycle colors
+    }
+
+    // Read brightness
+    int32_t brightness_val;
+    if (nvs_get_i32(nvs_handle, NVS_KEY_BRIGHTNESS, &brightness_val) ==
+            ESP_OK &&
+        brightness_val >= 1 && brightness_val <= 255) {
+      s_brightness = (int)brightness_val;
+    } else {
+      s_brightness = 128;  // Default
+    }
+
+    // Read leg color
+    int32_t leg_color_val;
+    if (nvs_get_i32(nvs_handle, NVS_KEY_LEG_COLOR, &leg_color_val) == ESP_OK) {
+      s_leg_color = (int)leg_color_val;
+    } else {
+      s_leg_color = 0xFFFFFF;  // Default white
     }
 
     required_size = sizeof(s_image_url);
@@ -440,6 +476,14 @@ float nvs_get_pendulum_mass1(void) { return s_pendulum_mass1; }
 
 float nvs_get_pendulum_mass2(void) { return s_pendulum_mass2; }
 
+int nvs_get_trail_length(void) { return s_trail_length; }
+
+bool nvs_get_trail_color_cycle(void) { return s_trail_color_cycle; }
+
+int nvs_get_brightness(void) { return s_brightness; }
+
+int nvs_get_leg_color(void) { return s_leg_color; }
+
 // Double pendulum settings setters
 esp_err_t nvs_set_pendulum_speed(float speed) {
   if (speed <= 0.0f || speed > 1.0f) {
@@ -481,6 +525,44 @@ esp_err_t nvs_set_pendulum_mass2(float mass) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_trail_length(int length) {
+  if (length < 10 || length > 500) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_trail_length = length;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_trail_color_cycle(bool cycle) {
+  s_trail_color_cycle = cycle;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_brightness(int brightness) {
+  if (brightness < 1 || brightness > 255) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_brightness = brightness;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_leg_color(int color) {
+  s_leg_color = color;
+  return ESP_OK;
+}
+
+static bool s_reload_flag = false;
+
+void nvs_settings_set_reload_flag(void) { s_reload_flag = true; }
+
+bool nvs_settings_get_and_clear_reload_flag(void) {
+  if (s_reload_flag) {
+    s_reload_flag = false;
+    return true;
+  }
+  return false;
+}
+
 // Save all modified settings to NVS
 esp_err_t nvs_save_settings(void) {
   nvs_handle_t nvs_handle;
@@ -506,6 +588,11 @@ esp_err_t nvs_save_settings(void) {
                sizeof(s_pendulum_mass1));
   nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_MASS2, &s_pendulum_mass2,
                sizeof(s_pendulum_mass2));
+  nvs_set_i32(nvs_handle, NVS_KEY_TRAIL_LENGTH, s_trail_length);
+  nvs_set_u8(nvs_handle, NVS_KEY_TRAIL_COLOR_CYCLE,
+             s_trail_color_cycle ? 1 : 0);
+  nvs_set_i32(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
+  nvs_set_i32(nvs_handle, NVS_KEY_LEG_COLOR, s_leg_color);
 
   nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);
