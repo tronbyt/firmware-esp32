@@ -505,8 +505,7 @@ void app_main(void) {
   // Start WiFi (this will also start config portal if ap_mode is enabled or no
   // credentials)
   if (wifi_initialize(saved_ssid, "") != 0) {
-    ESP_LOGE(TAG, "failed to initialize wifi");
-    return;
+    ESP_LOGE(TAG, "failed to initialize wifi, continuing anyway");
   }
 
   // Start config portal always at boot
