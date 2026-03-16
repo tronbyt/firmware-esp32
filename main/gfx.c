@@ -66,17 +66,19 @@ int gfx_initialize(const char *img_url) {
   ESP_LOGI(TAG, "Allocating buffer of size: %d", ASSET_BOOT_WEBP_LEN);
 
   _state = calloc(1, sizeof(struct gfx_state));
-  _state->len = ASSET_BOOT_WEBP_LEN;
   _state->paused = false;
-  ESP_LOGI(TAG, "calloc buff");
-  _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
-  ESP_LOGI(TAG, "done calloc, copying");
-  if (_state->buf == NULL) {
-    ESP_LOGE("gfx", "Memory allocation failed!");
-    return 1;
+  if (!nvs_get_skip_boot_animation()) {
+    _state->len = ASSET_BOOT_WEBP_LEN;
+    ESP_LOGI(TAG, "calloc buff");
+    _state->buf = calloc(1, ASSET_BOOT_WEBP_LEN);
+    ESP_LOGI(TAG, "done calloc, copying");
+    if (_state->buf == NULL) {
+      ESP_LOGE("gfx", "Memory allocation failed!");
+      return 1;
+    }
+    memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
+    ESP_LOGI(TAG, "done, copying");
   }
-  memcpy(_state->buf, ASSET_BOOT_WEBP, ASSET_BOOT_WEBP_LEN);
-  ESP_LOGI(TAG, "done, copying");
 
   _state->mutex = xSemaphoreCreateMutex();
   if (_state->mutex == NULL) {
@@ -88,6 +90,10 @@ int gfx_initialize(const char *img_url) {
   // Initialize the display
   if (display_initialize()) {
     return 1;
+  }
+
+  if (nvs_get_skip_boot_animation()) {
+    display_clear();
   }
 
   // Display version if not skipped

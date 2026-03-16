@@ -23,6 +23,7 @@
 #define NVS_KEY_SWAP_COLORS "swap_colors"
 #define NVS_KEY_WIFI_POWER_SAVE "wifi_ps"
 #define NVS_KEY_SKIP_VERSION "skip_ver"
+#define NVS_KEY_SKIP_BOOT "skip_boot"
 #define NVS_KEY_AP_MODE "ap_mode"
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
 #define NVS_KEY_API_KEY "api_key"
@@ -37,6 +38,7 @@ static char s_image_url[MAX_URL_LEN + 1] = {0};
 static bool s_swap_colors = false;
 static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
 static bool s_skip_display_version = false;
+static bool s_skip_boot_animation = false;
 static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
@@ -147,6 +149,10 @@ esp_err_t nvs_settings_init(void) {
       s_skip_display_version = (val_u8 != 0);
     }
 
+    if (nvs_get_u8(nvs_handle, NVS_KEY_SKIP_BOOT, &val_u8) == ESP_OK) {
+      s_skip_boot_animation = (val_u8 != 0);
+    }
+
     if (nvs_get_u8(nvs_handle, NVS_KEY_AP_MODE, &val_u8) == ESP_OK) {
       s_ap_mode = (val_u8 != 0);
     }
@@ -247,6 +253,8 @@ bool nvs_get_swap_colors(void) { return s_swap_colors; }
 wifi_ps_type_t nvs_get_wifi_power_save(void) { return s_wifi_power_save; }
 
 bool nvs_get_skip_display_version(void) { return s_skip_display_version; }
+
+bool nvs_get_skip_boot_animation(void) { return s_skip_boot_animation; }
 
 bool nvs_get_ap_mode(void) { return s_ap_mode; }
 
@@ -367,6 +375,11 @@ esp_err_t nvs_set_skip_display_version(bool skip) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_skip_boot_animation(bool skip) {
+  s_skip_boot_animation = skip;
+  return ESP_OK;
+}
+
 esp_err_t nvs_set_ap_mode(bool ap_mode) {
   s_ap_mode = ap_mode;
   return ESP_OK;
@@ -395,6 +408,7 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);
   nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION, s_skip_display_version ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_SKIP_BOOT, s_skip_boot_animation ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
 
