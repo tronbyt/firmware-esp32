@@ -27,6 +27,11 @@ static dp::system pendulum_system;
 static double sim_time = 0.0;
 static uint8_t hue_counter = 0;
 
+#define TRAIL_LENGTH 100
+static int trail_x[TRAIL_LENGTH];
+static int trail_y[TRAIL_LENGTH];
+static int trail_head = 0;
+
 static void hsv_to_rgb(uint8_t h, uint8_t s, uint8_t v, uint8_t* r, uint8_t* g,
                        uint8_t* b) {
   uint8_t region = h / 43;
@@ -119,10 +124,16 @@ void dp_init(void) {
   pendulum_system.length.first = 1.0;
   pendulum_system.length.second = 1.0;
 
+  for (int i = 0; i < TRAIL_LENGTH; i++) {
+    trail_x[i] = -1;
+    trail_y[i] = -1;
+  }
+  trail_head = 0;
+
   // Start with lower energy - angles closer to vertical (hanging down)
   // But add some randomness to avoid always starting the same way
   // Range: 10-80 degrees from vertical (so mostly down but with some swing)
-  double angle1_offset = 70.0 + (esp_random() % 30);  // 10-80 degrees
+  double angle1_offset = 70.0 + (esp_random() % 30);   // 10-80 degrees
   double angle2_offset = 100.0 + (esp_random() % 30);  // 10-80 degrees
 
   // Randomly choose direction (left or right) for each arm
@@ -166,6 +177,26 @@ void dp_run(void) {
     int iy2 = (int)(y2 + 0.5);
 
     display_clear();
+
+    // Draw trail as individual pixels (smoother curve than connecting lines)
+    for (int i = 0; i < TRAIL_LENGTH; i++) {
+      int idx = (trail_head - i - 1 + TRAIL_LENGTH) % TRAIL_LENGTH;
+      if (trail_x[idx] >= 0 && trail_y[idx] >= 0) {
+        uint8_t alpha = (uint8_t)((TRAIL_LENGTH - i) * 200 / TRAIL_LENGTH);
+        uint8_t r, g, b;
+        hsv_to_rgb((hue_counter - i * 2) & 0xFF, 255, alpha, &r, &g, &b);
+        if (trail_x[idx] >= 0 && trail_x[idx] < DISPLAY_WIDTH &&
+            trail_y[idx] >= 0 && trail_y[idx] < DISPLAY_HEIGHT) {
+          display_get_matrix()->drawPixelRGB888(trail_x[idx], trail_y[idx], r,
+                                                g, b);
+        }
+      }
+    }
+
+    // Update trail
+    trail_x[trail_head] = ix2;
+    trail_y[trail_head] = iy2;
+    trail_head = (trail_head + 1) % TRAIL_LENGTH;
 
     draw_line(PIVOT_X, PIVOT_Y, ix1, iy1, 255, 255, 255);
     draw_line(ix1, iy1, ix2, iy2, 255, 255, 255);
