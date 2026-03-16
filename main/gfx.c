@@ -39,17 +39,8 @@ static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t *isAnimating);
+                     volatile int32_t *isAnimating);
 static void send_websocket_notification(int counter);
-
-static bool is_static_asset(const void *ptr) {
-  if (ptr == ASSET_BOOT_WEBP) return true;
-  if (ptr == ASSET_CONFIG_WEBP) return true;
-  if (ptr == ASSET_404_WEBP) return true;
-  if (ptr == ASSET_OVERSIZE_WEBP) return true;
-  if (ptr == ASSET_NOCONNECT_WEBP) return true;
-  return false;
-}
 
 int gfx_initialize(const char *img_url) {
   // Only initialize once
@@ -440,7 +431,7 @@ static void gfx_loop(void *args) {
 }
 
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     int32_t *isAnimating) {
+                     volatile int32_t *isAnimating) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;

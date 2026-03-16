@@ -328,7 +328,7 @@ esp_err_t nvs_set_image_url(const char *image_url) {
     char *key_end = strchr(key_value, '&');
     size_t key_len = key_end ? (size_t)(key_end - key_value) : strlen(key_value);
     if (key_len > 0 && key_len <= MAX_API_KEY_LEN) {
-      strncpy(s_api_key, key_value, key_len);
+      memcpy(s_api_key, key_value, key_len);
       s_api_key[key_len] = '\0';
       ESP_LOGI(TAG, "Extracted API key from URL");
     }
