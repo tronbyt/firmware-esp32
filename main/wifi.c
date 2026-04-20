@@ -283,6 +283,17 @@ static void handle_successful_ip_acquisition(void) {
   // Set connection bit and clear fail bit
   xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
   xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+  // Display IP address
+  esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA");
+  if (sta_netif) {
+    esp_netif_ip_info_t ip_info;
+    if (esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK) {
+      char ip_str[16];
+      snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&ip_info.ip));
+      ESP_LOGI(TAG, "Got IP: %s", ip_str);
+    }
+  }
 }
 
 // WiFi event handler

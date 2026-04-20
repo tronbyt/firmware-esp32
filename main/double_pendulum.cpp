@@ -26,7 +26,7 @@ static dp::system pendulum_system;
 static double sim_time = 0.0;
 static uint8_t hue_counter = 0;
 
-#define TRAIL_LENGTH_MAX 10000
+#define TRAIL_LENGTH_MAX 2000
 
 static int trail_x[TRAIL_LENGTH_MAX];
 static int trail_y[TRAIL_LENGTH_MAX];
@@ -42,7 +42,6 @@ static float arm1_length_max = 14.0f;
 static float arm2_length_min = 6.0f;
 static float arm2_length_max = 12.0f;
 static float arm_evolution_speed = 0.00002f;
-static bool arm_evolution_enabled = true;
 static bool arm_evolution_setting = true;
 static int arm_evolution_direction = 1;
 static bool current_trail_color_cycle = true;
@@ -145,8 +144,10 @@ void dp_init(void) {
     nvs_set_trail_color_cycle(esp_random() % 2);
     nvs_set_arm_evolution_enabled(true);
     nvs_set_arm_evolution_speed((esp_random() % 100 + 1) / 100000.0f);
-    nvs_set_brightness(esp_random() % 254 + 1);
-    nvs_set_leg_color(esp_random() | (esp_random() << 8) | (esp_random() << 16));
+    uint8_t r = esp_random() & 0xFF;
+    uint8_t g = esp_random() & 0xFF;
+    uint8_t b = esp_random() & 0xFF;
+    nvs_set_leg_color((r << 16) | (g << 8) | b);
     nvs_save_settings();
   }
 
@@ -294,7 +295,7 @@ void dp_run(void) {
       int idx = (trail_head - i - 1 + TRAIL_LENGTH_MAX) % TRAIL_LENGTH_MAX;
       if (trail_x[idx] >= 0 && trail_y[idx] >= 0) {
         uint8_t alpha;
-        if (current_trail_length >= 10000 || current_trail_length < 0) {
+        if (current_trail_length >= 2000 || current_trail_length < 0) {
           alpha = 255;  // "infinite" trail - no fade
         } else {
           alpha = (uint8_t)((current_trail_length - i) * 200 / current_trail_length);

@@ -3,6 +3,7 @@
 #include <esp_crt_bundle.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_netif.h>
 #include <esp_timer.h>
 #include <esp_websocket_client.h>
 #include <freertos/FreeRTOS.h>
@@ -497,10 +498,9 @@ void app_main(void) {
     return;
   }
 
-  // Check if we should start config portal
+  // Start WiFi
   char saved_ssid[33] = {0};
   nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
-  bool has_credentials = (strlen(saved_ssid) > 0);
 
   // Start WiFi (this will also start config portal if ap_mode is enabled or no
   // credentials)
@@ -508,10 +508,20 @@ void app_main(void) {
     ESP_LOGE(TAG, "failed to initialize wifi, continuing anyway");
   }
 
-  // Start config portal always at boot
+  // Start config portal always at boot, keep it running
   ESP_LOGI(TAG, "Starting config portal");
   ap_start();
-  ap_start_shutdown_timer();
+
+  // Check and print IP if connected
+  esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA");
+  if (sta_netif) {
+    esp_netif_ip_info_t ip_info;
+    if (esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK) {
+      char ip_str[16];
+      snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&ip_info.ip));
+      ESP_LOGI(TAG, "Connected IP: %s", ip_str);
+    }
+  }
 
   // Setup the display directly (skip gfx_initialize since dp_run handles
   // drawing)

@@ -55,12 +55,24 @@ static bool s_prefer_ipv6 = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 
 // Double pendulum settings defaults - hardcoded values
-#define PENDULUM_SPEED 0.01f        // Default physics step size
-#define PENDULUM_ARM1_LENGTH 12.0f  // Default arm 1 length in pixels
-#define PENDULUM_ARM2_LENGTH 10.0f  // Default arm 2 length in pixels
-#define PENDULUM_MASS1 1.0f         // Default mass 1
-#define PENDULUM_MASS2 1.0f         // Default mass 2
-#define TRAIL_LENGTH_DEFAULT 200    // Default trail length
+#ifndef PENDULUM_SPEED
+#define PENDULUM_SPEED 0.01f
+#endif
+#ifndef PENDULUM_ARM1_LENGTH
+#define PENDULUM_ARM1_LENGTH 12.0f
+#endif
+#ifndef PENDULUM_ARM2_LENGTH
+#define PENDULUM_ARM2_LENGTH 10.0f
+#endif
+#ifndef PENDULUM_MASS1
+#define PENDULUM_MASS1 1.0f
+#endif
+#ifndef PENDULUM_MASS2
+#define PENDULUM_MASS2 1.0f
+#endif
+#ifndef TRAIL_LENGTH_DEFAULT
+#define TRAIL_LENGTH_DEFAULT 200
+#endif
 
 // Double pendulum settings
 static float s_pendulum_speed = PENDULUM_SPEED;
@@ -187,7 +199,7 @@ esp_err_t nvs_settings_init(void) {
     // Read trail length
     int32_t trail_len;
     if (nvs_get_i32(nvs_handle, NVS_KEY_TRAIL_LENGTH, &trail_len) != ESP_OK ||
-        trail_len < 10 || trail_len > 10000) {
+        trail_len < 10 || trail_len > 2000) {
       s_trail_length = TRAIL_LENGTH_DEFAULT;
     } else {
       s_trail_length = (int)trail_len;
@@ -561,7 +573,7 @@ esp_err_t nvs_set_pendulum_mass2(float mass) {
 }
 
 esp_err_t nvs_set_trail_length(int length) {
-  if (length < 10 || length > 10000) {
+  if (length < 10 || length > 2000) {
     return ESP_ERR_INVALID_ARG;
   }
   s_trail_length = length;

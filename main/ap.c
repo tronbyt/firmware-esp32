@@ -31,7 +31,7 @@ static const char *s_html_part1 =
     "<!DOCTYPE html>"
     "<html>"
     "<head>"
-    "<title>Tronbyt WiFi Setup</title>"
+    "<title>Trondulum WiFi Setup</title>"
     "<meta name='viewport' content='width=device-width, initial-scale=1'>"
     "<style>"
     "body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }"
@@ -64,29 +64,19 @@ static const char *s_html_part1 =
     "<div class='form-group'>"
     "<label for='password'>WiFi Password:</label>"
     "<input type='password' id='password' name='password' maxlength='64'>"
-    "</div>"
-    "<div class='form-group'>"
-    "<label for='image_url'>Image URL:</label>"
-    "<input type='text' id='image_url' name='image_url' maxlength='128' "
-    "value='";
-
-static const char *s_html_part2 =
-    "'>"
     "</div>";
 
 static const char *s_html_part3_start =
     "<div class='form-group'>"
     "<label>";
 
-static const char *s_html_part3_end =
-    ">"
-    " Swap Colors (Gen1/S3 only - requires reboot)"
+static const char* s_html_part3_end =
     "</label>"
     "</div>"
     "<div class='form-group'>"
     "<label for='trail_len'>Trail Length: <span "
     "id='trail_len_val'>200</span></label>"
-    "<input type='range' id='trail_len' name='trail_len' min='10' max='10000' "
+    "<input type='range' id='trail_len' name='trail_len' min='10' max='2000' "
     "value='200' "
     "class='slider' "
     "oninput='document.getElementById(\"trail_len_val\").innerText=this.value' "
@@ -135,19 +125,22 @@ static const char *s_html_part3_end =
     "</label>"
     "</div>"
     "<div class='form-group'>"
+    "<label for='arm_evo_speed'>Evo Speed: <span "
+    "id='arm_evo_speed_val'>2</span></label>"
+    "<input type='range' id='arm_evo_speed' name='arm_evo_speed' min='1' "
+    "max='100' "
+    "value='2' "
+    "oninput='document.getElementById(\"arm_evo_speed_val\").innerText=this."
+    "value' "
+    "onchange='saveSlider(\"arm_evo_speed\",this.value)'>"
+    "</div>"
+    "<div class='form-group'>"
     "<label>"
-    "<input type='checkbox' id='randomize_on_boot' name='randomize_on_boot' value='1' "
+    "<input type='checkbox' id='randomize_on_boot' name='randomize_on_boot' "
+    "value='1' "
     "onchange='saveSlider(\"randomize_on_boot\",this.checked?1:0)'>"
     " Randomize on Boot"
     "</label>"
-    "</div>"
-    "<div class='form-group'>"
-    "<label for='arm_evo_speed'>Evo Speed: <span "
-    "id='arm_evo_speed_val'>2</span></label>"
-    "<input type='range' id='arm_evo_speed' name='arm_evo_speed' min='1' max='100' "
-    "value='2' "
-    "oninput='document.getElementById(\"arm_evo_speed_val\").innerText=this.value' "
-    "onchange='saveSlider(\"arm_evo_speed\",this.value)'>"
     "</div>"
     "<hr>"
     "<h3>Display Settings</h3>"
@@ -174,11 +167,16 @@ static const char *s_html_part3_end =
     "var p=this.responseText.split('&');"
     "for(var i=0;i<p.length;i++){"
     "var kv=p[i].split('=');"
-    "if(kv[0]=='trail_len'){document.getElementById('trail_len').value=parseInt(kv[1]);document.getElementById('trail_len_val').innerText=kv[1];}"
-    "if(kv[0]=='trail_cycle')document.getElementById('trail_cycle').checked=(kv[1]=='1');"
-    "if(kv[0]=='arm_evolution')document.getElementById('arm_evolution').checked=(kv[1]=='1');"
-    "if(kv[0]=='arm_evo_speed'){document.getElementById('arm_evo_speed').value=kv[1];document.getElementById('arm_evo_speed_val').innerText=kv[1];}"
-    "if(kv[0]=='randomize_on_boot')document.getElementById('randomize_on_boot').checked=(kv[1]=='1');"
+    "if(kv[0]=='trail_len'){document.getElementById('trail_len').value="
+    "parseInt(kv[1]);document.getElementById('trail_len_val').innerText=kv[1];}"
+    "if(kv[0]=='trail_cycle')document.getElementById('trail_cycle').checked=("
+    "kv[1]=='1');"
+    "if(kv[0]=='arm_evolution')document.getElementById('arm_evolution')."
+    "checked=(kv[1]=='1');"
+    "if(kv[0]=='arm_evo_speed'){document.getElementById('arm_evo_speed').value="
+    "kv[1];document.getElementById('arm_evo_speed_val').innerText=kv[1];}"
+    "if(kv[0]=='randomize_on_boot')document.getElementById('randomize_on_boot')"
+    ".checked=(kv[1]=='1');"
     "if(kv[0]=='brightness')document.getElementById('brightness').value=kv[1];"
     "}"
     "}"
@@ -561,18 +559,6 @@ static esp_err_t root_handler(httpd_req_t *req) {
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
 
-    // Send Image URL (Dynamic)
-    if (image_url && image_url[0]) {
-      if ((ret = httpd_resp_send_chunk(req, image_url,
-                                       HTTPD_RESP_USE_STRLEN)) != ESP_OK)
-        break;
-    }
-
-    // Send Part 2
-    if ((ret = httpd_resp_send_chunk(req, s_html_part2,
-                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
-      break;
-
     // Send Swap Colors Checkbox and Pendulum Settings
     if ((ret = httpd_resp_send_chunk(req, s_html_part3_start,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
@@ -699,7 +685,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
   if (httpd_query_key_value(buf, "trail_len", trail_len_str,
                             sizeof(trail_len_str)) == ESP_OK) {
     int trail_len = atoi(trail_len_str);
-    if (trail_len >= 10 && trail_len <= 10000) {
+    if (trail_len >= 10 && trail_len <= 2000) {
       nvs_set_trail_length(trail_len);
       ESP_LOGI(TAG, "Set trail length to %d", trail_len);
     }
@@ -805,7 +791,7 @@ static esp_err_t set_value_handler(httpd_req_t *req) {
   char value[32] = {0};
   if (httpd_query_key_value(buf, "trail_len", value, sizeof(value)) == ESP_OK) {
     int val = atoi(value);
-    if (val >= 10 && val <= 10000) {
+    if (val >= 10 && val <= 2000) {
       nvs_set_trail_length(val);
       ESP_LOGI(TAG, "Set trail_len to %d", val);
     }
@@ -857,6 +843,23 @@ nvs_set_arm_evolution_speed(val / 100000.0f);
     bool val = (strcmp(value, "1") == 0);
     nvs_set_randomize_on_boot(val);
     ESP_LOGI(TAG, "Set randomize_on_boot to %d", val);
+  }
+if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
+    int val;
+    if (value[0] == '#') {
+      val = strtol(value + 1, NULL, 16);
+    } else {
+      val = atoi(value);
+    }
+    if (val >= 0 && val <= 0xFFFFFF) {
+      nvs_set_leg_color(val);
+    }
+  }
+  if (httpd_query_key_value(buf, "brightness", value, sizeof(value)) == ESP_OK) {
+    int val = atoi(value);
+    if (val >= 1 && val <= 255) {
+      nvs_set_brightness(val);
+    }
   }
 
   nvs_save_settings();
