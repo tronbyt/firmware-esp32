@@ -86,7 +86,7 @@ static const char *s_html_part3_end =
     "<div class='form-group'>"
     "<label for='trail_len'>Trail Length: <span "
     "id='trail_len_val'>200</span></label>"
-    "<input type='range' id='trail_len' name='trail_len' min='10' max='500' "
+    "<input type='range' id='trail_len' name='trail_len' min='10' max='10000' "
     "value='200' "
     "class='slider' "
     "oninput='document.getElementById(\"trail_len_val\").innerText=this.value' "
@@ -127,17 +127,27 @@ static const char *s_html_part3_end =
     " Trail Color Cycles"
     "</label>"
     "</div>"
-    "<hr>"
-    "<h3>Display Settings</h3>"
     "<div class='form-group'>"
-    "<label for='brightness'>Brightness: <span "
-    "id='brightness_val'>128</span></label>"
-    "<input type='range' id='brightness' name='brightness' min='1' max='255' "
-    "value='128' "
-    "class='slider' "
-    "oninput='document.getElementById(\"brightness_val\").innerText=this.value'"
-    " "
-    "onchange='saveSlider(\"brightness\",this.value)'>"
+    "<label>"
+    "<input type='checkbox' id='arm_evolution' name='arm_evolution' value='1' "
+    "onchange='saveSlider(\"arm_evolution\",this.checked?1:0)'>"
+    " Evolve Arm Lengths Over Time"
+    "</label>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='randomize_on_boot' name='randomize_on_boot' value='1' "
+    "onchange='saveSlider(\"randomize_on_boot\",this.checked?1:0)'>"
+    " Randomize on Boot"
+    "</label>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='arm_evo_speed'>Evo Speed: <span "
+    "id='arm_evo_speed_val'>2</span></label>"
+    "<input type='range' id='arm_evo_speed' name='arm_evo_speed' min='1' max='100' "
+    "value='2' "
+    "oninput='document.getElementById(\"arm_evo_speed_val\").innerText=this.value' "
+    "onchange='saveSlider(\"arm_evo_speed\",this.value)'>"
     "</div>"
     "<hr>"
     "<h3>Display Settings</h3>"
@@ -155,31 +165,35 @@ static const char *s_html_part3_end =
     "<input type='color' id='leg_color' name='leg_color' value='#ffffff' "
     "onchange='saveSlider(\"leg_color\",parseInt(this.value.substring(1),16))'>"
     "</div>"
-    "<script>function resetDefaults(){"
-    "saveSlider('trail_len',200);"
-    "document.getElementById('trail_len').value=200;"
-    "document.getElementById('trail_len_val').innerText=200;"
-    "saveSlider('pend_speed',10);"
-    "document.getElementById('pend_speed').value=10;"
-    "document.getElementById('pend_speed_val').innerText=10;"
-    "document.getElementById('pend_arm1').value=12;"
-    "document.getElementById('pend_arm1_val').innerText=12;"
-    "saveSlider('pend_arm2',10);"
-    "document.getElementById('pend_arm2').value=10;"
-    "document.getElementById('pend_arm2_val').innerText=10;"
-    "saveSlider('trail_cycle',0);"
-    "document.getElementById('trail_cycle').checked=false;"
-    "saveSlider('brightness',128);"
-    "document.getElementById('brightness').value=128;"
-    "document.getElementById('brightness_val').innerText=128;"
-    "saveSlider('leg_color',16777215);"
-    "document.getElementById('leg_color').value='#ffffff';"
-    "}</script>";
+    "<script>"
+    "function loadSettings(){"
+    "var x=new XMLHttpRequest();"
+    "x.open('GET','/get',true);"
+    "x.onload=function(){"
+    "if(this.status==200){"
+    "var p=this.responseText.split('&');"
+    "for(var i=0;i<p.length;i++){"
+    "var kv=p[i].split('=');"
+    "if(kv[0]=='trail_len'){document.getElementById('trail_len').value=parseInt(kv[1]);document.getElementById('trail_len_val').innerText=kv[1];}"
+    "if(kv[0]=='trail_cycle')document.getElementById('trail_cycle').checked=(kv[1]=='1');"
+    "if(kv[0]=='arm_evolution')document.getElementById('arm_evolution').checked=(kv[1]=='1');"
+    "if(kv[0]=='arm_evo_speed'){document.getElementById('arm_evo_speed').value=kv[1];document.getElementById('arm_evo_speed_val').innerText=kv[1];}"
+    "if(kv[0]=='randomize_on_boot')document.getElementById('randomize_on_boot').checked=(kv[1]=='1');"
+    "if(kv[0]=='brightness')document.getElementById('brightness').value=kv[1];"
+    "}"
+    "}"
+    "};"
+    "x.send();"
+    "}"
+    "window.onload=loadSettings;"
+    "</script>";
 
 static const char *s_html_part4 =
     "<button type='submit'>Save and Connect</button>"
     " "
     "<button type='button' onclick='resetDefaults()'>Reset to Defaults</button>"
+    " "
+    "<button type='button' onclick='randomize()'>Randomize</button>"
     "</form>"
     "<hr>"
     "<h3>Firmware Update</h3>"
@@ -195,9 +209,75 @@ static const char *s_html_part4 =
     "x.onload=function(){if(x.status==200){"
     "var msg=document.getElementById('save_msg');"
     "msg.style.display='block';"
-    "msg.innerText=name+' saved!';"
+    "msg.innerText=name+' = '+val+' saved!';"
+    "if(name=='trail_len'){document.getElementById('trail_len').value=val;document.getElementById('trail_len_val').innerText=val;}"
     "setTimeout(function(){msg.style.display='none';},1500);"
     "}};x.send();"
+    "}"
+    "function randomize(){"
+    "var tl=Math.floor(Math.random()*990)+10;"
+    "saveSlider('trail_len',tl);"
+    "document.getElementById('trail_len').value=tl;"
+    "document.getElementById('trail_len_val').innerText=tl;"
+    "var ps=Math.floor(Math.random()*49)+1;"
+    "saveSlider('pend_speed',ps);"
+    "document.getElementById('pend_speed').value=ps;"
+    "document.getElementById('pend_speed_val').innerText=ps;"
+    "var pa1=Math.floor(Math.random()*20)+5;"
+    "saveSlider('pend_arm1',pa1);"
+    "document.getElementById('pend_arm1').value=pa1;"
+    "document.getElementById('pend_arm1_val').innerText=pa1;"
+    "var pa2=Math.floor(Math.random()*20)+5;"
+    "saveSlider('pend_arm2',pa2);"
+    "document.getElementById('pend_arm2').value=pa2;"
+    "document.getElementById('pend_arm2_val').innerText=pa2;"
+    "var tc=Math.random()>0.5?1:0;"
+    "saveSlider('trail_cycle',tc);"
+    "document.getElementById('trail_cycle').checked=(tc==1);"
+    "saveSlider('arm_evolution',1);"
+    "document.getElementById('arm_evolution').checked=true;"
+    "var aes=Math.floor(Math.random()*100)+1;"
+    "saveSlider('arm_evo_speed',aes);"
+    "document.getElementById('arm_evo_speed').value=aes;"
+    "document.getElementById('arm_evo_speed_val').innerText=aes;"
+    "var rob=Math.random()>0.5?1:0;"
+    "saveSlider('randomize_on_boot',rob);"
+    "document.getElementById('randomize_on_boot').checked=(rob==1);"
+    "var br=Math.floor(Math.random()*254)+1;"
+    "saveSlider('brightness',br);"
+    "document.getElementById('brightness').value=br;"
+    "document.getElementById('brightness_val').innerText=br;"
+    "var r=Math.floor(Math.random()*255);"
+    "var g=Math.floor(Math.random()*255);"
+    "var b=Math.floor(Math.random()*255);"
+    "var c='#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);"
+    "saveSlider('leg_color',(r<<16)+(g<<8)+b);"
+    "document.getElementById('leg_color').value=c;"
+    "}"
+    "function resetDefaults(){"
+    "saveSlider('trail_len',200);"
+    "document.getElementById('trail_len').value=200;"
+    "document.getElementById('trail_len_val').innerText=200;"
+    "saveSlider('pend_speed',10);"
+    "document.getElementById('pend_speed').value=10;"
+    "document.getElementById('pend_speed_val').innerText=10;"
+    "document.getElementById('pend_arm1').value=12;"
+    "document.getElementById('pend_arm1_val').innerText=12;"
+    "saveSlider('pend_arm2',10);"
+    "document.getElementById('pend_arm2').value=10;"
+    "document.getElementById('pend_arm2_val').innerText=10;"
+    "saveSlider('trail_cycle',0);"
+    "document.getElementById('trail_cycle').checked=false;"
+    "saveSlider('arm_evolution',1);"
+    "document.getElementById('arm_evolution').checked=true;"
+    "saveSlider('arm_evo_speed',2);"
+    "document.getElementById('arm_evo_speed').value=2;"
+    "document.getElementById('arm_evo_speed_val').innerText=2;"
+    "saveSlider('brightness',128);"
+    "document.getElementById('brightness').value=128;"
+    "document.getElementById('brightness_val').innerText=128;"
+    "saveSlider('leg_color',16777215);"
+    "document.getElementById('leg_color').value='#ffffff';"
     "}"
     "function saveSettings(e) {"
     "e.preventDefault();"
@@ -261,6 +341,7 @@ static const char *s_success_html =
 static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
 static esp_err_t set_value_handler(httpd_req_t *req);
+static esp_err_t get_settings_handler(httpd_req_t *req);
 static esp_err_t update_handler(httpd_req_t *req);
 static esp_err_t captive_portal_handler(httpd_req_t *req);
 static void url_decode(char *str);
@@ -408,6 +489,12 @@ esp_err_t ap_start(void) {
                          .handler = set_value_handler,
                          .user_ctx = NULL};
   httpd_register_uri_handler(s_server, &set_uri);
+
+  httpd_uri_t get_uri = {.uri = "/get",
+                     .method = HTTP_GET,
+                     .handler = get_settings_handler,
+                     .user_ctx = NULL};
+  httpd_register_uri_handler(s_server, &get_uri);
 
   httpd_uri_t update_uri = {.uri = "/update",
                             .method = HTTP_POST,
@@ -612,7 +699,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
   if (httpd_query_key_value(buf, "trail_len", trail_len_str,
                             sizeof(trail_len_str)) == ESP_OK) {
     int trail_len = atoi(trail_len_str);
-    if (trail_len >= 10 && trail_len <= 500) {
+    if (trail_len >= 10 && trail_len <= 10000) {
       nvs_set_trail_length(trail_len);
       ESP_LOGI(TAG, "Set trail length to %d", trail_len);
     }
@@ -653,6 +740,25 @@ static esp_err_t save_handler(httpd_req_t *req) {
   }
   nvs_set_trail_color_cycle(trail_cycle);
   ESP_LOGI(TAG, "Set trail color cycle to %d", trail_cycle);
+
+  bool arm_evolution = true;
+  char arm_evolution_val[5] = {0};
+  if (httpd_query_key_value(buf, "arm_evolution", arm_evolution_val,
+                            sizeof(arm_evolution_val)) == ESP_OK) {
+    arm_evolution = (strcmp(arm_evolution_val, "1") == 0);
+  }
+  nvs_set_arm_evolution_enabled(arm_evolution);
+  ESP_LOGI(TAG, "Set arm evolution to %d", arm_evolution);
+
+  char arm_evo_speed_val[5] = {0};
+  if (httpd_query_key_value(buf, "arm_evo_speed", arm_evo_speed_val,
+                            sizeof(arm_evo_speed_val)) == ESP_OK) {
+    int arm_evo_speed = atoi(arm_evo_speed_val);
+    if (arm_evo_speed >= 1 && arm_evo_speed <= 100) {
+      nvs_set_arm_evolution_speed(arm_evo_speed / 100000.0f);
+      ESP_LOGI(TAG, "Set arm evolution speed to %d", arm_evo_speed);
+    }
+  }
 
   url_decode(ssid);
   url_decode(password);
@@ -699,7 +805,7 @@ static esp_err_t set_value_handler(httpd_req_t *req) {
   char value[32] = {0};
   if (httpd_query_key_value(buf, "trail_len", value, sizeof(value)) == ESP_OK) {
     int val = atoi(value);
-    if (val >= 10 && val <= 500) {
+    if (val >= 10 && val <= 10000) {
       nvs_set_trail_length(val);
       ESP_LOGI(TAG, "Set trail_len to %d", val);
     }
@@ -732,26 +838,46 @@ static esp_err_t set_value_handler(httpd_req_t *req) {
     nvs_set_trail_color_cycle(val);
     ESP_LOGI(TAG, "Set trail_cycle to %d", val);
   }
-  if (httpd_query_key_value(buf, "brightness", value, sizeof(value)) ==
+  if (httpd_query_key_value(buf, "arm_evolution", value, sizeof(value)) ==
+      ESP_OK) {
+    bool val = (strcmp(value, "1") == 0);
+    nvs_set_arm_evolution_enabled(val);
+    ESP_LOGI(TAG, "Set arm_evolution to %d", val);
+  }
+  if (httpd_query_key_value(buf, "arm_evo_speed", value, sizeof(value)) ==
       ESP_OK) {
     int val = atoi(value);
-    if (val >= 1 && val <= 255) {
-      nvs_set_brightness(val);
-      ESP_LOGI(TAG, "Set brightness to %d", val);
+    if (val >= 1 && val <= 100) {
+nvs_set_arm_evolution_speed(val / 100000.0f);
+      ESP_LOGI(TAG, "Set arm_evo_speed to %d", val);
     }
   }
-  if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
-    int val = strtol(value, NULL, 16);
-    if (val >= 0 && val <= 0xFFFFFF) {
-      nvs_set_leg_color(val);
-      ESP_LOGI(TAG, "Set leg_color to %d", val);
-    }
+  if (httpd_query_key_value(buf, "randomize_on_boot", value, sizeof(value)) ==
+      ESP_OK) {
+    bool val = (strcmp(value, "1") == 0);
+    nvs_set_randomize_on_boot(val);
+    ESP_LOGI(TAG, "Set randomize_on_boot to %d", val);
   }
 
   nvs_save_settings();
   nvs_settings_set_reload_flag();
 
   httpd_resp_send(req, "OK", 2);
+  return ESP_OK;
+}
+
+static esp_err_t get_settings_handler(httpd_req_t *req) {
+  char buf[128];
+  int len = snprintf(buf, sizeof(buf),
+                     "trail_len=%d&trail_cycle=%d&arm_evolution=%d&arm_evo_speed=%d&randomize_on_boot=%d&brightness=%d",
+                     nvs_get_trail_length(),
+                     nvs_get_trail_color_cycle() ? 1 : 0,
+                     nvs_get_arm_evolution_enabled() ? 1 : 0,
+                     (int)(nvs_get_arm_evolution_speed() * 100000.0f),
+                     nvs_get_randomize_on_boot() ? 1 : 0,
+                     nvs_get_brightness());
+  httpd_resp_set_type(req, "text/plain");
+  httpd_resp_send(req, buf, len);
   return ESP_OK;
 }
 

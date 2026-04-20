@@ -34,6 +34,9 @@
 #define NVS_KEY_PENDULUM_MASS2 "pend_mass2"
 #define NVS_KEY_TRAIL_LENGTH "trail_len"
 #define NVS_KEY_TRAIL_COLOR_CYCLE "trail_col"
+#define NVS_KEY_ARM_EVOLUTION "arm_evo"
+#define NVS_KEY_ARM_EVO_SPEED "arm_evo_spd"
+#define NVS_KEY_RANDOMIZE_BOOT "rand_boot"
 #define NVS_KEY_BRIGHTNESS "brightness"
 #define NVS_KEY_LEG_COLOR "leg_color"
 
@@ -67,6 +70,9 @@ static float s_pendulum_mass1 = PENDULUM_MASS1;
 static float s_pendulum_mass2 = PENDULUM_MASS2;
 static int s_trail_length = TRAIL_LENGTH_DEFAULT;
 static bool s_trail_color_cycle = false;
+static bool s_arm_evolution_enabled = true;
+static float s_arm_evolution_speed = 0.00002f;
+static bool s_randomize_on_boot = false;
 static int s_brightness = 128;
 static int s_leg_color = 0xFFFFFF;
 
@@ -181,7 +187,7 @@ esp_err_t nvs_settings_init(void) {
     // Read trail length
     int32_t trail_len;
     if (nvs_get_i32(nvs_handle, NVS_KEY_TRAIL_LENGTH, &trail_len) != ESP_OK ||
-        trail_len < 10 || trail_len > 500) {
+        trail_len < 10 || trail_len > 10000) {
       s_trail_length = TRAIL_LENGTH_DEFAULT;
     } else {
       s_trail_length = (int)trail_len;
@@ -194,6 +200,29 @@ esp_err_t nvs_settings_init(void) {
       s_trail_color_cycle = (trail_color_val != 0);
     } else {
       s_trail_color_cycle = false;  // Default: don't cycle colors
+    }
+
+    // Read arm evolution setting
+    uint8_t arm_evo_val;
+    if (nvs_get_u8(nvs_handle, NVS_KEY_ARM_EVOLUTION, &arm_evo_val) == ESP_OK) {
+      s_arm_evolution_enabled = (arm_evo_val != 0);
+    } else {
+      s_arm_evolution_enabled = true;  // Default: enabled
+    }
+
+    // Read arm evolution speed
+    required_size = sizeof(s_arm_evolution_speed);
+    if (nvs_get_blob(nvs_handle, NVS_KEY_ARM_EVO_SPEED, &s_arm_evolution_speed,
+                 &required_size) != ESP_OK) {
+      s_arm_evolution_speed = 0.00002f;  // Default ~38 min cycle
+    }
+
+    // Read randomize on boot setting
+    uint8_t rand_boot_val;
+    if (nvs_get_u8(nvs_handle, NVS_KEY_RANDOMIZE_BOOT, &rand_boot_val) == ESP_OK) {
+      s_randomize_on_boot = (rand_boot_val != 0);
+    } else {
+      s_randomize_on_boot = false;  // Default: off
     }
 
     // Read brightness
@@ -480,6 +509,12 @@ int nvs_get_trail_length(void) { return s_trail_length; }
 
 bool nvs_get_trail_color_cycle(void) { return s_trail_color_cycle; }
 
+bool nvs_get_arm_evolution_enabled(void) { return s_arm_evolution_enabled; }
+
+float nvs_get_arm_evolution_speed(void) { return s_arm_evolution_speed; }
+
+bool nvs_get_randomize_on_boot(void) { return s_randomize_on_boot; }
+
 int nvs_get_brightness(void) { return s_brightness; }
 
 int nvs_get_leg_color(void) { return s_leg_color; }
@@ -526,7 +561,7 @@ esp_err_t nvs_set_pendulum_mass2(float mass) {
 }
 
 esp_err_t nvs_set_trail_length(int length) {
-  if (length < 10 || length > 500) {
+  if (length < 10 || length > 10000) {
     return ESP_ERR_INVALID_ARG;
   }
   s_trail_length = length;
@@ -535,6 +570,24 @@ esp_err_t nvs_set_trail_length(int length) {
 
 esp_err_t nvs_set_trail_color_cycle(bool cycle) {
   s_trail_color_cycle = cycle;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_arm_evolution_enabled(bool enabled) {
+  s_arm_evolution_enabled = enabled;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_arm_evolution_speed(float speed) {
+  if (speed <= 0.0f || speed > 0.001f) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_arm_evolution_speed = speed;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_randomize_on_boot(bool enabled) {
+  s_randomize_on_boot = enabled;
   return ESP_OK;
 }
 
@@ -589,8 +642,14 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_blob(nvs_handle, NVS_KEY_PENDULUM_MASS2, &s_pendulum_mass2,
                sizeof(s_pendulum_mass2));
   nvs_set_i32(nvs_handle, NVS_KEY_TRAIL_LENGTH, s_trail_length);
-  nvs_set_u8(nvs_handle, NVS_KEY_TRAIL_COLOR_CYCLE,
-             s_trail_color_cycle ? 1 : 0);
+nvs_set_u8(nvs_handle, NVS_KEY_TRAIL_COLOR_CYCLE,
+              s_trail_color_cycle ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_ARM_EVOLUTION,
+              s_arm_evolution_enabled ? 1 : 0);
+  nvs_set_blob(nvs_handle, NVS_KEY_ARM_EVO_SPEED, &s_arm_evolution_speed,
+              sizeof(s_arm_evolution_speed));
+  nvs_set_u8(nvs_handle, NVS_KEY_RANDOMIZE_BOOT,
+             s_randomize_on_boot ? 1 : 0);
   nvs_set_i32(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
   nvs_set_i32(nvs_handle, NVS_KEY_LEG_COLOR, s_leg_color);
 

@@ -26,7 +26,7 @@ static dp::system pendulum_system;
 static double sim_time = 0.0;
 static uint8_t hue_counter = 0;
 
-#define TRAIL_LENGTH_MAX 200
+#define TRAIL_LENGTH_MAX 10000
 
 static int trail_x[TRAIL_LENGTH_MAX];
 static int trail_y[TRAIL_LENGTH_MAX];
@@ -35,6 +35,16 @@ static int trail_head = 0;
 static int current_trail_length = 200;
 static float current_arm1_length = 12.0f;
 static float current_arm2_length = 10.0f;
+static float arm1_length_target = 12.0f;
+static float arm2_length_target = 10.0f;
+static float arm1_length_min = 8.0f;
+static float arm1_length_max = 14.0f;
+static float arm2_length_min = 6.0f;
+static float arm2_length_max = 12.0f;
+static float arm_evolution_speed = 0.00002f;
+static bool arm_evolution_enabled = true;
+static bool arm_evolution_setting = true;
+static int arm_evolution_direction = 1;
 static bool current_trail_color_cycle = true;
 static float current_pendulum_speed = 0.01f;
 static int current_brightness = 128;
@@ -127,12 +137,27 @@ static void draw_bob(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
 void dp_init(void) {
   ESP_LOGI(TAG, "Initializing double pendulum");
 
+  if (nvs_get_randomize_on_boot()) {
+    nvs_set_trail_length(10 + esp_random() % 9990);
+    nvs_set_pendulum_speed((esp_random() % 50 + 1) / 1000.0f);
+    nvs_set_pendulum_arm1_length(esp_random() % 20 + 5);
+    nvs_set_pendulum_arm2_length(esp_random() % 20 + 5);
+    nvs_set_trail_color_cycle(esp_random() % 2);
+    nvs_set_arm_evolution_enabled(true);
+    nvs_set_arm_evolution_speed((esp_random() % 100 + 1) / 100000.0f);
+    nvs_set_brightness(esp_random() % 254 + 1);
+    nvs_set_leg_color(esp_random() | (esp_random() << 8) | (esp_random() << 16));
+    nvs_save_settings();
+  }
+
   // Get settings from NVS
   float arm1_len = nvs_get_pendulum_arm1_length();
   float arm2_len = nvs_get_pendulum_arm2_length();
   current_trail_length = nvs_get_trail_length();
   current_pendulum_speed = nvs_get_pendulum_speed();
   current_trail_color_cycle = nvs_get_trail_color_cycle();
+  arm_evolution_setting = nvs_get_arm_evolution_enabled();
+  arm_evolution_speed = nvs_get_arm_evolution_speed();
   current_brightness = nvs_get_brightness();
   current_leg_color = nvs_get_leg_color();
   if (current_trail_length > TRAIL_LENGTH_MAX) {
@@ -190,6 +215,8 @@ void dp_run(void) {
       current_trail_length = nvs_get_trail_length();
       current_pendulum_speed = nvs_get_pendulum_speed();
       current_trail_color_cycle = nvs_get_trail_color_cycle();
+      arm_evolution_setting = nvs_get_arm_evolution_enabled();
+      arm_evolution_speed = nvs_get_arm_evolution_speed();
       current_brightness = nvs_get_brightness();
       current_leg_color = nvs_get_leg_color();
       current_arm1_length = nvs_get_pendulum_arm1_length();
@@ -219,6 +246,26 @@ void dp_run(void) {
       sim_time = 0.0;
     }
 
+    if (arm_evolution_setting) {
+      if (arm_evolution_direction > 0) {
+        arm1_length_target = arm1_length_max;
+        arm2_length_target = arm2_length_max;
+      } else {
+        arm1_length_target = arm1_length_min;
+        arm2_length_target = arm2_length_min;
+      }
+      float diff1 = arm1_length_target - current_arm1_length;
+      float diff2 = arm2_length_target - current_arm2_length;
+      if (fabsf(diff1) < 0.1f && fabsf(diff2) < 0.1f) {
+        arm_evolution_direction *= -1;
+      } else {
+        current_arm1_length += diff1 * arm_evolution_speed;
+        current_arm2_length += diff2 * arm_evolution_speed;
+      }
+      pendulum_system.length.first = current_arm1_length / 10.0f;
+      pendulum_system.length.second = current_arm2_length / 10.0f;
+    }
+
     current_state =
         dp::advance(current_state, pendulum_system, current_pendulum_speed);
     sim_time += 0.01;
@@ -246,8 +293,12 @@ void dp_run(void) {
     for (int i = 0; i < current_trail_length; i++) {
       int idx = (trail_head - i - 1 + TRAIL_LENGTH_MAX) % TRAIL_LENGTH_MAX;
       if (trail_x[idx] >= 0 && trail_y[idx] >= 0) {
-        uint8_t alpha =
-            (uint8_t)((current_trail_length - i) * 200 / current_trail_length);
+        uint8_t alpha;
+        if (current_trail_length >= 10000 || current_trail_length < 0) {
+          alpha = 255;  // "infinite" trail - no fade
+        } else {
+          alpha = (uint8_t)((current_trail_length - i) * 200 / current_trail_length);
+        }
         uint8_t r, g, b;
         uint8_t hue = current_trail_color_cycle ? (hue_counter - i * 2) & 0xFF
                                                 : trail_hue[idx];
