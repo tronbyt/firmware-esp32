@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "ap.h"
+#include "display.h"
 #include "esp_event.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -42,6 +43,7 @@
 static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t* s_sta_netif = NULL;
 static void (*s_config_callback)(void) = NULL;
+static uint32_t s_pending_ip = 0;
 
 // Reconnection counter
 static int s_reconnect_attempts = 0;
@@ -274,6 +276,20 @@ void wifi_register_config_callback(void (*callback)(void)) {
   s_config_callback = callback;
 }
 
+// Display current IP on display (call after display init)
+void wifi_display_ip(void) {
+  if (s_pending_ip != 0) {
+    uint8_t* ip = (uint8_t*)&s_pending_ip;
+    char ip_str[16];
+    snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    ESP_LOGI(TAG, "Displaying IP: %s", ip_str);
+    display_clear();
+    display_text(ip_str, 0, 16, 255, 255, 255, 255);
+    display_flip();
+    s_pending_ip = 0;
+  }
+}
+
 // Helper to handle successful IP acquisition
 static void handle_successful_ip_acquisition(void) {
   // Reset reconnection counter on successful connection
@@ -284,13 +300,15 @@ static void handle_successful_ip_acquisition(void) {
   xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
   xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
-  // Display IP address
+  // Log IP address
   esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA");
   if (sta_netif) {
     esp_netif_ip_info_t ip_info;
     if (esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK) {
+      uint8_t* ip = (uint8_t*)&ip_info.ip.addr;
       char ip_str[16];
-      snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&ip_info.ip));
+      snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", ip[0], ip[1], ip[2],
+               ip[3]);
       ESP_LOGI(TAG, "Got IP: %s", ip_str);
     }
   }
@@ -361,6 +379,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         handle_successful_ip_acquisition();
+        // Store IP for main task to display
+        s_pending_ip = event->ip_info.ip.addr;
       } break;
       case IP_EVENT_GOT_IP6: {
         ip_event_got_ip6_t* event = (ip_event_got_ip6_t*)event_data;

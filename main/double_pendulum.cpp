@@ -119,15 +119,20 @@ static void draw_line(int x0, int y0, int x1, int y1, uint8_t r, uint8_t g,
 }
 
 static void draw_bob(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
-  // Draw a more circular bob with radius 2 pixels
+  // Draw a spherical bob with gradient effect
   for (int dy = -2; dy <= 2; dy++) {
     for (int dx = -2; dx <= 2; dx++) {
       int px = x + dx;
       int py = y + dy;
-      // Check if point is within circle radius 2
-      if (dx * dx + dy * dy <= 4 &&  // radius squared = 4
-          px >= 0 && px < DISPLAY_WIDTH && py >= 0 && py < DISPLAY_HEIGHT) {
-        display_get_matrix()->drawPixelRGB888(px, py, r, g, b);
+      int dist_sq = dx * dx + dy * dy;
+      if (dist_sq <= 4 && px >= 0 && px < DISPLAY_WIDTH && py >= 0 &&
+          py < DISPLAY_HEIGHT) {
+        // Dim based on distance from center (0,0) for spherical effect
+        uint8_t brightness = 255 - (dist_sq * 40);  // Center=255, edge=~80
+        uint8_t br = (r * brightness) / 255;
+        uint8_t bg = (g * brightness) / 255;
+        uint8_t bb = (b * brightness) / 255;
+        display_get_matrix()->drawPixelRGB888(px, py, br, bg, bb);
       }
     }
   }
@@ -298,7 +303,8 @@ void dp_run(void) {
         if (current_trail_length >= 2000 || current_trail_length < 0) {
           alpha = 255;  // "infinite" trail - no fade
         } else {
-          alpha = (uint8_t)((current_trail_length - i) * 200 / current_trail_length);
+          alpha = (uint8_t)((current_trail_length - i) * 200 /
+                            current_trail_length);
         }
         uint8_t r, g, b;
         uint8_t hue = current_trail_color_cycle ? (hue_counter - i * 2) & 0xFF

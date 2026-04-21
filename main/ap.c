@@ -546,7 +546,6 @@ static void ap_shutdown_timer_callback(TimerHandle_t xTimer) {
 }
 
 static esp_err_t root_handler(httpd_req_t *req) {
-  const char *image_url = nvs_get_image_url();
   ESP_LOGI(TAG, "Serving root page (chunked)");
 
   httpd_resp_set_type(req, "text/html");

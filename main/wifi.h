@@ -78,6 +78,11 @@ void wifi_health_check(void);
  */
 void wifi_apply_power_save(void);
 
+/**
+ * @brief Display current IP on LED matrix (call after display init)
+ */
+void wifi_display_ip(void);
+
 #ifdef __cplusplus
 }
 #endif

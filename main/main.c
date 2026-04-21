@@ -517,9 +517,9 @@ void app_main(void) {
   if (sta_netif) {
     esp_netif_ip_info_t ip_info;
     if (esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK) {
-      char ip_str[16];
-      snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&ip_info.ip));
-      ESP_LOGI(TAG, "Connected IP: %s", ip_str);
+      uint32_t ip = ip_info.ip.addr;
+      ESP_LOGI(TAG, "Connected IP: %d.%d.%d.%d", (ip >> 0) & 0xFF,
+               (ip >> 8) & 0xFF, (ip >> 16) & 0xFF, (ip >> 24) & 0xFF);
     }
   }
 
@@ -530,6 +530,9 @@ void app_main(void) {
     return;
   }
   esp_register_shutdown_handler(&display_shutdown);
+
+  // Display IP if already connected
+  wifi_display_ip();
 
   ESP_LOGI(TAG, "Starting double pendulum animation");
   dp_run();
