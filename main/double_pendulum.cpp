@@ -26,7 +26,7 @@ static dp::system pendulum_system;
 static double sim_time = 0.0;
 static uint8_t hue_counter = 0;
 
-#define TRAIL_LENGTH_MAX 2000
+#define TRAIL_LENGTH_MAX 10000
 
 static int trail_x[TRAIL_LENGTH_MAX];
 static int trail_y[TRAIL_LENGTH_MAX];
@@ -324,7 +324,7 @@ void dp_run(void) {
       int idx = (trail_head - i - 1 + TRAIL_LENGTH_MAX) % TRAIL_LENGTH_MAX;
       if (trail_x[idx] >= 0 && trail_y[idx] >= 0) {
         uint8_t alpha;
-        if (current_trail_length >= 2000 || current_trail_length < 0) {
+        if (current_trail_length >= 9999 || current_trail_length < 0) {
           alpha = 255;  // "infinite" trail - no fade
         } else {
           alpha = (uint8_t)((current_trail_length - i) * 200 /

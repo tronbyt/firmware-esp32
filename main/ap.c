@@ -70,13 +70,13 @@ static const char *s_html_part3_start =
     "<div class='form-group'>"
     "<label>";
 
-static const char* s_html_part3_end =
+static const char *s_html_part3_end =
     "</label>"
     "</div>"
     "<div class='form-group'>"
     "<label for='trail_len'>Trail Length: <span "
     "id='trail_len_val'>200</span></label>"
-    "<input type='range' id='trail_len' name='trail_len' min='10' max='2000' "
+    "<input type='range' id='trail_len' name='trail_len' min='10' max='10000' "
     "value='200' "
     "class='slider' "
     "oninput='document.getElementById(\"trail_len_val\").innerText=this.value' "
@@ -208,7 +208,8 @@ static const char *s_html_part4 =
     "var msg=document.getElementById('save_msg');"
     "msg.style.display='block';"
     "msg.innerText=name+' = '+val+' saved!';"
-    "if(name=='trail_len'){document.getElementById('trail_len').value=val;document.getElementById('trail_len_val').innerText=val;}"
+    "if(name=='trail_len'){document.getElementById('trail_len').value=val;"
+    "document.getElementById('trail_len_val').innerText=val;}"
     "setTimeout(function(){msg.style.display='none';},1500);"
     "}};x.send();"
     "}"
@@ -489,9 +490,9 @@ esp_err_t ap_start(void) {
   httpd_register_uri_handler(s_server, &set_uri);
 
   httpd_uri_t get_uri = {.uri = "/get",
-                     .method = HTTP_GET,
-                     .handler = get_settings_handler,
-                     .user_ctx = NULL};
+                         .method = HTTP_GET,
+                         .handler = get_settings_handler,
+                         .user_ctx = NULL};
   httpd_register_uri_handler(s_server, &get_uri);
 
   httpd_uri_t update_uri = {.uri = "/update",
@@ -833,7 +834,7 @@ static esp_err_t set_value_handler(httpd_req_t *req) {
       ESP_OK) {
     int val = atoi(value);
     if (val >= 1 && val <= 100) {
-nvs_set_arm_evolution_speed(val / 100000.0f);
+      nvs_set_arm_evolution_speed(val / 100000.0f);
       ESP_LOGI(TAG, "Set arm_evo_speed to %d", val);
     }
   }
@@ -843,7 +844,7 @@ nvs_set_arm_evolution_speed(val / 100000.0f);
     nvs_set_randomize_on_boot(val);
     ESP_LOGI(TAG, "Set randomize_on_boot to %d", val);
   }
-if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
+  if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
     int val;
     if (value[0] == '#') {
       val = strtol(value + 1, NULL, 16);
@@ -854,7 +855,8 @@ if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
       nvs_set_leg_color(val);
     }
   }
-  if (httpd_query_key_value(buf, "brightness", value, sizeof(value)) == ESP_OK) {
+  if (httpd_query_key_value(buf, "brightness", value, sizeof(value)) ==
+      ESP_OK) {
     int val = atoi(value);
     if (val >= 1 && val <= 255) {
       nvs_set_brightness(val);
@@ -870,14 +872,14 @@ if (httpd_query_key_value(buf, "leg_color", value, sizeof(value)) == ESP_OK) {
 
 static esp_err_t get_settings_handler(httpd_req_t *req) {
   char buf[128];
-  int len = snprintf(buf, sizeof(buf),
-                     "trail_len=%d&trail_cycle=%d&arm_evolution=%d&arm_evo_speed=%d&randomize_on_boot=%d&brightness=%d",
-                     nvs_get_trail_length(),
-                     nvs_get_trail_color_cycle() ? 1 : 0,
-                     nvs_get_arm_evolution_enabled() ? 1 : 0,
-                     (int)(nvs_get_arm_evolution_speed() * 100000.0f),
-                     nvs_get_randomize_on_boot() ? 1 : 0,
-                     nvs_get_brightness());
+  int len =
+      snprintf(buf, sizeof(buf),
+               "trail_len=%d&trail_cycle=%d&arm_evolution=%d&arm_evo_speed=%d&"
+               "randomize_on_boot=%d&brightness=%d",
+               nvs_get_trail_length(), nvs_get_trail_color_cycle() ? 1 : 0,
+               nvs_get_arm_evolution_enabled() ? 1 : 0,
+               (int)(nvs_get_arm_evolution_speed() * 100000.0f),
+               nvs_get_randomize_on_boot() ? 1 : 0, nvs_get_brightness());
   httpd_resp_set_type(req, "text/plain");
   httpd_resp_send(req, buf, len);
   return ESP_OK;

@@ -199,7 +199,7 @@ esp_err_t nvs_settings_init(void) {
     // Read trail length
     int32_t trail_len;
     if (nvs_get_i32(nvs_handle, NVS_KEY_TRAIL_LENGTH, &trail_len) != ESP_OK ||
-        trail_len < 10 || trail_len > 2000) {
+        trail_len < 10 || trail_len > 10000) {
       s_trail_length = TRAIL_LENGTH_DEFAULT;
     } else {
       s_trail_length = (int)trail_len;
@@ -574,7 +574,7 @@ esp_err_t nvs_set_pendulum_mass2(float mass) {
 }
 
 esp_err_t nvs_set_trail_length(int length) {
-  if (length < 10 || length > 2000) {
+  if (length < 10 || length > 10000) {
     return ESP_ERR_INVALID_ARG;
   }
   s_trail_length = length;
