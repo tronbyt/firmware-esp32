@@ -215,6 +215,30 @@ void dp_run(void) {
   dp_init();
 
   while (1) {
+    // Check for pending IP display
+    const char* ip_str = nvs_get_and_clear_pending_ip_display();
+    if (ip_str) {
+      ESP_LOGI(TAG, "Displaying IP: %s", ip_str);
+      display_clear();
+      display_flip();
+      vTaskDelay(pdMS_TO_TICKS(10));
+      // Parse IP and display in two lines
+      // Format: xxx.xxx - first line, xxx.xxx - second line
+      char line1[16], line2[16];
+      int a, b, c, d;
+      sscanf(ip_str, "%d.%d.%d.%d", &a, &b, &c, &d);
+      snprintf(line1, sizeof(line1), "%d.%d", a, b);
+      snprintf(line2, sizeof(line2), "%d.%d", c, d);
+      display_text(line1, 0, 11, 255, 255, 255, 1);
+      display_text(line2, 0, 21, 255, 255, 255, 1);
+      display_flip();
+      free((void*)ip_str);
+      vTaskDelay(pdMS_TO_TICKS(3000));
+      // Clear after showing IP
+      display_clear();
+      display_flip();
+    }
+
     // Check if settings were updated via config portal
     if (nvs_settings_get_and_clear_reload_flag()) {
       ESP_LOGI(TAG, "Reloading settings from NVS");

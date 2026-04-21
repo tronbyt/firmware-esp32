@@ -43,7 +43,6 @@
 static EventGroupHandle_t s_wifi_event_group;
 static esp_netif_t* s_sta_netif = NULL;
 static void (*s_config_callback)(void) = NULL;
-static uint32_t s_pending_ip = 0;
 
 // Reconnection counter
 static int s_reconnect_attempts = 0;
@@ -278,15 +277,13 @@ void wifi_register_config_callback(void (*callback)(void)) {
 
 // Display current IP on display (call after display init)
 void wifi_display_ip(void) {
-  if (s_pending_ip != 0) {
-    uint8_t* ip = (uint8_t*)&s_pending_ip;
-    char ip_str[16];
-    snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  const char* ip_str = nvs_get_and_clear_pending_ip_display();
+  if (ip_str) {
     ESP_LOGI(TAG, "Displaying IP: %s", ip_str);
     display_clear();
     display_text(ip_str, 0, 16, 255, 255, 255, 255);
     display_flip();
-    s_pending_ip = 0;
+    free((void*)ip_str);
   }
 }
 
@@ -379,8 +376,13 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
         ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         handle_successful_ip_acquisition();
-        // Store IP for main task to display
-        s_pending_ip = event->ip_info.ip.addr;
+        // Store IP for display
+        uint8_t* ip = (uint8_t*)&event->ip_info.ip.addr;
+        char ip_str[16];
+        snprintf(ip_str, sizeof(ip_str), "%d.%d.%d.%d", ip[0], ip[1], ip[2],
+                 ip[3]);
+        ESP_LOGI(TAG, "Setting pending IP: %s", ip_str);
+        nvs_set_pending_ip_display(ip_str);
       } break;
       case IP_EVENT_GOT_IP6: {
         ip_event_got_ip6_t* event = (ip_event_got_ip6_t*)event_data;

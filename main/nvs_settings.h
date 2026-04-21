@@ -79,7 +79,10 @@ esp_err_t nvs_set_pendulum_arm2_length(float length);
 esp_err_t nvs_set_pendulum_mass1(float mass);
 esp_err_t nvs_set_pendulum_mass2(float mass);
 
-// Save all modified settings to NVS
+// Pending IP display
+void nvs_set_pending_ip_display(const char *ip_str);
+const char *nvs_get_and_clear_pending_ip_display(void);
+
 esp_err_t nvs_save_settings(void);
 
 #ifdef __cplusplus
