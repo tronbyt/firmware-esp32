@@ -736,6 +736,7 @@ void app_main(void) {
                "WebSocket client failed to start after %d attempts, "
                "will retry periodically",
                max_start_retries);
+      
     }
 
     bool was_connected = false;
@@ -788,6 +789,7 @@ void app_main(void) {
             }
           }
         }
+        draw_error_indicator_pixel();
         // Normal disconnection within threshold: library reconnects via
         // reconnect_timeout_ms
       }
