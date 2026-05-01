@@ -158,8 +158,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
       xEventGroupSetBits(s_ws_event_group, WS_CONNECTED_BIT);
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-      draw_error_indicator_pixel();
+      xEventGroupClearBits(s_ws_event_group, WS_CONNECTED_BIT);
       break;
     case WEBSOCKET_EVENT_DATA:
       // Process text messages (op_code == 1)
@@ -711,16 +710,11 @@ void app_main(void) {
     s_ws_event_group = xEventGroupCreate();
 
     // Start the client immediately
+    // Start once, never stop/start in the loop
     esp_err_t err = esp_websocket_client_start(ws_handle);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Failed to start WebSocket client: %d", err);
     }
-
-    // Wait for connection with a timeout (e.g., 5 seconds)
-    // If it fails to connect in time, the loop below will handle reconnection
-    // logic
-    xEventGroupWaitBits(s_ws_event_group, WS_CONNECTED_BIT, pdFALSE, pdTRUE,
-                        pdMS_TO_TICKS(5000));
 
     bool was_connected = false;
     for (;;) {
@@ -735,14 +729,11 @@ void app_main(void) {
       } else {
         if (was_connected) {
           was_connected = false;
-          ESP_LOGW(TAG, "WebSocket Disconnected");
+          ESP_LOGW(TAG,
+                   "WebSocket Disconnected, waiting for auto-reconnect...");
         }
-        ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
-        esp_websocket_client_stop(ws_handle);
-        esp_err_t err = esp_websocket_client_start(ws_handle);
-        if (err != ESP_OK) {
-          ESP_LOGE(TAG, "Reconnection failed with error %d", err);
-        }
+        // DO NOT call stop/start here — library reconnects via
+        // reconnect_timeout_ms
       }
 
       wifi_health_check();
