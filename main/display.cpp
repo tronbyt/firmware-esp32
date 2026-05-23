@@ -72,6 +72,25 @@
 #define CLK 22
 #define LAT 26
 #define OE 25
+
+#elif CONFIG_BOARD_WAVESHARE_S3
+#define R1 4
+#define G1 5
+#define BL1 6
+#define R2 7
+#define G2 15
+#define BL2 16
+
+#define CH_A 18
+#define CH_B 8
+#define CH_C 3
+#define CH_D 42
+#define CH_E 9
+
+#define LAT 40
+#define OE 2
+#define CLK 41
+
 #elif CONFIG_BOARD_MATRIXPORTAL_S3
 //                     R1, G1, B1, R2, G2, B2
 // uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
@@ -137,7 +156,7 @@ int display_initialize(void) {
     pin_BL2 = 37;
   }
 #elif CONFIG_BOARD_TIDBYT_GEN2 || CONFIG_BOARD_TRONBYT_S3_WIDE || \
-    CONFIG_BOARD_TRONBYT_S3 || CONFIG_BOARD_PIXOTICKER
+    CONFIG_BOARD_TRONBYT_S3 || CONFIG_BOARD_PIXOTICKER || CONFIG_BOARD_WAVESHARE_S3
   // These variants don't support color swapping, use fixed pins
   pin_R1 = R1;
   pin_G1 = G1;
