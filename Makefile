@@ -21,7 +21,7 @@ help:
 	@echo "  tronbyt-s3-wide          Build for Tronbyt S3 Wide"
 	@echo "  pixoticker               Build for Pixoticker"
 	@echo "  matrixportal-s3          Build for MatrixPortal S3"
-	@echo "  matrixportal-s3-waveshare Build for MatrixPortal S3 (Waveshare)
+	@echo "  matrixportal-s3-waveshare Build for MatrixPortal S3 (Waveshare)"
 	@echo "  waveshare-s3             Build for Waveshare ESP32-S3-RGB-Matrix"
 
 IDFPY := $(shell which idf.py)
