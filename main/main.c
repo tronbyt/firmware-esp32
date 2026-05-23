@@ -669,7 +669,7 @@ void app_main(void) {
   if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&
       strlen(api_key) > 0) {
     size_t key_len = strlen(api_key);
-    ESP_LOGI(TAG, "API key: ...%s", api_key + key_len - 4);
+    ESP_LOGD(TAG, "API key: ...%s", api_key + key_len - 4);
   }
 
   ESP_LOGI(TAG, "Free heap: %" PRIu32, esp_get_free_heap_size());
@@ -678,9 +678,8 @@ void app_main(void) {
   ESP_LOGI(TAG, "Free internal RAM: %" PRIu32,
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
-  // Check for ws:// or wss:// in the URL
-  if (strncmp(image_url, "ws://", 5) == 0 ||
-      strncmp(image_url, "wss://", 6) == 0) {
+  // Check for secure WebSocket URL (wss:// only)
+  if (strncmp(image_url, "wss://", 6) == 0) {
     ESP_LOGI(TAG, "Using websockets with URL: %s", image_url);
     use_websocket = true;
 
