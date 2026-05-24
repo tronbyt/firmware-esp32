@@ -814,14 +814,16 @@ void app_main(void) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Poll touch frequently for 5 seconds (50ms intervals = 100 checks)
       // This allows proper gesture detection while keeping health checks at 5s
-      for (int i = 0; i < 100; i++) {
-        if (!nvs_get_disable_touch()) {
+      if (nvs_get_disable_touch()) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+      } else {
+        for (int i = 0; i < 100; i++) {
           touch_event_t touch_event = touch_control_check();
           if (touch_event != TOUCH_EVENT_NONE) {
             handle_touch_event(touch_event);
           }
+          vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
         }
-        vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
       }
 #else
       vTaskDelay(pdMS_TO_TICKS(5000));  // 5 second health check interval
