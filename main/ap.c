@@ -487,7 +487,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
   char password[200] = {0};
   char image_url[400] = {0};
   char swap_val[2] = {0};
-  char touch_val[2] = {0};
+  char touch_val[4] = {0};
   bool swap_colors = false;
   bool disable_touch = false;
 
