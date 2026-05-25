@@ -125,6 +125,7 @@ static esp_err_t send_client_info(void) {
                             nvs_get_skip_boot_animation());
       cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
+      cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -288,6 +289,16 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 bool val = cJSON_IsTrue(prefer_ipv6_item);
                 nvs_set_prefer_ipv6(val);
                 ESP_LOGI(TAG, "Updated prefer_ipv6 to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for "disable_touch"
+              cJSON* disable_touch_item =
+                  cJSON_GetObjectItem(root, "disable_touch");
+              if (cJSON_IsBool(disable_touch_item)) {
+                bool val = cJSON_IsTrue(disable_touch_item);
+                nvs_set_disable_touch(val);
+                ESP_LOGI(TAG, "Updated disable_touch to %d", val);
                 settings_changed = true;
               }
 
@@ -524,14 +535,18 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
-  ESP_LOGI(TAG, "Initializing touch control...");
-  esp_err_t touch_ret = touch_control_init();
-  if (touch_ret == ESP_OK) {
-    ESP_LOGI(TAG, "Touch control ready on GPIO33");
-    touch_control_debug_all_pads();
+  if (!nvs_get_disable_touch()) {
+    ESP_LOGI(TAG, "Initializing touch control...");
+    esp_err_t touch_ret = touch_control_init();
+    if (touch_ret == ESP_OK) {
+      ESP_LOGI(TAG, "Touch control ready on GPIO33");
+      touch_control_debug_all_pads();
+    } else {
+      ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
+               esp_err_to_name(touch_ret));
+    }
   } else {
-    ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
-             esp_err_to_name(touch_ret));
+    ESP_LOGI(TAG, "Touch control disabled via NVS");
   }
 #endif
 
@@ -799,12 +814,16 @@ void app_main(void) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Poll touch frequently for 5 seconds (50ms intervals = 100 checks)
       // This allows proper gesture detection while keeping health checks at 5s
-      for (int i = 0; i < 100; i++) {
-        touch_event_t touch_event = touch_control_check();
-        if (touch_event != TOUCH_EVENT_NONE) {
-          handle_touch_event(touch_event);
+      if (nvs_get_disable_touch()) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+      } else {
+        for (int i = 0; i < 100; i++) {
+          touch_event_t touch_event = touch_control_check();
+          if (touch_event != TOUCH_EVENT_NONE) {
+            handle_touch_event(touch_event);
+          }
+          vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
         }
-        vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
       }
 #else
       vTaskDelay(pdMS_TO_TICKS(5000));  // 5 second health check interval
@@ -898,9 +917,11 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Check for touch events
-      touch_event_t touch_event = touch_control_check();
-      if (touch_event != TOUCH_EVENT_NONE) {
-        handle_touch_event(touch_event);
+      if (!nvs_get_disable_touch()) {
+        touch_event_t touch_event = touch_control_check();
+        if (touch_event != TOUCH_EVENT_NONE) {
+          handle_touch_event(touch_event);
+        }
       }
 #endif
 

@@ -37,6 +37,7 @@ bool nvs_get_skip_display_version(void);
 bool nvs_get_skip_boot_animation(void);
 bool nvs_get_ap_mode(void);
 bool nvs_get_prefer_ipv6(void);
+bool nvs_get_disable_touch(void);
 
 // Setters
 esp_err_t nvs_set_ssid(const char *ssid);
@@ -52,6 +53,7 @@ esp_err_t nvs_set_skip_display_version(bool skip);
 esp_err_t nvs_set_skip_boot_animation(bool skip);
 esp_err_t nvs_set_ap_mode(bool ap_mode);
 esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6);
+esp_err_t nvs_set_disable_touch(bool disable_touch);
 
 // Save all modified settings to NVS
 esp_err_t nvs_save_settings(void);

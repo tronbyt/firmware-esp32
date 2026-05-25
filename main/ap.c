@@ -82,6 +82,19 @@ static const char *s_html_part3_end =
     "</div>";
 #endif
 
+#if CONFIG_BOARD_TIDBYT_GEN2
+static const char *s_html_gen2_start =
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='disable_touch' name='disable_touch' value='1' ";
+
+static const char *s_html_gen2_end =
+    ">"
+    " Disable Touch Button (Gen2 only - requires reboot)"
+    "</label>"
+    "</div>";
+#endif
+
 static const char *s_html_part4 =
     "<button type='submit'>Save and Connect</button>"
     "</form>"
@@ -376,6 +389,21 @@ static esp_err_t root_handler(httpd_req_t *req) {
       break;
 #endif
 
+#if CONFIG_BOARD_TIDBYT_GEN2
+    // Send Disable Touch Checkbox (Conditional)
+    if ((ret = httpd_resp_send_chunk(req, s_html_gen2_start,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+    if (nvs_get_disable_touch()) {
+      if ((ret = httpd_resp_send_chunk(req, "checked",
+                                       HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+        break;
+    }
+    if ((ret = httpd_resp_send_chunk(req, s_html_gen2_end,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+#endif
+
     // Send Part 4 (End)
     if ((ret = httpd_resp_send_chunk(req, s_html_part4,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
@@ -459,7 +487,9 @@ static esp_err_t save_handler(httpd_req_t *req) {
   char password[200] = {0};
   char image_url[400] = {0};
   char swap_val[2] = {0};
+  char touch_val[4] = {0};
   bool swap_colors = false;
+  bool disable_touch = false;
 
   // Use httpd_query_key_value to parse form data
   if (httpd_query_key_value(buf, "ssid", ssid, sizeof(ssid)) != ESP_OK) {
@@ -481,17 +511,25 @@ static esp_err_t save_handler(httpd_req_t *req) {
     swap_colors = (strcmp(swap_val, "1") == 0);
   }
 
+  if (httpd_query_key_value(buf, "disable_touch", touch_val,
+                            sizeof(touch_val)) == ESP_OK) {
+    disable_touch = (strcmp(touch_val, "1") == 0);
+  }
+
   url_decode(ssid);
   url_decode(password);
   url_decode(image_url);
 
-  ESP_LOGI(TAG, "Received SSID: %s, Image URL: %s, Swap Colors: %s", ssid,
-           image_url, swap_colors ? "true" : "false");
+  ESP_LOGI(TAG,
+           "Received SSID: %s, Image URL: %s, Swap Colors: %s, Disable Touch: %s",
+           ssid, image_url, swap_colors ? "true" : "false",
+           disable_touch ? "true" : "false");
 
   nvs_set_ssid(ssid);
   nvs_set_password(password);
   nvs_set_image_url(strlen(image_url) < 6 ? NULL : image_url);
   nvs_set_swap_colors(swap_colors);
+  nvs_set_disable_touch(disable_touch);
   nvs_save_settings();
 
   free(buf);

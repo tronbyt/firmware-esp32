@@ -26,6 +26,7 @@
 #define NVS_KEY_SKIP_BOOT "skip_boot"
 #define NVS_KEY_AP_MODE "ap_mode"
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
+#define NVS_KEY_DISABLE_TOUCH "dis_touch"
 #define NVS_KEY_API_KEY "api_key"
 
 // Internal storage
@@ -41,6 +42,7 @@ static bool s_skip_display_version = false;
 static bool s_skip_boot_animation = false;
 static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
+static bool s_disable_touch = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 
 // Hardcoded defaults (from secrets.json via CMake)
@@ -161,6 +163,10 @@ esp_err_t nvs_settings_init(void) {
       s_prefer_ipv6 = (val_u8 != 0);
     }
 
+    if (nvs_get_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, &val_u8) == ESP_OK) {
+      s_disable_touch = (val_u8 != 0);
+    }
+
     required_size = sizeof(s_api_key);
     if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key,
                     &required_size) != ESP_OK) {
@@ -259,6 +265,8 @@ bool nvs_get_skip_boot_animation(void) { return s_skip_boot_animation; }
 bool nvs_get_ap_mode(void) { return s_ap_mode; }
 
 bool nvs_get_prefer_ipv6(void) { return s_prefer_ipv6; }
+
+bool nvs_get_disable_touch(void) { return s_disable_touch; }
 
 esp_err_t nvs_get_api_key(char *api_key, size_t max_len) {
   if (!api_key) return ESP_ERR_INVALID_ARG;
@@ -390,6 +398,11 @@ esp_err_t nvs_set_prefer_ipv6(bool prefer_ipv6) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_disable_touch(bool disable_touch) {
+  s_disable_touch = disable_touch;
+  return ESP_OK;
+}
+
 esp_err_t nvs_save_settings(void) {
   nvs_handle_t nvs_handle;
   esp_err_t err;
@@ -411,6 +424,7 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_u8(nvs_handle, NVS_KEY_SKIP_BOOT, s_skip_boot_animation ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, s_disable_touch ? 1 : 0);
 
   err = nvs_commit(nvs_handle);
   nvs_close(nvs_handle);
