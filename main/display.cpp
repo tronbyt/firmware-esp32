@@ -99,7 +99,11 @@
 // uint8_t latchPin = 47;
 // uint8_t oePin = 14;
 #define R1 42
+#define G1 41
+#define BL1 40
 #define R2 38
+#define G2 39
+#define BL2 37
 #define CH_A 45
 #define CH_B 36
 #define CH_C 48
@@ -109,6 +113,12 @@
 #define LAT 47
 #define OE 14
 #else  // GEN1 from here down.
+#define R1 2
+#define G1 22
+#define BL1 21
+#define R2 4
+#define G2 27
+#define BL2 23
 #define CH_A 26
 #define CH_B 5
 #define CH_C 25
@@ -136,53 +146,22 @@ int display_initialize(void) {
   // Get swap_colors setting
   bool swap_colors = nvs_get_swap_colors();
 
-  // Initialize pin values based on hardware and swap_colors setting
-  int8_t pin_R1, pin_G1, pin_BL1, pin_R2, pin_G2, pin_BL2;
+  // Initialize all pins to their default configuration
+  int8_t pin_R1 = R1, pin_G1 = G1, pin_BL1 = BL1;
+  int8_t pin_R2 = R2, pin_G2 = G2, pin_BL2 = BL2;
 
-#if CONFIG_BOARD_MATRIXPORTAL_S3
-  pin_R1 = R1;  // R1 = 42
-  pin_R2 = R2;  // R2 = 38
+  // Apply board-specific color swap
   if (swap_colors) {
-    // Swapped configuration for MATRIXPORTALS3
-    pin_G1 = 40;
-    pin_BL1 = 41;
-    pin_G2 = 37;
-    pin_BL2 = 39;
-  } else {
-    // Normal configuration for MATRIXPORTALS3
-    pin_G1 = 41;
-    pin_BL1 = 40;
-    pin_G2 = 39;
-    pin_BL2 = 37;
-  }
-#elif CONFIG_BOARD_TIDBYT_GEN2 || CONFIG_BOARD_TRONBYT_S3_WIDE || \
-    CONFIG_BOARD_TRONBYT_S3 || CONFIG_BOARD_PIXOTICKER || CONFIG_BOARD_WAVESHARE_S3
-  // These variants don't support color swapping, use fixed pins
-  pin_R1 = R1;
-  pin_G1 = G1;
-  pin_BL1 = BL1;
-  pin_R2 = R2;
-  pin_G2 = G2;
-  pin_BL2 = BL2;
-#else  // GEN1
-  if (swap_colors) {
-    // Swapped configuration for GEN1
-    pin_R1 = 21;
-    pin_G1 = 2;
-    pin_BL1 = 22;
-    pin_R2 = 23;
-    pin_G2 = 4;
-    pin_BL2 = 27;
-  } else {
-    // Normal configuration for GEN1
-    pin_R1 = 2;
-    pin_G1 = 22;
-    pin_BL1 = 21;
-    pin_R2 = 4;
-    pin_G2 = 27;
-    pin_BL2 = 23;
-  }
+#if CONFIG_BOARD_MATRIXPORTAL_S3 || CONFIG_BOARD_TRONBYT_S3
+    // Swap green and blue channels
+    int8_t tmp = pin_G1; pin_G1 = pin_BL1; pin_BL1 = tmp;
+    tmp = pin_G2; pin_G2 = pin_BL2; pin_BL2 = tmp;
+#elif CONFIG_BOARD_TIDBYT_GEN1
+    // Rotate R -> BL -> G -> R
+    int8_t tmp = pin_R1; pin_R1 = pin_BL1; pin_BL1 = pin_G1; pin_G1 = tmp;
+    tmp = pin_R2; pin_R2 = pin_BL2; pin_BL2 = pin_G2; pin_G2 = tmp;
 #endif
+  }
 
   ESP_LOGI(TAG, "Initializing display with swap_colors=%s",
            swap_colors ? "true" : "false");

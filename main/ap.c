@@ -69,7 +69,7 @@ static const char *s_html_part2 =
     "'>"
     "</div>";
 
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3 || CONFIG_BOARD_TRONBYT_S3
 static const char *s_html_part3_start =
     "<div class='form-group'>"
     "<label>"
@@ -374,7 +374,7 @@ static esp_err_t root_handler(httpd_req_t *req) {
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
 
-#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3
+#if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3 || CONFIG_BOARD_TRONBYT_S3
     // Send Swap Colors Checkbox (Conditional)
     if ((ret = httpd_resp_send_chunk(req, s_html_part3_start,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
