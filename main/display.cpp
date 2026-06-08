@@ -109,8 +109,6 @@
 
 #define WIDTH 128
 #define HEIGHT 64
-#elif CONFIG_BOARD_MATRIXPORTAL_S3
-// ... rest of original code stays exactly as it is ...
 
 #elif CONFIG_BOARD_MATRIXPORTAL_S3
 //                     R1, G1, B1, R2, G2, B2
