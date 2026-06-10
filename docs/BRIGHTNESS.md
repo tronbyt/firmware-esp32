@@ -158,11 +158,67 @@ not to `DISPLAY_DEFAULT_BRIGHTNESS` (30).
   too bright. If it's `0`, the device goes dark and the server returns a default
   image (`rotation.go:55`), which works correctly.
 
-**Second, independent dimming lever — color filters.** The server can also darken
-the *image pixels* server-side via `NightColorFilter` / `DimColorFilter`
-(`ColorFilterDimmed`, `render_utils.go:258-264`). This stacks on top of the
-brightness header. When comparing devices, check whether a color filter is also
-configured so you're not attributing pixel-level dimming to the brightness curve.
+---
+
+## 2b. The two dimming levers (read this before chasing brightness bugs)
+
+There are **two completely separate** ways the stack can dim the display. They
+behave differently, and confusing them wastes hours.
+
+| | **Panel brightness** | **Color filter** |
+|---|---|---|
+| What | global panel PWM (`setBrightness8`) | recolors the **pixels** of the rendered image |
+| Where set | `Tronbyt-Brightness` header (device / night / dim brightness) | per-device `ColorFilter` / `NightColorFilter` / `DimColorFilter` |
+| Applied | **instant** — firmware acts on the next fetch | **at render time** — baked into the WebP when it's generated |
+| Scope | everything on the panel | the rendered image only |
+| Granularity | coarse; mushy/indistinct in the bottom ~1–10/255 | fine, gamma-correct (true grey text) |
+
+This is almost certainly how the **real Tidbyt** dimmed: its HDK firmware sets
+panel brightness once at boot and never reads a brightness header, so dynamic
+dimming/night mode had to be **pixel-based in the cloud render** (white → grey).
+
+### What the color filters actually do (pixel math)
+
+From `tronbyt/pixlet`'s `encode/filter.go` — each filter is a 3×3 matrix applied
+per pixel, clamped to 0–255:
+
+| Filter | Effect on white (255,255,255) | Character |
+|---|---|---|
+| `none` | unchanged (returns `nil`) | true no-op |
+| **`dimmed`** | ×0.25 → **(64,64,64)** | strong, unmissable darkening |
+| `moonlight` | clamps back to ~white | blue-gray tint on midtones; **barely touches white** |
+| `warm` | ≈(255,255,242) | very subtle warmth |
+| `redshift` | (255,227,90) | warm amber, kills blue (eye comfort, not dimming) |
+
+So `dimmed` is a 75% cut — **impossible to miss when applied.** If you set
+`dimmed` and see *nothing*, it is not being applied (see caveats below). If you
+used `moonlight`/`warm` on white text, "nothing" is *expected* — they clamp white.
+
+### Why a color filter "does nothing" — the caveats
+
+Filters are injected only inside `renderer.Render()`. Several paths skip it
+entirely (`tronbyt-server: internal/server/render_utils.go`):
+
+1. **Not instant.** The filter is baked in on the app's **next render**
+   (`UInterval` since its `LastRender`, ~line 145). Toggling a filter does **not**
+   force a re-render — the cached pre-filter WebP keeps serving until then. Apps
+   roll over to the dimmed look one at a time, not all at once. Force a re-render
+   to test immediately.
+2. **Pushed / pre-rendered apps bypass it** (`if app.Pushed { return }`, ~96–102).
+3. **Static `.webp` apps bypass it** (`return content, nil, nil`, ~70–77).
+   → For pushed/static content, **panel brightness is the ONLY night lever** — the
+   color filter can never touch those pixels.
+4. **App filter overrides device filter**; an app set to `none` suppresses the
+   device night/dim filter for that app (~274–283).
+5. **`NightColorFilter` only applies when night mode is actually active**
+   (schedule/override); otherwise the base `ColorFilter` is used.
+
+### The real-Tidbyt night model (recommended)
+
+- **Color filter** (`NightColorFilter = dimmed`/`moonlight`) for the smooth,
+  grey-text night dimming on **server-rendered Starlark apps**.
+- **Panel brightness** (now Tidbyt-accurate 1:1, §5) as the global floor and the
+  *only* lever that affects pushed/static content.
 
 ---
 
@@ -336,7 +392,12 @@ Workflow:
 | Server brightness header emit | `tronbyt-server: internal/server/handlers_device_api.go` | 139–141 |
 | Server UI level → % ladder | `tronbyt-server: internal/data/models.go` | 313–320 |
 | Server night/dim fields | `tronbyt-server: internal/data/models.go` | 579–592 |
-| Server color-filter dimming | `tronbyt-server: internal/server/render_utils.go` | 258–264 |
+| Server color-filter selection | `tronbyt-server: internal/server/render_utils.go` | 254–285 |
+| Filter applied only at render | `tronbyt-server: internal/server/render_utils.go` | 79–92 |
+| Pushed/static apps bypass filter | `tronbyt-server: internal/server/render_utils.go` | 70–77, 96–102 |
+| Re-render interval (`UInterval`) gate | `tronbyt-server: internal/server/render_utils.go` | ~145 |
+| Color-filter enum (filter names) | `tronbyt-server: internal/data/models.go` | 348–365 |
+| Color-filter pixel math (3×3 matrices) | `tronbyt/pixlet: encode/filter.go` | — |
 
 > Reference firmware (Tidbyt HDK): `setBrightness8(DISPLAY_DEFAULT_BRIGHTNESS)`
 > with `DISPLAY_DEFAULT_BRIGHTNESS=30`, `MAX=100` — value passed straight through,
