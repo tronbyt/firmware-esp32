@@ -1,8 +1,11 @@
 # Brightness & Night Mode: Server↔Firmware Contract and Per-Board Handling
 
-> Status: analysis + proposed design. No firmware behavior has been changed yet.
-> This documents *why* tronbyt devices look brighter than a real Tidbyt at the
-> same setting, and how to fix it per-board (the right place for the S3).
+> Status: **implemented for Gen1/Gen2** (branch `fix/per-board-brightness-ceiling`).
+> Gen1 and Gen2 now use a `BRIGHTNESS_8BIT_MAX` of 100 (Tidbyt-accurate 1:1);
+> third-party boards (S3, Pixoticker, MatrixPortal, Waveshare) keep the legacy
+> 230 fallback pending empirical tuning. This documents *why* tronbyt devices
+> looked brighter than a real Tidbyt at the same setting, and how the per-board
+> fix works (the right place for the S3).
 
 ## TL;DR
 
@@ -226,18 +229,18 @@ This is exactly the design you intuited — it's just expressed at compile time.
 
 ---
 
-## 5. Proposed implementation (per-board scale)
+## 5. Implementation (per-board scale)
 
-There's already a (currently **dead**) hook for this: `display.cpp:215-222`
-references `MAX_BRIGHTNESS_8BIT`, but **no board defines it anywhere** (grep
-confirms), so that clamp never runs. We can formalize the same idea cleanly.
+There was already a (**dead**) hook for this: the old `display.cpp` referenced
+`MAX_BRIGHTNESS_8BIT`, but **no board defined it anywhere**, so that clamp never
+ran. It has been removed in favor of a real per-board ceiling, `BRIGHTNESS_8BIT_MAX`.
 
-**Step 1 — make the conversion ceiling a per-board macro:**
+**Step 1 — the conversion ceiling is a per-board macro** with a legacy fallback
+(`display.cpp`, just above `brightness_percent_to_8bit`):
 
 ```c
-// main/display.cpp — replace lines 205-209
 #ifndef BRIGHTNESS_8BIT_MAX
-#define BRIGHTNESS_8BIT_MAX 230   // fallback = current/legacy behavior
+#define BRIGHTNESS_8BIT_MAX 230   // fallback = legacy behavior for untuned boards
 #endif
 
 static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
@@ -246,29 +249,37 @@ static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
 }
 ```
 
-**Step 2 — set the ceiling inside the existing board `#if` block** (alongside
-the pin/`WIDTH`/`HEIGHT` defines, `display.cpp:7-160`):
+**Step 2 — the ceiling is set inside the existing board `#if` block** (alongside
+the pin/`WIDTH`/`HEIGHT` defines), for the two genuine-Tidbyt boards:
 
 ```c
-// Tidbyt Gen 2 section:
-#define BRIGHTNESS_8BIT_MAX 100   // Tidbyt-accurate (matches real HW / HDK)
-
-// Gen 1 section (the trailing #else "GEN1 from here down", ~line 115):
-#define BRIGHTNESS_8BIT_MAX 100   // Tidbyt-accurate
-
-// S3 / third-party sections: omit → falls back to 230, or set a tuned value.
+// Tidbyt Gen 2 section AND Gen 1 section ("#else // GEN1 from here down"):
+// Genuine Tidbyt hardware: match the stock HDK brightness convention
+// (0-100% feeds setBrightness8() 1:1, ~39% max panel PWM duty).
+#define BRIGHTNESS_8BIT_MAX 100
 ```
 
+The S3 / Pixoticker / MatrixPortal / Waveshare sections define nothing, so they
+hit the `#ifndef` fallback (230) and keep today's behavior until tuned.
+
 With `BRIGHTNESS_8BIT_MAX = 100`, the math collapses to a true 1:1
-(`(pct*100+50)/100 == pct`), so a Gen1 behaves exactly like a real Tidbyt /
-HDK. S3 boards keep today's behavior unless/until you tune them.
+(`(pct*100+50)/100 == pct`), so a Gen1/Gen2 behaves exactly like a real Tidbyt /
+HDK. Verified mapping (standalone build of the exact conversion):
 
-> Alternative: expose it as a Kconfig `int` per board instead of a `#define`.
-> More config surface than needed — the `#define`-in-board-block approach matches
-> how every other per-board hardware constant is already handled here.
+| Server % | OLD (×230) | NEW Gen1/Gen2 (×100) |
+|---------:|-----------:|---------------------:|
+| 3 (Dim)  | 7/255 = 2.7%  | 3/255 = 1.2% |
+| 5 (Low)  | 12/255 = 4.7% | 5/255 = 2.0% |
+| 12 (Med) | 28/255 = 11%  | 12/255 = 4.7% |
+| 35 (High)| 81/255 = 32%  | 35/255 = 14% |
+| 100 (Max)| 230/255 = 90% | 100/255 = 39% |
 
-While here, consider deciding what the **missing-header default** should be
-(`remote.c:184`) — `-1`→`255`→~max is probably not the intended fallback.
+> Alternative considered: expose it as a Kconfig `int` per board instead of a
+> `#define`. More config surface than needed — the `#define`-in-board-block
+> approach matches how every other per-board hardware constant is already handled.
+
+Still open: what the **missing-header default** should be (`remote.c:184`) —
+`-1`→`255`→~max is probably not the intended fallback. Left unchanged for now.
 
 ---
 
@@ -292,12 +303,13 @@ Workflow:
 
 ---
 
-## 7. Open decisions
+## 7. Decisions & still-open items
 
-- **Gen1/Gen2 ceiling:** `100` for true Tidbyt parity (≈39% duty). Confirm this
-  isn't *too* dim for your use before committing — it is a noticeable drop from
-  today's ≈90%.
-- **S3 ceiling:** keep `230`, or choose a tuned value once the panel is in hand.
+- **Gen1/Gen2 ceiling:** ✅ **decided — `100`** (true Tidbyt parity, ≈39% duty).
+  This is a deliberate, noticeable drop from today's ≈90% max; if it reads as too
+  dim on real hardware, bump the `#define` in the board block (single line).
+- **S3 ceiling:** keep `230` (the `#ifndef` fallback) for now; choose a tuned
+  value once the panel is in hand and A/B'd in the room.
 - **Optional perceptual curve:** if you'd rather the *steps* feel even (rather
   than matching raw duty), add a gamma curve in `brightness_percent_to_8bit`
   instead of a linear scale. Per-board gamma is also possible.
@@ -310,10 +322,11 @@ Workflow:
 
 | Concern | File | Lines |
 |---|---|---|
-| Firmware percent→8-bit conversion | `main/display.cpp` | 205–209 |
-| Dead per-board max clamp hook | `main/display.cpp` | 215–222 |
-| Per-board pin/size `#if` block | `main/display.cpp` | 7–160 |
-| `setBrightness8` call | `main/display.cpp` | 226 |
+| Firmware percent→8-bit conversion | `main/display.cpp` | ~223–226 |
+| `BRIGHTNESS_8BIT_MAX` legacy fallback (`#ifndef`) | `main/display.cpp` | ~219–221 |
+| Per-board `BRIGHTNESS_8BIT_MAX 100` (Gen2 / Gen1) | `main/display.cpp` | 27, 138 |
+| Per-board pin/size `#if` block | `main/display.cpp` | 7–168 |
+| `setBrightness8` call | `main/display.cpp` | ~234 |
 | HTTP `Tronbyt-Brightness` parse | `main/remote.c` | 73–76, 270 |
 | Missing-header default (`-1`→255) | `main/remote.c` | 23, 184 |
 | WS/JSON brightness parse | `main/main.c` | 206–214 |
