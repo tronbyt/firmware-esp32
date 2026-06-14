@@ -21,6 +21,10 @@
 #define LAT 18
 #define OE 27
 #define CLK 15
+
+// Genuine Tidbyt hardware: match the stock HDK brightness convention
+// (0-100% feeds setBrightness8() 1:1, ~39% max panel PWM duty).
+#define BRIGHTNESS_8BIT_MAX 100
 #elif CONFIG_BOARD_TRONBYT_S3_WIDE
 #define R1 4
 #define G1 5
@@ -128,6 +132,10 @@
 #define LAT 19
 #define OE 32
 #define CLK 33
+
+// Genuine Tidbyt hardware: match the stock HDK brightness convention
+// (0-100% feeds setBrightness8() 1:1, ~39% max panel PWM duty).
+#define BRIGHTNESS_8BIT_MAX 100
 #endif
 
 #ifndef WIDTH
@@ -202,24 +210,24 @@ int display_initialize(void) {
   return 0;
 }
 
+// Per-board ceiling for the 0-100% -> setBrightness8() (0-255) mapping.
+// Genuine Tidbyt hardware (Gen1/Gen2) defines this as 100 in its board block
+// above, matching the stock HDK convention where the brightness percentage
+// feeds setBrightness8() 1:1 (max ~39% panel PWM duty). Third-party panels with
+// no Tidbyt reference fall back to the legacy 230 (~90% duty) and can be tuned
+// empirically per board.
+#ifndef BRIGHTNESS_8BIT_MAX
+#define BRIGHTNESS_8BIT_MAX 230
+#endif
+
 static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
   if (pct > 100) pct = 100;
-  return (uint8_t)(((uint32_t)pct * 230 + 50) /
-                   100);  // 230 as MAX 8 BIT HARDCODED
+  return (uint8_t)(((uint32_t)pct * BRIGHTNESS_8BIT_MAX + 50) / 100);
 }
 
 void display_set_brightness(uint8_t brightness_pct) {
   if (brightness_pct != _brightness) {
     uint8_t brightness_8bit = brightness_percent_to_8bit(brightness_pct);
-
-#ifdef MAX_BRIGHTNESS_8BIT
-    uint8_t max_brightness_8bit = MAX_BRIGHTNESS_8BIT;
-    if (brightness_8bit > max_brightness_8bit) {
-      brightness_8bit = max_brightness_8bit;
-      ESP_LOGI(TAG, "Clamping brightness to MAX_BRIGHTNESS (%d)",
-               MAX_BRIGHTNESS_8BIT);
-    }
-#endif
 
     ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct,
              brightness_8bit);
