@@ -22,9 +22,6 @@
 #define OE 27
 #define CLK 15
 
-// Genuine Tidbyt hardware: match the stock HDK brightness convention
-// (0-100% feeds setBrightness8() 1:1, ~39% max panel PWM duty).
-#define BRIGHTNESS_8BIT_MAX 100
 #elif CONFIG_BOARD_TRONBYT_S3_WIDE
 #define R1 4
 #define G1 5
