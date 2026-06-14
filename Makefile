@@ -1,5 +1,8 @@
 PROJECT_NAME := firmware
 
+# Fix for git safe.bareRepository=explicit in some environments
+export GIT_CONFIG_COUNT=0
+
 .PHONY: all clean fullclean flash monitor menuconfig help tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare waveshare-s3
 
 help:
@@ -50,8 +53,8 @@ menuconfig:
 # Usage: $(call build_device,<target>,<defaults_file>)
 define build_device
 	rm -f sdkconfig
-	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
-	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
+	GIT_CONFIG_COUNT=0 IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
+	GIT_CONFIG_COUNT=0 IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
 	cd build && esptool.py --chip $(1) merge_bin -o merged_firmware.bin @flash_args
 endef
 
