@@ -53,8 +53,8 @@ menuconfig:
 # Usage: $(call build_device,<target>,<defaults_file>)
 define build_device
 	rm -f sdkconfig
-	GIT_CONFIG_COUNT=0 IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
-	GIT_CONFIG_COUNT=0 IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
+	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
+	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
 	cd build && esptool.py --chip $(1) merge_bin -o merged_firmware.bin @flash_args
 endef
 
