@@ -45,7 +45,9 @@ static bool s_prefer_ipv6 = false;
 static bool s_disable_touch = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 
-// Hardcoded defaults (from secrets.json via CMake)
+// Hardcoded defaults (from secrets.json via generated secrets_gen.h)
+#include "secrets_gen.h"
+
 #ifndef WIFI_SSID
 #define WIFI_SSID ""
 #endif

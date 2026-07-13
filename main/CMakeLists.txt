@@ -35,11 +35,20 @@ idf_component_register(SRCS ${SRCS}
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 
-target_compile_definitions(${COMPONENT_LIB} PRIVATE 
-    WIFI_SSID="${VAL_WIFI_SSID}"
-    WIFI_PASSWORD="${VAL_WIFI_PASSWORD}"
-    REMOTE_URL="${VAL_REMOTE_URL}"
-)
+# Emit secrets as a generated header instead of compile definitions: CMake
+# silently drops any -D value containing '#' (e.g. in a WiFi password).
+foreach(_secret VAL_WIFI_SSID VAL_WIFI_PASSWORD VAL_REMOTE_URL)
+    string(REPLACE "\\" "\\\\" ${_secret} "${${_secret}}")
+    string(REPLACE "\"" "\\\"" ${_secret} "${${_secret}}")
+endforeach()
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gen/secrets_gen.h" CONTENT
+"// Auto-generated from secrets.cmake - DO NOT EDIT
+#pragma once
+#define WIFI_SSID \"@VAL_WIFI_SSID@\"
+#define WIFI_PASSWORD \"@VAL_WIFI_PASSWORD@\"
+#define REMOTE_URL \"@VAL_REMOTE_URL@\"
+" @ONLY)
+target_include_directories(${COMPONENT_LIB} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/gen")
 
 if(CONFIG_NO_FAST_FUNCTIONS)
     idf_build_set_property(COMPILE_DEFINITIONS "-DNO_FAST_FUNCTIONS" APPEND)
