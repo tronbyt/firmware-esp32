@@ -48,6 +48,16 @@ menu "Application Configuration"
         help
             Prefer IPv6 for connections.
 
+    config PATCH_I2S_DIVIDER
+        bool "Patch HUB75 I2S Divider"
+        default n
+        help
+            Patch the bundled ESP32-HUB75-MatrixPanel-DMA library to compute
+            the I2S clock divider from the requested freq instead of using
+            the upstream 2-or-4 lookup. Required on some Tidbyt Gen1 / Gen2
+            displays that misbehave at the default rate; harmless to leave
+            off if your panel works without it.
+
     config HTTP_BUFFER_SIZE_MAX
         int "Max HTTP Buffer Size"
         default 460000

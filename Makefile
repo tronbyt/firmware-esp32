@@ -3,7 +3,7 @@ PROJECT_NAME := firmware
 # Fix for git safe.bareRepository=explicit in some environments
 export GIT_CONFIG_COUNT=0
 
-.PHONY: all clean fullclean flash monitor menuconfig help tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare waveshare-s3
+.PHONY: all clean fullclean flash monitor menuconfig help tidbyt-gen1 tidbyt-gen1_swap tidbyt-gen2 tidbyt-gen1-patched tidbyt-gen1_swap-patched tidbyt-gen2-patched tronbyt-s3 tronbyt-s3-wide pixoticker matrixportal-s3 matrixportal-s3-waveshare waveshare-s3
 
 help:
 	@echo "Tronbyt Firmware Build System"
@@ -26,8 +26,17 @@ help:
 	@echo "  matrixportal-s3          Build for MatrixPortal S3"
 	@echo "  matrixportal-s3-waveshare Build for MatrixPortal S3 (Waveshare)"
 	@echo "  waveshare-s3             Build for Waveshare ESP32-S3-RGB-Matrix"
+	@echo ""
+	@echo "Patched Variants (apply HUB75 I2S divider fix for affected panels):"
+	@echo "  tidbyt-gen1-patched       Build for Tidbyt Gen 1 with divider patch"
+	@echo "  tidbyt-gen1_swap-patched  Build for Tidbyt Gen 1 Swap with divider patch"
+	@echo "  tidbyt-gen2-patched       Build for Tidbyt Gen 2 with divider patch"
 
-IDFPY := $(shell which idf.py)
+IDFPY := $(shell which idf.py 2>/dev/null)
+# eim-based installs expose idf.py as a shell function, invisible to $(shell which ...)
+ifeq ($(IDFPY),)
+IDFPY := $(IDF_PATH)/tools/idf.py
+endif
 PYTHON := python3
 
 all:
@@ -50,10 +59,10 @@ menuconfig:
 	$(PYTHON) $(IDFPY) menuconfig
 
 # Macro for device-specific builds
-# Usage: $(call build_device,<target>,<defaults_file>)
+# Usage: $(call build_device,<target>,<defaults_file>[,<extra_defaults_file>])
 define build_device
 	rm -f sdkconfig
-	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)" set-target $(1)
+	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)$(if $(3),;$(3))" set-target $(1)
 	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
 	cd build && esptool.py --chip $(1) merge_bin -o merged_firmware.bin @flash_args
 endef
@@ -67,6 +76,16 @@ tidbyt-gen1_swap:
 
 tidbyt-gen2:
 	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen2)
+
+# Patched variants — apply HUB75 I2S divider fix for affected Tidbyt panels.
+tidbyt-gen1-patched:
+	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen1,sdkconfig.defaults.patched)
+
+tidbyt-gen1_swap-patched:
+	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen1_swap,sdkconfig.defaults.patched)
+
+tidbyt-gen2-patched:
+	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen2,sdkconfig.defaults.patched)
 
 tronbyt-s3:
 	$(call build_device,esp32s3,sdkconfig.defaults.tronbyt-s3)

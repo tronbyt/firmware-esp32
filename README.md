@@ -59,6 +59,18 @@ To flash the built firmware to your device:
 idf.py flash
 ```
 
+#### Patched Variants (HUB75 I2S Divider Fix)
+
+Some Tidbyt Gen1/Gen2 panels show red pixel artifacts at the default pixel clock because the bundled ESP32-HUB75-MatrixPanel-DMA library snaps the clock to 20MHz/10MHz instead of honoring the requested frequency (see [mrcodetastic/ESP32-HUB75-MatrixPanel-DMA#816](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/issues/816)). The legacy Tidbyt OS used a divider derived from the requested frequency; the `-patched` targets restore that behavior by enabling `CONFIG_PATCH_I2S_DIVIDER`, which patches the downloaded library at configure time (and reverts it when disabled):
+
+```bash
+make tidbyt-gen1-patched
+make tidbyt-gen1_swap-patched
+make tidbyt-gen2-patched
+```
+
+If your panel looks fine with the regular targets, you don't need these.
+
 ## Monitoring Logs
 
 To check the output of your running firmware, run the following:
