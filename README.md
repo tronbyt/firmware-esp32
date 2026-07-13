@@ -1,6 +1,6 @@
 # Tronbyt Firmware
 
-[![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)](https://discord.gg/nKDErHGmU7)
+[![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)](https://discord.gg/U6h6CD6MYM)
 
 This repository contains a community supported firmware for the Tidbyt hardware 🤓.
 

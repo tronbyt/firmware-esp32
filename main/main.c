@@ -125,6 +125,7 @@ static esp_err_t send_client_info(void) {
                             nvs_get_skip_boot_animation());
       cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
+      cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -158,8 +159,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
       xEventGroupSetBits(s_ws_event_group, WS_CONNECTED_BIT);
       break;
     case WEBSOCKET_EVENT_DISCONNECTED:
-      ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
-      draw_error_indicator_pixel();
+      xEventGroupClearBits(s_ws_event_group, WS_CONNECTED_BIT);
       break;
     case WEBSOCKET_EVENT_DATA:
       // Process text messages (op_code == 1)
@@ -214,7 +214,8 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 display_set_brightness((uint8_t)brightness_value);
                 ESP_LOGI(TAG, "Updated brightness to %d", brightness_value);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
-                // Sync touch control state - server brightness command means display is on
+                // Sync touch control state - server brightness command means
+                // display is on
                 display_power_on = true;
                 saved_brightness = (uint8_t)brightness_value;
 #endif
@@ -288,6 +289,16 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 bool val = cJSON_IsTrue(prefer_ipv6_item);
                 nvs_set_prefer_ipv6(val);
                 ESP_LOGI(TAG, "Updated prefer_ipv6 to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for "disable_touch"
+              cJSON* disable_touch_item =
+                  cJSON_GetObjectItem(root, "disable_touch");
+              if (cJSON_IsBool(disable_touch_item)) {
+                bool val = cJSON_IsTrue(disable_touch_item);
+                nvs_set_disable_touch(val);
+                ESP_LOGI(TAG, "Updated disable_touch to %d", val);
                 settings_changed = true;
               }
 
@@ -524,14 +535,18 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
-  ESP_LOGI(TAG, "Initializing touch control...");
-  esp_err_t touch_ret = touch_control_init();
-  if (touch_ret == ESP_OK) {
-    ESP_LOGI(TAG, "Touch control ready on GPIO33");
-    touch_control_debug_all_pads();
+  if (!nvs_get_disable_touch()) {
+    ESP_LOGI(TAG, "Initializing touch control...");
+    esp_err_t touch_ret = touch_control_init();
+    if (touch_ret == ESP_OK) {
+      ESP_LOGI(TAG, "Touch control ready on GPIO33");
+      touch_control_debug_all_pads();
+    } else {
+      ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
+               esp_err_to_name(touch_ret));
+    }
   } else {
-    ESP_LOGW(TAG, "Touch control init failed: %s (continuing without touch)",
-             esp_err_to_name(touch_ret));
+    ESP_LOGI(TAG, "Touch control disabled via NVS");
   }
 #endif
 
@@ -710,21 +725,46 @@ void app_main(void) {
     // Create event group for WebSocket connection
     s_ws_event_group = xEventGroupCreate();
 
-    // Start the client immediately
-    esp_err_t err = esp_websocket_client_start(ws_handle);
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Failed to start WebSocket client: %d", err);
+    // Start the client with retry logic for initial failures
+    // The library's auto-reconnect only works if the client task is running,
+    // so we must ensure the initial start succeeds
+    const int max_start_retries = 5;
+    const int start_retry_delay_ms = 2000;
+    bool client_started = false;
+
+    for (int attempt = 1; attempt <= max_start_retries; attempt++) {
+      esp_err_t err = esp_websocket_client_start(ws_handle);
+      if (err == ESP_OK) {
+        ESP_LOGI(TAG, "WebSocket client started successfully");
+        client_started = true;
+        break;
+      }
+      ESP_LOGE(TAG, "Failed to start WebSocket client (attempt %d/%d): %s",
+               attempt, max_start_retries, esp_err_to_name(err));
+      if (attempt < max_start_retries) {
+        vTaskDelay(pdMS_TO_TICKS(start_retry_delay_ms));
+      }
     }
 
-    // Wait for connection with a timeout (e.g., 5 seconds)
-    // If it fails to connect in time, the loop below will handle reconnection
-    // logic
-    xEventGroupWaitBits(s_ws_event_group, WS_CONNECTED_BIT, pdFALSE, pdTRUE,
-                        pdMS_TO_TICKS(5000));
+    if (!client_started) {
+      ESP_LOGE(TAG,
+               "WebSocket client failed to start after %d attempts, "
+               "will retry periodically",
+               max_start_retries);
+      
+    }
 
     bool was_connected = false;
+    int64_t last_connected_time = esp_timer_get_time();
+    const int64_t extended_disconnect_threshold_us =
+        5 * 60 * 1000000LL;  // 5 minutes
+    int64_t last_disconnect_log_time = 0;
+    const int64_t disconnect_log_interval_us =
+        60 * 1000000LL;  // Log every 60 seconds
+
     for (;;) {
       bool is_connected = esp_websocket_client_is_connected(ws_handle);
+      int64_t now = esp_timer_get_time();
 
       if (is_connected) {
         if (!was_connected) {
@@ -732,17 +772,41 @@ void app_main(void) {
           send_client_info();
           was_connected = true;
         }
+        last_connected_time = now;
+        client_started = true;  // Mark as started if we ever connect
       } else {
         if (was_connected) {
           was_connected = false;
-          ESP_LOGW(TAG, "WebSocket Disconnected");
+          ESP_LOGW(TAG,
+                   "WebSocket Disconnected, waiting for auto-reconnect...");
+        } else if (!client_started || (now - last_connected_time) >
+                                          extended_disconnect_threshold_us) {
+          // Either initial start failed or we've been disconnected for too long
+          // Log periodically and attempt to restart the client
+          if ((now - last_disconnect_log_time) > disconnect_log_interval_us) {
+            int64_t disconnected_secs = (now - last_connected_time) / 1000000LL;
+            ESP_LOGW(TAG,
+                     "WebSocket not connected for %lld seconds, "
+                     "attempting restart...",
+                     disconnected_secs);
+            last_disconnect_log_time = now;
+
+            // Stop and restart the client to recover from stuck states
+            esp_websocket_client_stop(ws_handle);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_err_t err = esp_websocket_client_start(ws_handle);
+            if (err == ESP_OK) {
+              ESP_LOGI(TAG, "WebSocket client restarted");
+              client_started = true;
+            } else {
+              ESP_LOGE(TAG, "Failed to restart WebSocket client: %s",
+                       esp_err_to_name(err));
+            }
+          }
         }
-        ESP_LOGW(TAG, "WebSocket not connected. Attempting to reconnect...");
-        esp_websocket_client_stop(ws_handle);
-        esp_err_t err = esp_websocket_client_start(ws_handle);
-        if (err != ESP_OK) {
-          ESP_LOGE(TAG, "Reconnection failed with error %d", err);
-        }
+        draw_error_indicator_pixel();
+        // Normal disconnection within threshold: library reconnects via
+        // reconnect_timeout_ms
       }
 
       wifi_health_check();
@@ -750,12 +814,16 @@ void app_main(void) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Poll touch frequently for 5 seconds (50ms intervals = 100 checks)
       // This allows proper gesture detection while keeping health checks at 5s
-      for (int i = 0; i < 100; i++) {
-        touch_event_t touch_event = touch_control_check();
-        if (touch_event != TOUCH_EVENT_NONE) {
-          handle_touch_event(touch_event);
+      if (nvs_get_disable_touch()) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+      } else {
+        for (int i = 0; i < 100; i++) {
+          touch_event_t touch_event = touch_control_check();
+          if (touch_event != TOUCH_EVENT_NONE) {
+            handle_touch_event(touch_event);
+          }
+          vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
         }
-        vTaskDelay(pdMS_TO_TICKS(50));  // 50ms = responsive touch
       }
 #else
       vTaskDelay(pdMS_TO_TICKS(5000));  // 5 second health check interval
@@ -827,7 +895,8 @@ void app_main(void) {
         // Wait for gfx task to load the newly queued image before fetching the
         // next one This ensures the image has begun displaying before we fetch
         // again
-        // ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)", queued_counter);
+        // ESP_LOGI(TAG, "Waiting for gfx task to load new image (counter=%d)",
+        // queued_counter);
         int timeout = 0;
         while (gfx_get_loaded_counter() != queued_counter && timeout < 20000) {
           vTaskDelay(pdMS_TO_TICKS(10));
@@ -848,9 +917,11 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
       // Check for touch events
-      touch_event_t touch_event = touch_control_check();
-      if (touch_event != TOUCH_EVENT_NONE) {
-        handle_touch_event(touch_event);
+      if (!nvs_get_disable_touch()) {
+        touch_event_t touch_event = touch_control_check();
+        if (touch_event != TOUCH_EVENT_NONE) {
+          handle_touch_event(touch_event);
+        }
       }
 #endif
 

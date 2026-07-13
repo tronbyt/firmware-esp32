@@ -21,6 +21,7 @@
 #define LAT 18
 #define OE 27
 #define CLK 15
+
 #elif CONFIG_BOARD_TRONBYT_S3_WIDE
 #define R1 4
 #define G1 5
@@ -72,6 +73,25 @@
 #define CLK 22
 #define LAT 26
 #define OE 25
+
+#elif CONFIG_BOARD_WAVESHARE_S3
+#define R1 4
+#define G1 5
+#define BL1 6
+#define R2 7
+#define G2 15
+#define BL2 16
+
+#define CH_A 18
+#define CH_B 8
+#define CH_C 3
+#define CH_D 42
+#define CH_E 9
+
+#define LAT 40
+#define OE 2
+#define CLK 41
+
 #elif CONFIG_BOARD_MATRIXPORTAL_S3
 //                     R1, G1, B1, R2, G2, B2
 // uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
@@ -80,7 +100,11 @@
 // uint8_t latchPin = 47;
 // uint8_t oePin = 14;
 #define R1 42
+#define G1 41
+#define BL1 40
 #define R2 38
+#define G2 39
+#define BL2 37
 #define CH_A 45
 #define CH_B 36
 #define CH_C 48
@@ -90,6 +114,12 @@
 #define LAT 47
 #define OE 14
 #else  // GEN1 from here down.
+#define R1 2
+#define G1 22
+#define BL1 21
+#define R2 4
+#define G2 27
+#define BL2 23
 #define CH_A 26
 #define CH_B 5
 #define CH_C 25
@@ -99,6 +129,10 @@
 #define LAT 19
 #define OE 32
 #define CLK 33
+
+// Genuine Tidbyt hardware: match the stock HDK brightness convention
+// (0-100% feeds setBrightness8() 1:1, ~39% max panel PWM duty).
+#define BRIGHTNESS_8BIT_MAX 100
 #endif
 
 #ifndef WIDTH
@@ -117,53 +151,22 @@ int display_initialize(void) {
   // Get swap_colors setting
   bool swap_colors = nvs_get_swap_colors();
 
-  // Initialize pin values based on hardware and swap_colors setting
-  int8_t pin_R1, pin_G1, pin_BL1, pin_R2, pin_G2, pin_BL2;
+  // Initialize all pins to their default configuration
+  int8_t pin_R1 = R1, pin_G1 = G1, pin_BL1 = BL1;
+  int8_t pin_R2 = R2, pin_G2 = G2, pin_BL2 = BL2;
 
-#if CONFIG_BOARD_MATRIXPORTAL_S3
-  pin_R1 = R1;  // R1 = 42
-  pin_R2 = R2;  // R2 = 38
+  // Apply board-specific color swap
   if (swap_colors) {
-    // Swapped configuration for MATRIXPORTALS3
-    pin_G1 = 40;
-    pin_BL1 = 41;
-    pin_G2 = 37;
-    pin_BL2 = 39;
-  } else {
-    // Normal configuration for MATRIXPORTALS3
-    pin_G1 = 41;
-    pin_BL1 = 40;
-    pin_G2 = 39;
-    pin_BL2 = 37;
-  }
-#elif CONFIG_BOARD_TIDBYT_GEN2 || CONFIG_BOARD_TRONBYT_S3_WIDE || \
-    CONFIG_BOARD_TRONBYT_S3 || CONFIG_BOARD_PIXOTICKER
-  // These variants don't support color swapping, use fixed pins
-  pin_R1 = R1;
-  pin_G1 = G1;
-  pin_BL1 = BL1;
-  pin_R2 = R2;
-  pin_G2 = G2;
-  pin_BL2 = BL2;
-#else  // GEN1
-  if (swap_colors) {
-    // Swapped configuration for GEN1
-    pin_R1 = 21;
-    pin_G1 = 2;
-    pin_BL1 = 22;
-    pin_R2 = 23;
-    pin_G2 = 4;
-    pin_BL2 = 27;
-  } else {
-    // Normal configuration for GEN1
-    pin_R1 = 2;
-    pin_G1 = 22;
-    pin_BL1 = 21;
-    pin_R2 = 4;
-    pin_G2 = 27;
-    pin_BL2 = 23;
-  }
+#if CONFIG_BOARD_MATRIXPORTAL_S3 || CONFIG_BOARD_TRONBYT_S3
+    // Swap green and blue channels
+    int8_t tmp = pin_G1; pin_G1 = pin_BL1; pin_BL1 = tmp;
+    tmp = pin_G2; pin_G2 = pin_BL2; pin_BL2 = tmp;
+#elif CONFIG_BOARD_TIDBYT_GEN1
+    // Rotate R -> BL -> G -> R
+    int8_t tmp = pin_R1; pin_R1 = pin_BL1; pin_BL1 = pin_G1; pin_G1 = tmp;
+    tmp = pin_R2; pin_R2 = pin_BL2; pin_BL2 = pin_G2; pin_G2 = tmp;
 #endif
+  }
 
   ESP_LOGI(TAG, "Initializing display with swap_colors=%s",
            swap_colors ? "true" : "false");
@@ -204,24 +207,24 @@ int display_initialize(void) {
   return 0;
 }
 
+// Per-board ceiling for the 0-100% -> setBrightness8() (0-255) mapping.
+// Genuine Tidbyt hardware (Gen1/Gen2) defines this as 100 in its board block
+// above, matching the stock HDK convention where the brightness percentage
+// feeds setBrightness8() 1:1 (max ~39% panel PWM duty). Third-party panels with
+// no Tidbyt reference fall back to the legacy 230 (~90% duty) and can be tuned
+// empirically per board.
+#ifndef BRIGHTNESS_8BIT_MAX
+#define BRIGHTNESS_8BIT_MAX 230
+#endif
+
 static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
   if (pct > 100) pct = 100;
-  return (uint8_t)(((uint32_t)pct * 230 + 50) /
-                   100);  // 230 as MAX 8 BIT HARDCODED
+  return (uint8_t)(((uint32_t)pct * BRIGHTNESS_8BIT_MAX + 50) / 100);
 }
 
 void display_set_brightness(uint8_t brightness_pct) {
   if (brightness_pct != _brightness) {
     uint8_t brightness_8bit = brightness_percent_to_8bit(brightness_pct);
-
-#ifdef MAX_BRIGHTNESS_8BIT
-    uint8_t max_brightness_8bit = MAX_BRIGHTNESS_8BIT;
-    if (brightness_8bit > max_brightness_8bit) {
-      brightness_8bit = max_brightness_8bit;
-      ESP_LOGI(TAG, "Clamping brightness to MAX_BRIGHTNESS (%d)",
-               MAX_BRIGHTNESS_8BIT);
-    }
-#endif
 
     ESP_LOGI(TAG, "Setting brightness to %d%% (%d)", brightness_pct,
              brightness_8bit);
