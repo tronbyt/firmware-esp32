@@ -32,7 +32,7 @@ help:
 	@echo "  tidbyt-gen1_swap-patched  Build for Tidbyt Gen 1 Swap with divider patch"
 	@echo "  tidbyt-gen2-patched       Build for Tidbyt Gen 2 with divider patch"
 
-IDFPY := $(shell which idf.py)
+IDFPY := $(shell which idf.py 2>/dev/null)
 # eim-based installs expose idf.py as a shell function, invisible to $(shell which ...)
 ifeq ($(IDFPY),)
 IDFPY := $(IDF_PATH)/tools/idf.py

@@ -38,7 +38,7 @@ def find_target_files() -> list[Path]:
 
 
 def apply_patch(path: Path) -> bool:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     if PATCHED_MARKER in content:
         print(f"[patch_i2s_divider] already patched: {path.relative_to(REPO_ROOT)}")
         return True
@@ -51,13 +51,13 @@ def apply_patch(path: Path) -> bool:
     backup = path.with_suffix(path.suffix + ".orig")
     if not backup.exists():
         shutil.copy2(path, backup)
-    path.write_text(ORIGINAL_PATTERN.sub(PATCHED_MARKER, content))
+    path.write_text(ORIGINAL_PATTERN.sub(PATCHED_MARKER, content), encoding="utf-8")
     print(f"[patch_i2s_divider] applied: {path.relative_to(REPO_ROOT)}")
     return True
 
 
 def revert_patch(path: Path) -> bool:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     if PATCHED_MARKER not in content:
         return True
     backup = path.with_suffix(path.suffix + ".orig")
@@ -91,7 +91,9 @@ def main() -> int:
 
     ok = True
     for path in targets:
-        ok = (revert_patch(path) if do_revert else apply_patch(path)) and ok
+        success = revert_patch(path) if do_revert else apply_patch(path)
+        if not success:
+            ok = False
     return 0 if ok else 1
 
 

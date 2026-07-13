@@ -41,13 +41,13 @@ foreach(_secret VAL_WIFI_SSID VAL_WIFI_PASSWORD VAL_REMOTE_URL)
     string(REPLACE "\\" "\\\\" ${_secret} "${${_secret}}")
     string(REPLACE "\"" "\\\"" ${_secret} "${${_secret}}")
 endforeach()
-file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gen/secrets_gen.h" CONTENT
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/gen/secrets_gen.h"
 "// Auto-generated from secrets.cmake - DO NOT EDIT
 #pragma once
-#define WIFI_SSID \"@VAL_WIFI_SSID@\"
-#define WIFI_PASSWORD \"@VAL_WIFI_PASSWORD@\"
-#define REMOTE_URL \"@VAL_REMOTE_URL@\"
-" @ONLY)
+#define WIFI_SSID \"${VAL_WIFI_SSID}\"
+#define WIFI_PASSWORD \"${VAL_WIFI_PASSWORD}\"
+#define REMOTE_URL \"${VAL_REMOTE_URL}\"
+")
 target_include_directories(${COMPONENT_LIB} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/gen")
 
 if(CONFIG_NO_FAST_FUNCTIONS)
