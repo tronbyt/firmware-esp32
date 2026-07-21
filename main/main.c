@@ -869,9 +869,9 @@ void app_main(void) {
         } else {
           ESP_LOGI(TAG, "Updated image_url to %s",
                    nvs_get_image_url() != NULL ? nvs_get_image_url() : "(empty)");
+          reboot_requested = true;
         }
         free(new_image_url);
-        reboot_requested = true;
       }
 
       if (fetch_failed) {
