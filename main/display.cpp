@@ -92,6 +92,25 @@
 #define OE 2
 #define CLK 41
 
+#elif CONFIG_BOARD_MATRIXPORTAL_S3_WIDE
+#define R1 42
+#define G1 41
+#define BL1 40
+#define R2 38
+#define G2 39
+#define BL2 37
+#define CH_A 45
+#define CH_B 36
+#define CH_C 48
+#define CH_D 35
+#define CH_E 8      // The crucial update mapping address E to GPIO 8
+#define CLK 2
+#define LAT 47
+#define OE 14
+
+#define WIDTH 128
+#define HEIGHT 64
+
 #elif CONFIG_BOARD_MATRIXPORTAL_S3
 //                     R1, G1, B1, R2, G2, B2
 // uint8_t rgbPins[] = {42, 41, 40, 38, 39, 37};
@@ -157,7 +176,7 @@ int display_initialize(void) {
 
   // Apply board-specific color swap
   if (swap_colors) {
-#if CONFIG_BOARD_MATRIXPORTAL_S3 || CONFIG_BOARD_TRONBYT_S3
+#if CONFIG_BOARD_MATRIXPORTAL_S3 || CONFIG_BOARD_MATRIXPORTAL_S3_WIDE || CONFIG_BOARD_TRONBYT_S3
     // Swap green and blue channels
     int8_t tmp = pin_G1; pin_G1 = pin_BL1; pin_BL1 = tmp;
     tmp = pin_G2; pin_G2 = pin_BL2; pin_BL2 = tmp;
@@ -244,7 +263,7 @@ void display_shutdown(void) {
 void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB) {
   int scale = 1;
-#if CONFIG_BOARD_TRONBYT_S3_WIDE
+#if CONFIG_BOARD_TRONBYT_S3_WIDE || CONFIG_BOARD_MATRIXPORTAL_S3_WIDE
   if (width == 64 && height == 32) {
     scale = 2;  // Scale up to 128x64
   }

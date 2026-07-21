@@ -108,6 +108,9 @@ menu "Application Configuration"
         config BOARD_MATRIXPORTAL_S3
             bool "MatrixPortal S3"
 
+        config BOARD_MATRIXPORTAL_S3_WIDE
+            bool "MatrixPortal S3 Wide (128x64)"
+
         config BOARD_WAVESHARE_S3
             bool "Waveshare ESP32-S3-RGB-Matrix"
     endchoice
