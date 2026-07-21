@@ -1,9 +1,10 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
-// Retrieves url via HTTP GET. Caller is responsible for freeing buf
-// and ota_url (if not NULL) on success.
+// Retrieves url via HTTP GET. Caller is responsible for freeing buf,
+// ota_url, and image_url (if not NULL) on success.
 int remote_get(const char* url, uint8_t** buf, size_t* len,
                uint8_t* brightness_pct, int32_t* dwell_secs, int* return_code,
-               char** ota_url);
+               char** ota_url, char** image_url, bool* reboot_requested);

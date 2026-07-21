@@ -839,12 +839,15 @@ void app_main(void) {
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
+      char* new_image_url = NULL;
+      bool reboot_requested = false;
 
       // Start timing the HTTP fetch
       int64_t fetch_start_us = esp_timer_get_time();
       bool fetch_failed = !wifi_is_connected() ||
                           remote_get(image_url, &webp, &len, &brightness_pct,
-                                     &app_dwell_secs, &status_code, &ota_url);
+                                     &app_dwell_secs, &status_code, &ota_url,
+                                     &new_image_url, &reboot_requested);
       int64_t fetch_duration_ms =
           (esp_timer_get_time() - fetch_start_us) / 1000;
 
@@ -855,6 +858,20 @@ void app_main(void) {
         xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
         // Since we are rebooting (if successful) or failed, we might want to
         // continue or pause. If OTA failed, we continue normal operation.
+      }
+
+      if (new_image_url != NULL) {
+        ESP_LOGI(TAG, "Image URL received via HTTP: %s", new_image_url);
+        nvs_set_image_url(new_image_url);
+        esp_err_t err = nvs_save_settings();
+        if (err != ESP_OK) {
+          ESP_LOGE(TAG, "Failed to save image_url: %s", esp_err_to_name(err));
+        } else {
+          ESP_LOGI(TAG, "Updated image_url to %s",
+                   nvs_get_image_url() != NULL ? nvs_get_image_url() : "(empty)");
+        }
+        free(new_image_url);
+        reboot_requested = true;
       }
 
       if (fetch_failed) {
@@ -924,6 +941,11 @@ void app_main(void) {
         }
       }
 #endif
+
+      if (reboot_requested) {
+        ESP_LOGI(TAG, "Rebooting");
+        esp_restart();
+      }
 
       wifi_health_check();
     }
