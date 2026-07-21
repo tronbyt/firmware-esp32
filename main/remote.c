@@ -253,6 +253,10 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
     if (state.buf != NULL) {
       free(state.buf);
     }
+    if (state.image_url != NULL) {
+      free(state.image_url);
+      state.image_url = NULL;
+    }
     esp_http_client_cleanup(http);
     return 1;
   }
