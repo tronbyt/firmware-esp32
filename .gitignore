@@ -15,4 +15,5 @@ sdkconfig.old
 secrets.cmake
 secrets.json
 secrets.json.injected*
+main/certs/custom_ca.pem
 .cache/clangd/*
