@@ -23,12 +23,28 @@ def validate_and_normalize_ca(ca_raw):
         except Exception:
             pass
 
+    # A doubled backslash in secrets.json (e.g. "\\n") decodes to a literal
+    # two-character "\n" rather than a real newline. If there's no real line
+    # break yet but this literal escape is present, treat it as the intended
+    # line break instead of silently emitting a single-line, invalid PEM.
+    if "\n" not in ca_str and "\\n" in ca_str:
+        ca_str = ca_str.replace("\\r\\n", "\n").replace("\\n", "\n")
+
     # Normalize line endings
     ca_str = ca_str.replace("\r\n", "\n").strip()
 
     # Check for PEM headers
     if "BEGIN CERTIFICATE" not in ca_str or "END CERTIFICATE" not in ca_str:
         print("ERROR: CUSTOM_CA is not a valid PEM certificate (missing BEGIN/END CERTIFICATE header).")
+        sys.exit(1)
+
+    # A real PEM certificate has the header, base64 body, and footer on
+    # separate lines. Reject anything that still looks like a single-line
+    # blob (stray backslashes, too few lines) rather than writing invalid
+    # PEM out to custom_ca.pem.
+    body_lines = [line for line in ca_str.split("\n") if line]
+    if len(body_lines) < 3 or "\\" in ca_str:
+        print("ERROR: CUSTOM_CA does not look like a properly line-broken PEM certificate.")
         sys.exit(1)
 
     # Ensure trailing newline for MbedTLS parser
