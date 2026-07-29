@@ -97,8 +97,10 @@ def generate_cmake_secrets(output_path):
         ca_pem = validate_and_normalize_ca(config["CUSTOM_CA"])
         with open(custom_ca_path, "w") as f:
             f.write(ca_pem)
-    elif os.path.exists(custom_ca_path):
-        os.remove(custom_ca_path)
+    else:
+        # gen_crt_bundle.py expects at least one .pem file in the dir
+        with open(custom_ca_path, "w") as f:
+            f.write("# No custom CA configured - using default bundle only\n")
 
     with open(output_path, "w") as f:
         f.write(cmake_content)
