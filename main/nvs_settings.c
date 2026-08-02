@@ -170,8 +170,8 @@ esp_err_t nvs_settings_init(void) {
     }
 
     required_size = sizeof(s_api_key);
-    if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key,
-                    &required_size) != ESP_OK) {
+    if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key, &required_size) !=
+        ESP_OK) {
       s_api_key[0] = '\0';
     }
 
@@ -211,48 +211,51 @@ esp_err_t nvs_settings_init(void) {
     nvs_save_settings();
   }
 
-  ESP_LOGI(TAG, "Settings initialized. SSID: %s, URL: %s, AP Mode: %d",
-           s_wifi_ssid, s_image_url, s_ap_mode);
+  ESP_LOGI(TAG,
+           "Settings initialized. Saved credentials: %s, image endpoint: %s, "
+           "AP Mode: %d",
+           s_wifi_ssid[0] != '\0' ? "yes" : "no",
+           s_image_url[0] != '\0' ? "yes" : "no", s_ap_mode);
 
   return ESP_OK;
 }
 
-esp_err_t nvs_get_ssid(char *ssid, size_t max_len) {
+esp_err_t nvs_get_ssid(char* ssid, size_t max_len) {
   if (!ssid) return ESP_ERR_INVALID_ARG;
   strncpy(ssid, s_wifi_ssid, max_len);
   ssid[max_len - 1] = '\0';
   return ESP_OK;
 }
 
-esp_err_t nvs_get_password(char *password, size_t max_len) {
+esp_err_t nvs_get_password(char* password, size_t max_len) {
   if (!password) return ESP_ERR_INVALID_ARG;
   strncpy(password, s_wifi_password, max_len);
   password[max_len - 1] = '\0';
   return ESP_OK;
 }
 
-esp_err_t nvs_get_hostname(char *hostname, size_t max_len) {
+esp_err_t nvs_get_hostname(char* hostname, size_t max_len) {
   if (!hostname) return ESP_ERR_INVALID_ARG;
   strncpy(hostname, s_hostname, max_len);
   hostname[max_len - 1] = '\0';
   return ESP_OK;
 }
 
-esp_err_t nvs_get_syslog_addr(char *addr, size_t max_len) {
+esp_err_t nvs_get_syslog_addr(char* addr, size_t max_len) {
   if (!addr) return ESP_ERR_INVALID_ARG;
   strncpy(addr, s_syslog_addr, max_len);
   addr[max_len - 1] = '\0';
   return ESP_OK;
 }
 
-esp_err_t nvs_get_sntp_server(char *server, size_t max_len) {
+esp_err_t nvs_get_sntp_server(char* server, size_t max_len) {
   if (!server) return ESP_ERR_INVALID_ARG;
   strncpy(server, s_sntp_server, max_len);
   server[max_len - 1] = '\0';
   return ESP_OK;
 }
 
-const char *nvs_get_image_url(void) {
+const char* nvs_get_image_url(void) {
   return (strlen(s_image_url) > 0) ? s_image_url : NULL;
 }
 
@@ -270,14 +273,14 @@ bool nvs_get_prefer_ipv6(void) { return s_prefer_ipv6; }
 
 bool nvs_get_disable_touch(void) { return s_disable_touch; }
 
-esp_err_t nvs_get_api_key(char *api_key, size_t max_len) {
+esp_err_t nvs_get_api_key(char* api_key, size_t max_len) {
   if (!api_key) return ESP_ERR_INVALID_ARG;
   strncpy(api_key, s_api_key, max_len);
   api_key[max_len - 1] = '\0';
   return ESP_OK;
 }
 
-esp_err_t nvs_set_ssid(const char *ssid) {
+esp_err_t nvs_set_ssid(const char* ssid) {
   if (!ssid) return ESP_ERR_INVALID_ARG;
   if (strlen(ssid) > MAX_SSID_LEN) return ESP_ERR_INVALID_SIZE;
   strncpy(s_wifi_ssid, ssid, MAX_SSID_LEN);
@@ -285,7 +288,7 @@ esp_err_t nvs_set_ssid(const char *ssid) {
   return ESP_OK;
 }
 
-esp_err_t nvs_set_password(const char *password) {
+esp_err_t nvs_set_password(const char* password) {
   if (!password) return ESP_ERR_INVALID_ARG;
   if (strlen(password) > MAX_PASSWORD_LEN) return ESP_ERR_INVALID_SIZE;
   strncpy(s_wifi_password, password, MAX_PASSWORD_LEN);
@@ -293,7 +296,7 @@ esp_err_t nvs_set_password(const char *password) {
   return ESP_OK;
 }
 
-esp_err_t nvs_set_hostname(const char *hostname) {
+esp_err_t nvs_set_hostname(const char* hostname) {
   if (!hostname) return ESP_ERR_INVALID_ARG;
   if (strlen(hostname) > MAX_HOSTNAME_LEN) return ESP_ERR_INVALID_SIZE;
   strncpy(s_hostname, hostname, MAX_HOSTNAME_LEN);
@@ -301,7 +304,7 @@ esp_err_t nvs_set_hostname(const char *hostname) {
   return ESP_OK;
 }
 
-esp_err_t nvs_set_syslog_addr(const char *addr) {
+esp_err_t nvs_set_syslog_addr(const char* addr) {
   if (!addr) {
     s_syslog_addr[0] = '\0';
     return ESP_OK;
@@ -312,7 +315,7 @@ esp_err_t nvs_set_syslog_addr(const char *addr) {
   return ESP_OK;
 }
 
-esp_err_t nvs_set_sntp_server(const char *server) {
+esp_err_t nvs_set_sntp_server(const char* server) {
   if (!server) return ESP_ERR_INVALID_ARG;
   if (strlen(server) > MAX_SNTP_SERVER_LEN) return ESP_ERR_INVALID_SIZE;
   strncpy(s_sntp_server, server, MAX_SNTP_SERVER_LEN);
@@ -320,7 +323,7 @@ esp_err_t nvs_set_sntp_server(const char *server) {
   return ESP_OK;
 }
 
-esp_err_t nvs_set_image_url(const char *image_url) {
+esp_err_t nvs_set_image_url(const char* image_url) {
   if (!image_url) {
     s_image_url[0] = '\0';
     return ESP_OK;
@@ -329,21 +332,22 @@ esp_err_t nvs_set_image_url(const char *image_url) {
   strncpy(s_image_url, image_url, MAX_URL_LEN);
   s_image_url[MAX_URL_LEN] = '\0';
 
-  char *key_start = strstr(s_image_url, "&key=");
+  char* key_start = strstr(s_image_url, "&key=");
   if (!key_start) {
     key_start = strstr(s_image_url, "?key=");
   }
   if (key_start) {
-    char *key_value = key_start + 5;
-    char *key_end = strchr(key_value, '&');
-    size_t key_len = key_end ? (size_t)(key_end - key_value) : strlen(key_value);
+    char* key_value = key_start + 5;
+    char* key_end = strchr(key_value, '&');
+    size_t key_len =
+        key_end ? (size_t)(key_end - key_value) : strlen(key_value);
     if (key_len > 0 && key_len <= MAX_API_KEY_LEN) {
       memcpy(s_api_key, key_value, key_len);
       s_api_key[key_len] = '\0';
       ESP_LOGI(TAG, "Extracted API key from URL");
     }
     if (key_end) {
-      char *question_mark = strchr(s_image_url, '?');
+      char* question_mark = strchr(s_image_url, '?');
       if (question_mark == key_start) {
         *key_end = '?';
       }
@@ -359,7 +363,7 @@ esp_err_t nvs_set_image_url(const char *image_url) {
   return ESP_OK;
 }
 
-esp_err_t nvs_set_api_key(const char *api_key) {
+esp_err_t nvs_set_api_key(const char* api_key) {
   if (!api_key) {
     s_api_key[0] = '\0';
     return ESP_OK;

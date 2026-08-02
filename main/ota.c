@@ -17,18 +17,18 @@
 #include "display.h"
 #include "gfx.h"
 
-static const char *TAG = "OTA";
+static const char* TAG = "OTA";
 
-static bool is_ip_private(const struct sockaddr *addr) {
+static bool is_ip_private(const struct sockaddr* addr) {
   if (addr->sa_family == AF_INET) {
-    struct sockaddr_in *sin = (struct sockaddr_in *)addr;
+    struct sockaddr_in* sin = (struct sockaddr_in*)addr;
     uint32_t ip = ntohl(sin->sin_addr.s_addr);
     return (ip >> 24 == 10) ||        // 10.0.0.0/8
            ((ip >> 20) == 0xAC1) ||   // 172.16.0.0/12
            ((ip >> 16) == 0xC0A8) ||  // 192.168.0.0/16
            (ip >> 24 == 127);         // 127.0.0.0/8
   } else if (addr->sa_family == AF_INET6) {
-    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
+    struct sockaddr_in6* sin6 = (struct sockaddr_in6*)addr;
     // fc00::/7 (Unique Local Addresses)
     if ((sin6->sin6_addr.s6_addr[0] & 0xFE) == 0xFC) return true;
     // fe80::/10 (Link-local)
@@ -39,11 +39,11 @@ static bool is_ip_private(const struct sockaddr *addr) {
   return false;
 }
 
-static bool check_url_protocol(const char *url, size_t url_len,
-                               const struct http_parser_url *u, char *out_url,
+static bool check_url_protocol(const char* url, size_t url_len,
+                               const struct http_parser_url* u, char* out_url,
                                size_t out_len) {
   if (u->field_set & (1 << UF_SCHEMA)) {
-    const char *schema = url + u->field_data[UF_SCHEMA].off;
+    const char* schema = url + u->field_data[UF_SCHEMA].off;
     size_t schema_len = u->field_data[UF_SCHEMA].len;
 
     if (schema_len == 5 && strncasecmp(schema, "https", 5) == 0) {
@@ -65,10 +65,10 @@ static bool check_url_protocol(const char *url, size_t url_len,
   return true;  // Is HTTP
 }
 
-static bool resolve_and_validate_host(const char *url,
-                                      const struct http_parser_url *u,
-                                      char *ip_str, size_t ip_str_len,
-                                      bool *is_ipv6) {
+static bool resolve_and_validate_host(const char* url,
+                                      const struct http_parser_url* u,
+                                      char* ip_str, size_t ip_str_len,
+                                      bool* is_ipv6) {
   if (!(u->field_set & (1 << UF_HOST))) {
     ESP_LOGE(TAG, "URL host missing");
     return false;
@@ -84,7 +84,7 @@ static bool resolve_and_validate_host(const char *url,
   host[host_len] = '\0';
 
   struct addrinfo hints = {.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM};
-  struct addrinfo *res;
+  struct addrinfo* res;
 
   if (getaddrinfo(host, NULL, &hints, &res) != 0) {
     ESP_LOGE(TAG, "DNS resolution failed for %s", host);
@@ -94,14 +94,14 @@ static bool resolve_and_validate_host(const char *url,
   bool private_ip = false;
   *is_ipv6 = false;
 
-  for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
+  for (struct addrinfo* p = res; p != NULL; p = p->ai_next) {
     if (is_ip_private(p->ai_addr)) {
-      void *addr_ptr;
+      void* addr_ptr;
       if (p->ai_family == AF_INET) {
-        addr_ptr = &((struct sockaddr_in *)p->ai_addr)->sin_addr;
+        addr_ptr = &((struct sockaddr_in*)p->ai_addr)->sin_addr;
         *is_ipv6 = false;
       } else {
-        addr_ptr = &((struct sockaddr_in6 *)p->ai_addr)->sin6_addr;
+        addr_ptr = &((struct sockaddr_in6*)p->ai_addr)->sin6_addr;
         *is_ipv6 = true;
       }
       if (inet_ntop(p->ai_family, addr_ptr, ip_str, ip_str_len) != NULL) {
@@ -122,8 +122,8 @@ static bool resolve_and_validate_host(const char *url,
   return true;
 }
 
-static bool reconstruct_url(const char *url, const struct http_parser_url *u,
-                            const char *ip_str, bool is_ipv6, char *out_url,
+static bool reconstruct_url(const char* url, const struct http_parser_url* u,
+                            const char* ip_str, bool is_ipv6, char* out_url,
                             size_t out_len) {
   int written = 0;
 
@@ -180,7 +180,7 @@ static bool reconstruct_url(const char *url, const struct http_parser_url *u,
   return true;
 }
 
-static bool validate_and_rewrite_url(const char *url, char *out_url,
+static bool validate_and_rewrite_url(const char* url, char* out_url,
                                      size_t out_len) {
   struct http_parser_url u;
   http_parser_url_init(&u);
@@ -215,17 +215,17 @@ static bool validate_and_rewrite_url(const char *url, char *out_url,
     return false;
   }
 
-  ESP_LOGI(TAG, "Rewritten OTA URL: %s", out_url);
+  ESP_LOGI(TAG, "OTA endpoint rewritten after host validation");
   return true;
 }
 
-void run_ota(const char *url) {
+void run_ota(const char* url) {
   char final_url[512] = {0};
   if (!validate_and_rewrite_url(url, final_url, sizeof(final_url))) {
     return;
   }
 
-  ESP_LOGI(TAG, "Starting OTA update from URL: %s", final_url);
+  ESP_LOGI(TAG, "Starting OTA update from validated endpoint");
 
   esp_http_client_config_t http_config = {
       .url = final_url,

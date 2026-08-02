@@ -9,6 +9,7 @@
 #include <freertos/event_groups.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
+#include <mbedtls/sha256.h>
 #include <webp/demux.h>
 
 #include "ap.h"
@@ -129,7 +130,7 @@ static esp_err_t send_client_info(void) {
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
-        ESP_LOGI(TAG, "Sending client info: %s", json_str);
+        ESP_LOGI(TAG, "Sending client info (endpoint values redacted)");
         int sent = esp_websocket_client_send_text(
             ws_handle, json_str, strlen(json_str), portMAX_DELAY);
         if (sent < 0) {
@@ -226,7 +227,8 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               if (cJSON_IsString(ota_item) && (ota_item->valuestring != NULL)) {
                 char* ota_url = strdup(ota_item->valuestring);
                 if (ota_url) {
-                  ESP_LOGI(TAG, "OTA URL received via WS: %s", ota_url);
+                  ESP_LOGI(TAG,
+                           "OTA URL received via websocket (value redacted)");
                   xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5,
                               NULL);
                 }
@@ -348,7 +350,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               if (cJSON_IsString(image_url_item) &&
                   (image_url_item->valuestring != NULL)) {
                 nvs_set_image_url(image_url_item->valuestring);
-                ESP_LOGI(TAG, "Updated image_url to %s", nvs_get_image_url());
+                ESP_LOGI(TAG, "Updated image endpoint");
                 settings_changed = true;
               }
 
@@ -476,6 +478,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
 }
 
 void app_main(void) {
+  ESP_LOGI(TAG, "Reset reason: %d", esp_reset_reason());
   const char* image_url = NULL;
 
   // delete here for 5 seconds to allow for serial port to connect.
@@ -603,6 +606,14 @@ void app_main(void) {
 
   if (nvs_get_ap_mode()) {
     if (button_boot || !sta_connected) {
+      char saved_ssid[33] = {0};
+      nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+      const char* portal_reason =
+          button_boot ? "manual_request"
+                      : (strlen(saved_ssid) == 0 ? "no_saved_credentials"
+                                                 : "startup_timeout");
+      ESP_LOGW(TAG, "Entering setup portal: reason=%s saved_credentials=%s",
+               portal_reason, strlen(saved_ssid) > 0 ? "yes" : "no");
       ESP_LOGW(TAG, "WiFi didn't connect or Boot Button Pressed");
       // Load up the config webp so that we don't just loop the boot screen over
       // and over again but show the ap config info webp
@@ -649,15 +660,21 @@ void app_main(void) {
       }
     }
   } else if (!wifi_is_connected()) {
-    ESP_LOGW(TAG, "Pausing main task until wifi connected...");
+    ESP_LOGW(TAG,
+             "Setup portal remains available while retrying saved network...");
+    uint32_t recovery_seconds = 0;
     while (!wifi_is_connected()) {
-      static int counter = 0;
-      counter++;
+      recovery_seconds++;
+      wifi_health_check();
       vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-      if (counter > 600)
-        esp_restart();  // after 10 minutes reboot because maybe we got stuck
-                        // here after power outage or something.
+      if (recovery_seconds % 600 == 0) {
+        ESP_LOGW(TAG,
+                 "Saved network is still unavailable after %lu seconds; "
+                 "continuing capped retries without discarding credentials",
+                 (unsigned long)recovery_seconds);
+      }
     }
+    ESP_LOGI(TAG, "Saved network connected; exiting portal recovery state");
   }
 
   // When AP mode is enabled, auto-shutdown the AP after a short delay
@@ -678,13 +695,12 @@ void app_main(void) {
   }
 
   // image_url is now valid and usable here
-  ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
+  ESP_LOGI(TAG, "Proceeding with configured image endpoint");
 
   char api_key[MAX_API_KEY_LEN + 1];
   if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&
       strlen(api_key) > 0) {
-    size_t key_len = strlen(api_key);
-    ESP_LOGI(TAG, "API key: ...%s", api_key + key_len - 4);
+    ESP_LOGI(TAG, "Device API key configured: yes");
   }
 
   ESP_LOGI(TAG, "Free heap: %" PRIu32, esp_get_free_heap_size());
@@ -696,7 +712,7 @@ void app_main(void) {
   // Check for ws:// or wss:// in the URL
   if (strncmp(image_url, "ws://", 5) == 0 ||
       strncmp(image_url, "wss://", 6) == 0) {
-    ESP_LOGI(TAG, "Using websockets with URL: %s", image_url);
+    ESP_LOGI(TAG, "Using websocket transport");
     use_websocket = true;
 
     char ws_headers[64 + MAX_API_KEY_LEN] = {0};
@@ -751,7 +767,6 @@ void app_main(void) {
                "WebSocket client failed to start after %d attempts, "
                "will retry periodically",
                max_start_retries);
-      
     }
 
     bool was_connected = false;
@@ -831,44 +846,44 @@ void app_main(void) {
     }
   } else {
     // normal http
-    ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", image_url);
+    ESP_LOGI(TAG, "HTTP polling loop started");
+    uint32_t http_failure_backoff_ms = 1000;
     for (;;) {
       uint8_t* webp;
       size_t len;
       static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
       int status_code = 0;
-      ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
+      ESP_LOGI(TAG, "HTTP request start");
       char* ota_url = NULL;
       char* new_image_url = NULL;
       bool reboot_requested = false;
 
       // Start timing the HTTP fetch
       int64_t fetch_start_us = esp_timer_get_time();
-      bool fetch_failed = !wifi_is_connected() ||
-                          remote_get(image_url, &webp, &len, &brightness_pct,
-                                     &app_dwell_secs, &status_code, &ota_url,
-                                     &new_image_url, &reboot_requested);
+      bool fetch_failed =
+          !wifi_is_connected() ||
+          remote_get(image_url, &webp, &len, &brightness_pct, &app_dwell_secs,
+                     &status_code, &ota_url, &new_image_url, &reboot_requested);
       int64_t fetch_duration_ms =
           (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
 
       if (ota_url != NULL) {
-        ESP_LOGI(TAG, "OTA URL received via HTTP: %s", ota_url);
+        ESP_LOGI(TAG, "OTA URL received via HTTP (value redacted)");
         xTaskCreate(ota_task_entry, "ota_task", 8192, ota_url, 5, NULL);
         // Since we are rebooting (if successful) or failed, we might want to
         // continue or pause. If OTA failed, we continue normal operation.
       }
 
       if (new_image_url != NULL) {
-        ESP_LOGI(TAG, "Image URL received via HTTP: %s", new_image_url);
+        ESP_LOGI(TAG, "Replacement image endpoint received via HTTP");
         nvs_set_image_url(new_image_url);
         esp_err_t err = nvs_save_settings();
         if (err != ESP_OK) {
           ESP_LOGE(TAG, "Failed to save image_url: %s", esp_err_to_name(err));
         } else {
-          ESP_LOGI(TAG, "Updated image_url to %s",
-                   nvs_get_image_url() != NULL ? nvs_get_image_url() : "(empty)");
+          ESP_LOGI(TAG, "Saved replacement image endpoint");
           reboot_requested = true;
         }
         free(new_image_url);
@@ -877,10 +892,14 @@ void app_main(void) {
       if (fetch_failed) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",
                  status_code);
-        vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         draw_error_indicator_pixel();  // Add this
         if (status_code == 0) {
           ESP_LOGI(TAG, "No connection");
+        } else if (status_code == 401 || status_code == 403) {
+          ESP_LOGE(TAG,
+                   "HTTP authentication rejected (%d): verify the "
+                   "device-scoped key and saved Image URL",
+                   status_code);
         } else if (status_code == 404 || status_code == 400) {
           ESP_LOGI(TAG, "HTTP 404/400, displaying 404");
           if (gfx_display_asset("error_404")) {
@@ -892,10 +911,30 @@ void app_main(void) {
                    "Content too large - oversize graphic already displayed");
           vTaskDelay(pdMS_TO_TICKS(1 * 5000));
         }
+        if (status_code == 401 || status_code == 403)
+          http_failure_backoff_ms = 30000;
+        ESP_LOGI(TAG, "HTTP retry backoff=%lu ms",
+                 (unsigned long)http_failure_backoff_ms);
+        vTaskDelay(pdMS_TO_TICKS(http_failure_backoff_ms));
+        if (http_failure_backoff_ms < 30000) {
+          http_failure_backoff_ms *= 2;
+          if (http_failure_backoff_ms > 30000)
+            http_failure_backoff_ms = 30000;
+        }
       } else {
         // Successful remote_get
+        http_failure_backoff_ms = 1000;
         display_set_brightness(brightness_pct);
-        ESP_LOGI(TAG, "Queuing new webp (%d bytes)", len);
+        uint8_t frame_hash[32];
+        mbedtls_sha256(webp, len, frame_hash, 0);
+        ESP_LOGI(
+            TAG,
+            "HTTP success status=%d bytes=%zu hash=%02x%02x%02x%02x%02x%02x "
+            "last_success_us=%lld queue_loaded=%d",
+            status_code, len, frame_hash[0], frame_hash[1], frame_hash[2],
+            frame_hash[3], frame_hash[4], frame_hash[5], esp_timer_get_time(),
+            gfx_get_loaded_counter());
+        ESP_LOGI(TAG, "Queuing new webp (%zu bytes)", len);
 
         int queued_counter = gfx_update(webp, len, app_dwell_secs);
         // Do not free(webp) here; ownership is transferred to gfx

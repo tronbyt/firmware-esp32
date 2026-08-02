@@ -91,11 +91,11 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
       } else if (strcasecmp(event->header_key, "Tronbyt-OTA-URL") == 0) {
         if (state->ota_url != NULL) free(state->ota_url);
         state->ota_url = strdup(event->header_value);
-        ESP_LOGI(TAG, "Found OTA URL: %s", state->ota_url);
+        ESP_LOGI(TAG, "Found OTA URL header (value redacted)");
       } else if (strcasecmp(event->header_key, "Tronbyt-Image-URL") == 0) {
         if (state->image_url != NULL) free(state->image_url);
         state->image_url = strdup(event->header_value);
-        ESP_LOGI(TAG, "Found Image URL: %s", state->image_url);
+        ESP_LOGI(TAG, "Found Image URL header (value redacted)");
       } else if (strcasecmp(event->header_key, "Tronbyt-Reboot") == 0) {
         state->reboot_requested = parse_header_bool(event->header_value);
         ESP_LOGI(TAG, "Tronbyt-Reboot value: %s", event->header_value);
@@ -224,7 +224,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
 
   esp_http_client_handle_t http = esp_http_client_init(&config);
   if (http == NULL) {
-    ESP_LOGE(TAG, "HTTP client initialization failed for URL: %s", url);
+    ESP_LOGE(TAG, "HTTP client initialization failed");
     free(state.buf);
     return 1;
   }
@@ -249,7 +249,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
   // Do the request
   esp_err_t err = esp_http_client_perform(http);
   if (err != ESP_OK) {
-    ESP_LOGE(TAG, "couldn't reach %s: %s", url, esp_err_to_name(err));
+    ESP_LOGE(TAG, "HTTP transport error: %s", esp_err_to_name(err));
     if (state.buf != NULL) {
       free(state.buf);
     }

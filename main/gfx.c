@@ -15,7 +15,7 @@
 #include "nvs_settings.h"
 #include "version.h"
 
-static const char *TAG = "gfx";
+static const char* TAG = "gfx";
 
 #define GFX_TASK_CORE 1
 #define GFX_TASK_PRIO 2
@@ -24,7 +24,7 @@ static const char *TAG = "gfx";
 struct gfx_state {
   TaskHandle_t task;
   SemaphoreHandle_t mutex;
-  void *buf;
+  void* buf;
   size_t len;
   int32_t dwell_secs;
   int counter;
@@ -35,14 +35,14 @@ struct gfx_state {
   volatile bool paused;
 };
 
-static struct gfx_state *_state = NULL;
+static struct gfx_state* _state = NULL;
 
-static void gfx_loop(void *arg);
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     volatile int32_t *isAnimating);
+static void gfx_loop(void* arg);
+static int draw_webp(const uint8_t* buf, size_t len, int32_t dwell_secs,
+                     volatile int32_t* isAnimating);
 static void send_websocket_notification(int counter);
 
-int gfx_initialize(const char *img_url) {
+int gfx_initialize(const char* img_url) {
   // Only initialize once
   if (_state) {
     ESP_LOGE(TAG, "Already initialized");
@@ -96,7 +96,7 @@ int gfx_initialize(const char *img_url) {
 
     // Parse URL to extract host and last two path components
     if (img_url != NULL && strlen(img_url) > 0) {
-      ESP_LOGI(TAG, "Full URL: %s", img_url);
+      ESP_LOGI(TAG, "Loading configured image endpoint");
       char host_only[64] = {0};
       char last_two_components[32] = {0};
 
@@ -112,10 +112,10 @@ int gfx_initialize(const char *img_url) {
         }
 
         if (u.field_set & (1 << UF_PATH)) {
-          const char *path = img_url + u.field_data[UF_PATH].off;
+          const char* path = img_url + u.field_data[UF_PATH].off;
           size_t path_len = u.field_data[UF_PATH].len;
-          const char *last_slash = NULL;
-          const char *second_last_slash = NULL;
+          const char* last_slash = NULL;
+          const char* second_last_slash = NULL;
 
           for (size_t i = 0; i < path_len; i++) {
             if (path[i] == '/') {
@@ -148,7 +148,7 @@ int gfx_initialize(const char *img_url) {
 
       // Display last 11 chars of path components in the middle, left-aligned
       if (strlen(last_two_components) > 0) {
-        const char *display_path = last_two_components;
+        const char* display_path = last_two_components;
         size_t path_len = strlen(last_two_components);
 
         // If longer than 11 chars, show only the last 11
@@ -181,15 +181,14 @@ int gfx_initialize(const char *img_url) {
   }
 
   // Launch the graphics loop in separate task
-  BaseType_t ret =
-      xTaskCreatePinnedToCore(gfx_loop,              // pvTaskCode
-                              "gfx_loop",            // pcName
-                              GFX_TASK_STACK_SIZE,   // usStackDepth
-                              (void *)&isAnimating,  // pvParameters
-                              GFX_TASK_PRIO,         // uxPriority
-                              &_state->task,         // pxCreatedTask
-                              GFX_TASK_CORE          // xCoreID
-      );
+  BaseType_t ret = xTaskCreatePinnedToCore(gfx_loop,             // pvTaskCode
+                                           "gfx_loop",           // pcName
+                                           GFX_TASK_STACK_SIZE,  // usStackDepth
+                                           (void*)&isAnimating,  // pvParameters
+                                           GFX_TASK_PRIO,        // uxPriority
+                                           &_state->task,  // pxCreatedTask
+                                           GFX_TASK_CORE   // xCoreID
+  );
   if (ret != pdPASS) {
     ESP_LOGE(TAG, "Could not create gfx task");
     return 1;
@@ -237,7 +236,7 @@ static void send_websocket_notification(int counter) {
   }
 }
 
-int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
+int gfx_update(void* webp, size_t len, int32_t dwell_secs) {
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
     return -1;  // Return negative on error
@@ -304,8 +303,8 @@ int gfx_get_loaded_counter(void) {
   return loaded;
 }
 
-int gfx_display_asset(const char *asset_type) {
-  const uint8_t *asset_data = NULL;
+int gfx_display_asset(const char* asset_type) {
+  const uint8_t* asset_data = NULL;
   size_t asset_len = 0;
 
   // Determine which asset to display
@@ -328,7 +327,7 @@ int gfx_display_asset(const char *asset_type) {
   }
 
   // Allocate heap memory and copy asset data
-  uint8_t *asset_heap_copy = (uint8_t *)malloc(asset_len);
+  uint8_t* asset_heap_copy = (uint8_t*)malloc(asset_len);
   if (asset_heap_copy == NULL) {
     ESP_LOGE(TAG, "Failed to allocate memory for %s asset copy", asset_type);
     return 1;
@@ -354,16 +353,16 @@ int gfx_display_asset(const char *asset_type) {
   return 0;
 }
 
-void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
+void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g,
                       uint8_t b, int scale) {
   display_text(text, x, y, r, g, b, scale);
 }
 
 void gfx_shutdown(void) { display_shutdown(); }
 
-static void gfx_loop(void *args) {
+static void gfx_loop(void* args) {
   ESP_LOGI(TAG, "gfx_loop ENTERED");
-  void *webp = NULL;
+  void* webp = NULL;
   size_t len = 0;
   int32_t dwell_secs = 0;
   int counter = -1;
@@ -407,9 +406,9 @@ static void gfx_loop(void *args) {
 
     // static int stack_check_counter = 0;
     // if (++stack_check_counter >= 100) {
-      // stack_check_counter = 0;
-      UBaseType_t stack_free = uxTaskGetStackHighWaterMark(NULL);
-      ESP_LOGI(TAG, "Stack remaining: %u bytes", stack_free);
+    // stack_check_counter = 0;
+    UBaseType_t stack_free = uxTaskGetStackHighWaterMark(NULL);
+    ESP_LOGI(TAG, "Stack remaining: %u bytes", stack_free);
     // }
 
     if (webp && len > 0) {
@@ -430,8 +429,8 @@ static void gfx_loop(void *args) {
   }
 }
 
-static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     volatile int32_t *isAnimating) {
+static int draw_webp(const uint8_t* buf, size_t len, int32_t dwell_secs,
+                     volatile int32_t* isAnimating) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -457,7 +456,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   WebPAnimDecoderOptionsInit(&decoderOptions);
   decoderOptions.color_mode = MODE_RGBA;
 
-  WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
+  WebPAnimDecoder* decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
   if (decoder == NULL) {
     ESP_LOGE(TAG, "Could not create WebP decoder");
     draw_error_indicator_pixel();
@@ -474,14 +473,16 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
   int64_t start_us = esp_timer_get_time();
 
-  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 && !_state->paused) {
+  while (esp_timer_get_time() - start_us < dwell_us && *isAnimating != -1 &&
+         !_state->paused) {
     int lastTimestamp = 0;
     int delay = 0;
     TickType_t drawStartTick = xTaskGetTickCount();
 
     // Draw each frame, and sleep for the delay
-    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 && !_state->paused) {
-      uint8_t *pix;
+    while (WebPAnimDecoderHasMoreFrames(decoder) && *isAnimating != -1 &&
+           !_state->paused) {
+      uint8_t* pix;
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
       if (delay > 0) {

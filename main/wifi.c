@@ -13,6 +13,7 @@
 #include "esp_partition.h"
 #include "esp_random.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_wifi_types.h"
 #include "freertos/FreeRTOS.h"
@@ -49,6 +50,9 @@ static bool s_connection_given_up = false;
 
 // Counter for tracking consecutive WiFi disconnections
 static int s_wifi_disconnect_counter = 0;
+static int64_t s_next_health_retry_us = 0;
+static uint32_t s_health_retry_delay_seconds = 1;
+static portMUX_TYPE s_retry_state_lock = portMUX_INITIALIZER_UNLOCKED;
 
 // Function prototypes
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
@@ -122,7 +126,7 @@ int wifi_initialize(const char* ssid, const char* password) {
     nvs_get_password((char*)sta_config.sta.password,
                      sizeof(sta_config.sta.password));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
-    ESP_LOGI(TAG, "Configured STA with SSID: %s", saved_ssid);
+    ESP_LOGI(TAG, "Configured STA from saved credentials");
   }
 
   // Start WiFi
@@ -279,6 +283,10 @@ static void handle_successful_ip_acquisition(void) {
   // Reset reconnection counter on successful connection
   s_reconnect_attempts = 0;
   s_connection_given_up = false;
+  portENTER_CRITICAL(&s_retry_state_lock);
+  s_next_health_retry_us = 0;
+  s_health_retry_delay_seconds = 1;
+  portEXIT_CRITICAL(&s_retry_state_lock);
 
   // Set connection bit and clear fail bit
   xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
@@ -306,7 +314,20 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
           esp_netif_create_ip6_linklocal(s_sta_netif);
         }
         break;
-      case WIFI_EVENT_STA_DISCONNECTED:
+      case WIFI_EVENT_STA_DISCONNECTED: {
+        wifi_event_sta_disconnected_t* disconnected =
+            (wifi_event_sta_disconnected_t*)event_data;
+        int reason = disconnected != NULL ? disconnected->reason : -1;
+        const char* category = "connection_lost";
+        if (reason == WIFI_REASON_NO_AP_FOUND ||
+            reason == WIFI_REASON_BEACON_TIMEOUT) {
+          category = "router_unavailable";
+        } else if (reason == WIFI_REASON_AUTH_FAIL ||
+                   reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
+          category = "authentication_rejected";
+        }
+        ESP_LOGW(TAG, "WiFi disconnected: category=%s reason=%d attempt=%d",
+                 category, reason, s_reconnect_attempts + 1);
         // Increment reconnection counter
         s_reconnect_attempts++;
 
@@ -319,7 +340,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         if (nvs_get_ap_mode() &&
             s_reconnect_attempts >= MAX_RECONNECT_ATTEMPTS &&
             !s_connection_given_up) {
-          ESP_LOGW(TAG, "Maximum reconnection attempts (%d) reached, giving up",
+          ESP_LOGW(TAG,
+                   "Initial reconnect burst (%d) exhausted; capped background "
+                   "retries remain active",
                    MAX_RECONNECT_ATTEMPTS);
           s_connection_given_up = true;
           // We'll continue in AP mode only at this point
@@ -330,7 +353,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                    s_reconnect_attempts);
           esp_wifi_connect();
         }
-        break;
+      } break;
       case WIFI_EVENT_AP_STACONNECTED: {
         wifi_event_ap_staconnected_t* event =
             (wifi_event_ap_staconnected_t*)event_data;
@@ -388,8 +411,26 @@ void wifi_health_check(void) {
       // counter");
       s_wifi_disconnect_counter = 0;
     }
+    portENTER_CRITICAL(&s_retry_state_lock);
+    s_next_health_retry_us = 0;
+    s_health_retry_delay_seconds = 1;
+    portEXIT_CRITICAL(&s_retry_state_lock);
     return;
   }
+
+  int64_t now_us = esp_timer_get_time();
+  portENTER_CRITICAL(&s_retry_state_lock);
+  if (now_us < s_next_health_retry_us) {
+    portEXIT_CRITICAL(&s_retry_state_lock);
+    return;
+  }
+  uint32_t delay_seconds = s_health_retry_delay_seconds;
+  s_next_health_retry_us = now_us + (int64_t)delay_seconds * 1000000LL;
+  if (s_health_retry_delay_seconds < 30) {
+    s_health_retry_delay_seconds *= 2;
+    if (s_health_retry_delay_seconds > 30) s_health_retry_delay_seconds = 30;
+  }
+  portEXIT_CRITICAL(&s_retry_state_lock);
 
   // WiFi is not connected, increment counter
   s_wifi_disconnect_counter++;
@@ -400,13 +441,17 @@ void wifi_health_check(void) {
   char saved_ssid[33] = {0};
   nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
   if (strlen(saved_ssid) > 0) {
-    ESP_LOGI(TAG, "Reconnecting in Health check...");
+    ESP_LOGI(TAG, "Saved-network retry attempt=%d delay_after_attempt=%lus",
+             s_wifi_disconnect_counter, (unsigned long)delay_seconds);
     esp_err_t err = esp_wifi_connect();
     if (err != ESP_OK) {
       ESP_LOGW(TAG, "WiFi reconnect attempt failed: %s", esp_err_to_name(err));
     }
   } else {
-    ESP_LOGW(TAG, "No SSID configured, cannot reconnect");
+    ESP_LOGW(TAG, "No saved credentials; setup portal required");
+    portENTER_CRITICAL(&s_retry_state_lock);
+    s_next_health_retry_us = now_us + 30000000LL;
+    portEXIT_CRITICAL(&s_retry_state_lock);
   }
 }
 
