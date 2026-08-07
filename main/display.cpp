@@ -177,7 +177,6 @@ static const char *TAG = "display";
 #endif
 
 static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
-  if (pct > 100) pct = 100;
   return (uint8_t)(((uint32_t)pct * BRIGHTNESS_8BIT_MAX + 50) / 100);
 }
 
@@ -248,6 +247,11 @@ int display_initialize(void) {
 }
 
 void display_set_brightness(uint8_t brightness_pct) {
+  if (brightness_pct > DISPLAY_MAX_BRIGHTNESS) {
+    ESP_LOGW(TAG, "Ignoring invalid brightness %u (valid range %d-%d)",
+             brightness_pct, DISPLAY_MIN_BRIGHTNESS, DISPLAY_MAX_BRIGHTNESS);
+    return;
+  }
   if (brightness_pct != _brightness) {
     uint8_t brightness_8bit = brightness_percent_to_8bit(brightness_pct);
 
@@ -256,8 +260,12 @@ void display_set_brightness(uint8_t brightness_pct) {
     _matrix->setBrightness8(brightness_8bit);
     _matrix->clearScreen();
     _brightness = brightness_pct;
-    nvs_set_brightness(brightness_pct);
-    nvs_persist_brightness();
+    esp_err_t err = nvs_set_brightness(brightness_pct);
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to store brightness: %s", esp_err_to_name(err));
+    } else if ((err = nvs_persist_brightness()) != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to persist brightness: %s", esp_err_to_name(err));
+    }
   }
 }
 
