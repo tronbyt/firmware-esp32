@@ -515,6 +515,14 @@ void app_main(void) {
   // Initialize NVS settings
   ESP_ERROR_CHECK(nvs_settings_init());
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+  saved_brightness = nvs_get_brightness();
+  if (saved_brightness == 0) {
+    saved_brightness = 30;
+  }
+  display_power_on = nvs_get_brightness() > 0;
+#endif
+
   // Setup WiFi.
   ESP_LOGI(TAG, "Initializing WiFi manager...");
   // Pass empty strings to force AP mode
@@ -832,10 +840,10 @@ void app_main(void) {
   } else {
     // normal http
     ESP_LOGW(TAG, "HTTP Loop Start with URL: %s", image_url);
+    uint8_t brightness_pct = nvs_get_brightness();
     for (;;) {
       uint8_t* webp;
       size_t len;
-      static uint8_t brightness_pct = DISPLAY_DEFAULT_BRIGHTNESS;
       int status_code = 0;
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;

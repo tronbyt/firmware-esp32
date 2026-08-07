@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "display.h"
 #include "esp_log.h"
 #include "esp_wifi_types.h"
 #include "nvs.h"
@@ -28,6 +29,7 @@
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
 #define NVS_KEY_DISABLE_TOUCH "dis_touch"
 #define NVS_KEY_API_KEY "api_key"
+#define NVS_KEY_BRIGHTNESS "brightness"
 
 // Internal storage
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
@@ -44,6 +46,7 @@ static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
 static bool s_disable_touch = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
+static uint8_t s_brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
 // Hardcoded defaults (from secrets.json via generated secrets_gen.h)
 #include "secrets_gen.h"
@@ -169,6 +172,10 @@ esp_err_t nvs_settings_init(void) {
       s_disable_touch = (val_u8 != 0);
     }
 
+    if (nvs_get_u8(nvs_handle, NVS_KEY_BRIGHTNESS, &val_u8) == ESP_OK) {
+      s_brightness = val_u8;
+    }
+
     required_size = sizeof(s_api_key);
     if (nvs_get_str(nvs_handle, NVS_KEY_API_KEY, s_api_key,
                     &required_size) != ESP_OK) {
@@ -269,6 +276,8 @@ bool nvs_get_ap_mode(void) { return s_ap_mode; }
 bool nvs_get_prefer_ipv6(void) { return s_prefer_ipv6; }
 
 bool nvs_get_disable_touch(void) { return s_disable_touch; }
+
+uint8_t nvs_get_brightness(void) { return s_brightness; }
 
 esp_err_t nvs_get_api_key(char *api_key, size_t max_len) {
   if (!api_key) return ESP_ERR_INVALID_ARG;
@@ -405,6 +414,27 @@ esp_err_t nvs_set_disable_touch(bool disable_touch) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_brightness(uint8_t brightness) {
+  if (brightness > DISPLAY_MAX_BRIGHTNESS) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_brightness = brightness;
+  return ESP_OK;
+}
+
+esp_err_t nvs_persist_brightness(void) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+  if (err != ESP_OK) return err;
+
+  err = nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
+  if (err == ESP_OK) {
+    err = nvs_commit(nvs_handle);
+  }
+  nvs_close(nvs_handle);
+  return err;
+}
+
 esp_err_t nvs_save_settings(void) {
   nvs_handle_t nvs_handle;
   esp_err_t err;
@@ -427,6 +457,7 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, s_disable_touch ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
 
   err = nvs_commit(nvs_handle);
   nvs_close(nvs_handle);

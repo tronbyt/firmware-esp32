@@ -166,6 +166,21 @@ static MatrixPanel_I2S_DMA *_matrix;
 static uint8_t _brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
 
+// Per-board ceiling for the 0-100% -> setBrightness8() (0-255) mapping.
+// Genuine Tidbyt hardware (Gen1/Gen2) defines this as 100 in its board block
+// above, matching the stock HDK convention where the brightness percentage
+// feeds setBrightness8() 1:1 (max ~39% panel PWM duty). Third-party panels with
+// no Tidbyt reference fall back to the legacy 230 (~90% duty) and can be tuned
+// empirically per board.
+#ifndef BRIGHTNESS_8BIT_MAX
+#define BRIGHTNESS_8BIT_MAX 230
+#endif
+
+static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
+  if (pct > 100) pct = 100;
+  return (uint8_t)(((uint32_t)pct * BRIGHTNESS_8BIT_MAX + 50) / 100);
+}
+
 int display_initialize(void) {
   // Get swap_colors setting
   bool swap_colors = nvs_get_swap_colors();
@@ -221,24 +236,15 @@ int display_initialize(void) {
     _matrix = NULL;
     return 1;
   }
-  display_set_brightness(DISPLAY_DEFAULT_BRIGHTNESS);
+
+  // Apply stored brightness immediately so reboots (especially at night with
+  // brightness 0) don't flash the boot animation at full brightness.
+  uint8_t brightness_pct = nvs_get_brightness();
+  _matrix->setBrightness8(brightness_percent_to_8bit(brightness_pct));
+  _brightness = brightness_pct;
+  ESP_LOGI(TAG, "Restored brightness to %d%%", brightness_pct);
 
   return 0;
-}
-
-// Per-board ceiling for the 0-100% -> setBrightness8() (0-255) mapping.
-// Genuine Tidbyt hardware (Gen1/Gen2) defines this as 100 in its board block
-// above, matching the stock HDK convention where the brightness percentage
-// feeds setBrightness8() 1:1 (max ~39% panel PWM duty). Third-party panels with
-// no Tidbyt reference fall back to the legacy 230 (~90% duty) and can be tuned
-// empirically per board.
-#ifndef BRIGHTNESS_8BIT_MAX
-#define BRIGHTNESS_8BIT_MAX 230
-#endif
-
-static inline uint8_t brightness_percent_to_8bit(uint8_t pct) {
-  if (pct > 100) pct = 100;
-  return (uint8_t)(((uint32_t)pct * BRIGHTNESS_8BIT_MAX + 50) / 100);
 }
 
 void display_set_brightness(uint8_t brightness_pct) {
@@ -250,6 +256,8 @@ void display_set_brightness(uint8_t brightness_pct) {
     _matrix->setBrightness8(brightness_8bit);
     _matrix->clearScreen();
     _brightness = brightness_pct;
+    nvs_set_brightness(brightness_pct);
+    nvs_persist_brightness();
   }
 }
 
