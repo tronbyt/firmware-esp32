@@ -405,12 +405,12 @@ static void gfx_loop(void *args) {
       continue;
     }
 
-    // static int stack_check_counter = 0;
-    // if (++stack_check_counter >= 100) {
-      // stack_check_counter = 0;
-      UBaseType_t stack_free = uxTaskGetStackHighWaterMark(NULL);
+    static UBaseType_t last_stack_free = 0;
+    UBaseType_t stack_free = uxTaskGetStackHighWaterMark(NULL);
+    if (stack_free != last_stack_free) {
       ESP_LOGI(TAG, "Stack remaining: %u bytes", stack_free);
-    // }
+      last_stack_free = stack_free;
+    }
 
     if (webp && len > 0) {
       if (draw_webp(webp, len, dwell_secs, &isAnimating)) {

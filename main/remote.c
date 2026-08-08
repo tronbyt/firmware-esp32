@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "display.h"
 #include "gfx.h"
 #include "nvs_settings.h"
 #include "sdkconfig.h"
@@ -21,7 +22,7 @@ struct remote_state {
   size_t len;
   size_t size;
   size_t max;
-  uint8_t brightness;
+  int16_t brightness;
   int32_t dwell_secs;
   char* ota_url;
   char* image_url;
@@ -82,9 +83,14 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 
       // Check for the specific header key
       if (strcasecmp(event->header_key, "Tronbyt-Brightness") == 0) {
-        state->brightness =
-            (uint8_t)atoi(event->header_value);  // API spec: 0-100
-        ESP_LOGD(TAG, "Tronbyt-Brightness value: %d%%", state->brightness);
+        int value = atoi(event->header_value);
+        if (value >= DISPLAY_MIN_BRIGHTNESS && value <= DISPLAY_MAX_BRIGHTNESS) {
+          state->brightness = (int16_t)value;
+          ESP_LOGD(TAG, "Tronbyt-Brightness value: %d%%", value);
+        } else {
+          ESP_LOGW(TAG, "Ignoring invalid Tronbyt-Brightness: %s",
+                   event->header_value);
+        }
       } else if (strcasecmp(event->header_key, "Tronbyt-Dwell-Secs") == 0) {
         state->dwell_secs = (int)atoi(event->header_value);
         // ESP_LOGI(TAG, "Tronbyt-Dwell-Secs value: %i", dwell_secs_value);
@@ -298,7 +304,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
   // Write back the results.
   *buf = state.buf;
   *len = state.len;
-  *brightness_pct = state.brightness;  // Assumes API provides 0–100 as spec'd
+  if (state.brightness >= 0) {
+    *brightness_pct = (uint8_t)state.brightness;
+  }
   if (state.dwell_secs > -1 && state.dwell_secs < 300)
     *dwell_secs = state.dwell_secs;  // 5 minute max ?
   *ota_url = state.ota_url;

@@ -95,6 +95,30 @@ static const char *s_html_gen2_end =
     "</div>";
 #endif
 
+static const char *s_html_skip_version_start =
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='skip_display_version' "
+    "name='skip_display_version' value='1' ";
+
+static const char *s_html_skip_version_end =
+    ">"
+    " Skip Version Display (requires reboot)"
+    "</label>"
+    "</div>";
+
+static const char *s_html_skip_boot_start =
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='skip_boot_animation' "
+    "name='skip_boot_animation' value='1' ";
+
+static const char *s_html_skip_boot_end =
+    ">"
+    " Skip Boot Animation (requires reboot)"
+    "</label>"
+    "</div>";
+
 static const char *s_html_part4 =
     "<button type='submit'>Save and Connect</button>"
     "</form>"
@@ -404,6 +428,30 @@ static esp_err_t root_handler(httpd_req_t *req) {
       break;
 #endif
 
+    if ((ret = httpd_resp_send_chunk(req, s_html_skip_version_start,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+    if (nvs_get_skip_display_version()) {
+      if ((ret = httpd_resp_send_chunk(req, "checked",
+                                       HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+        break;
+    }
+    if ((ret = httpd_resp_send_chunk(req, s_html_skip_version_end,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+
+    if ((ret = httpd_resp_send_chunk(req, s_html_skip_boot_start,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+    if (nvs_get_skip_boot_animation()) {
+      if ((ret = httpd_resp_send_chunk(req, "checked",
+                                       HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+        break;
+    }
+    if ((ret = httpd_resp_send_chunk(req, s_html_skip_boot_end,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+
     // Send Part 4 (End)
     if ((ret = httpd_resp_send_chunk(req, s_html_part4,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
@@ -488,8 +536,12 @@ static esp_err_t save_handler(httpd_req_t *req) {
   char image_url[400] = {0};
   char swap_val[2] = {0};
   char touch_val[4] = {0};
+  char skip_version_val[4] = {0};
+  char skip_boot_val[4] = {0};
   bool swap_colors = false;
   bool disable_touch = false;
+  bool skip_display_version = false;
+  bool skip_boot_animation = false;
 
   // Use httpd_query_key_value to parse form data
   if (httpd_query_key_value(buf, "ssid", ssid, sizeof(ssid)) != ESP_OK) {
@@ -516,20 +568,35 @@ static esp_err_t save_handler(httpd_req_t *req) {
     disable_touch = (strcmp(touch_val, "1") == 0);
   }
 
+  if (httpd_query_key_value(buf, "skip_display_version", skip_version_val,
+                            sizeof(skip_version_val)) == ESP_OK) {
+    skip_display_version = (strcmp(skip_version_val, "1") == 0);
+  }
+
+  if (httpd_query_key_value(buf, "skip_boot_animation", skip_boot_val,
+                            sizeof(skip_boot_val)) == ESP_OK) {
+    skip_boot_animation = (strcmp(skip_boot_val, "1") == 0);
+  }
+
   url_decode(ssid);
   url_decode(password);
   url_decode(image_url);
 
   ESP_LOGI(TAG,
-           "Received SSID: %s, Image URL: %s, Swap Colors: %s, Disable Touch: %s",
+           "Received SSID: %s, Image URL: %s, Swap Colors: %s, Disable Touch: "
+           "%s, Skip Version: %s, Skip Boot: %s",
            ssid, image_url, swap_colors ? "true" : "false",
-           disable_touch ? "true" : "false");
+           disable_touch ? "true" : "false",
+           skip_display_version ? "true" : "false",
+           skip_boot_animation ? "true" : "false");
 
   nvs_set_ssid(ssid);
   nvs_set_password(password);
   nvs_set_image_url(strlen(image_url) < 6 ? NULL : image_url);
   nvs_set_swap_colors(swap_colors);
   nvs_set_disable_touch(disable_touch);
+  nvs_set_skip_display_version(skip_display_version);
+  nvs_set_skip_boot_animation(skip_boot_animation);
   nvs_save_settings();
 
   free(buf);
