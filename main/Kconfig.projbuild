@@ -48,6 +48,13 @@ menu "Application Configuration"
         help
             Prefer IPv6 for connections.
 
+    config DISABLE_TOUCH_DEFAULT
+        bool "Disable Touch By Default"
+        default n
+        help
+            Disable the capacitive touch button by default (e.g., Tidbyt Gen2).
+            Can still be toggled via NVS, WebSocket, or the config portal.
+
     config PATCH_I2S_DIVIDER
         bool "Patch HUB75 I2S Divider"
         default n
