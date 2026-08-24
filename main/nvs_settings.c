@@ -104,6 +104,12 @@ esp_err_t nvs_settings_init(void) {
   s_prefer_ipv6 = false;
 #endif
 
+#ifdef CONFIG_DISABLE_TOUCH_DEFAULT
+  s_disable_touch = true;
+#else
+  s_disable_touch = false;
+#endif
+
   if (ret == ESP_OK) {
     // Load from NVS
     size_t required_size = sizeof(s_wifi_ssid);
