@@ -717,7 +717,14 @@ void app_main(void) {
     esp_websocket_client_config_t ws_cfg = {
         .uri = image_url,
         .task_stack = 8192,
-        .buffer_size = 8192,
+        // Must stay larger than the biggest WebSocket text frame the server
+        // sends (JSON config updates are dropped when fragmented across reads);
+        // binary WebP frames are reassembled into PSRAM independently of this.
+        // The rx+tx buffers are malloc'd before the client task is created and,
+        // being under 16 KiB, land in internal RAM - keep them small to
+        // preserve internal RAM for task creation on memory-constrained boards
+        // (e.g. Tronbyt S3 Wide).
+        .buffer_size = 4096,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .reconnect_timeout_ms = 10000,
         .network_timeout_ms = 10000,
