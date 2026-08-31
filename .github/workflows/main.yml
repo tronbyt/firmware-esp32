@@ -29,6 +29,7 @@ jobs:
           - tronbyt-s3-wide
           - pixoticker
           - matrixportal-s3
+          - matrixportal-s3-square
           - matrixportal-s3-waveshare
           - waveshare-s3
 

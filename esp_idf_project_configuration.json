@@ -28,6 +28,35 @@
       "postFlash": ""
     }
   },
+  "matrixportal-s3-square": {
+    "build": {
+      "compileArgs": [],
+      "ninjaArgs": [],
+      "buildDirectoryPath": "build",
+      "sdkconfigDefaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.defaults.matrixportal-s3-square"
+      ],
+      "sdkconfigFilePath": "sdkconfig"
+    },
+    "env": {},
+    "idfTarget": "esp32s3",
+    "flashBaudRate": "921600",
+    "monitorBaudRate": "115200",
+    "openOCD": {
+      "debugLevel": 2,
+      "configs": [
+        "board/esp32s3-builtin.cfg"
+      ],
+      "args": []
+    },
+    "tasks": {
+      "preBuild": "",
+      "preFlash": "",
+      "postBuild": "",
+      "postFlash": ""
+    }
+  },
   "matrixportal-s3-waveshare": {
     "build": {
       "compileArgs": [],
