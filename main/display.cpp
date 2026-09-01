@@ -158,8 +158,16 @@
 #define WIDTH 64
 #endif
 
+// Boards that drive a fixed 128x64 panel set HEIGHT in their block above.
+// Everything else is a 64-wide panel that is either 32 or 64 rows tall, which
+// is the same wiring either way plus the E address line, so the row count
+// comes from the build target rather than from a separate board definition.
 #ifndef HEIGHT
+#if CONFIG_PANEL_HEIGHT_64
+#define HEIGHT 64
+#else
 #define HEIGHT 32
+#endif
 #endif
 
 static MatrixPanel_I2S_DMA *_matrix;

@@ -122,6 +122,16 @@ menu "Application Configuration"
             bool "Waveshare ESP32-S3-RGB-Matrix"
     endchoice
 
+    config PANEL_HEIGHT_64
+        bool "64-row panel (64x64)"
+        default n
+        help
+            Drive a 64x64 panel instead of the default 64x32. A 64x64 panel is
+            wired exactly like a 64x32 one plus the E address line, so this is
+            a property of the panel rather than of the board: set it on top of
+            a board whose CH_E is wired to a real GPIO. Boards that fix their
+            own geometry (the 128x64 ones) ignore it.
+
     config BUTTON_PIN
         int "Button Pin"
         default -1
