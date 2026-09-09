@@ -298,6 +298,18 @@ static const uint8_t kChannelOrder[COLOR_ORDER_MAX][3] = {
     {2, 1, 0},  // bgr
 };
 
+// Remap a colour triple for panels whose RGB lines are permuted. display_draw()
+// applies the same table to its source indices instead, so its per-pixel loop
+// pays nothing; the helpers below receive a colour directly and permute once.
+static inline void apply_color_order(uint8_t *r, uint8_t *g, uint8_t *b) {
+  color_order_t order = nvs_get_color_order();
+  if (order >= COLOR_ORDER_MAX || order == COLOR_ORDER_RGB) return;
+  const uint8_t ch[3] = {*r, *g, *b};
+  *r = ch[kChannelOrder[order][0]];
+  *g = ch[kChannelOrder[order][1]];
+  *b = ch[kChannelOrder[order][2]];
+}
+
 void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB) {
   color_order_t order = nvs_get_color_order();
@@ -335,6 +347,7 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
 void display_clear(void) { _matrix->clearScreen(); }
 
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+  apply_color_order(&r, &g, &b);
   if (_matrix != NULL) {
     _matrix->drawPixelRGB888(x, y, r, g, b);
     _matrix->flipDMABuffer();
@@ -345,6 +358,7 @@ void draw_error_indicator_pixel(void) { display_draw_pixel(0, 0, 100, 0, 0); }
 
 void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
                        uint8_t b) {
+  apply_color_order(&r, &g, &b);
   if (_matrix != NULL) {
     for (int iy = y; iy < y + h; iy++) {
       for (int ix = x; ix < x + w; ix++) {
@@ -356,6 +370,7 @@ void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
 
 void display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
                   uint8_t b, int scale) {
+  apply_color_order(&r, &g, &b);
   if (_matrix == NULL || text == NULL) {
     return;
   }
