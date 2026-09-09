@@ -118,6 +118,8 @@ static esp_err_t send_client_info(void) {
       cJSON_AddStringToObject(ci, "sntp_server", sntp_server);
       cJSON_AddStringToObject(ci, "image_url", image_url);
       cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
+      cJSON_AddStringToObject(ci, "color_order",
+                              nvs_color_order_to_string(nvs_get_color_order()));
       cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
       cJSON_AddBoolToObject(ci, "skip_display_version",
                             nvs_get_skip_display_version());
@@ -240,6 +242,24 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 nvs_set_swap_colors(val);
                 ESP_LOGI(TAG, "Updated swap_colors to %d", val);
                 settings_changed = true;
+              }
+
+              // Check for "color_order"
+              cJSON* color_order_item =
+                  cJSON_GetObjectItem(root, "color_order");
+              if (cJSON_IsString(color_order_item) &&
+                  (color_order_item->valuestring != NULL)) {
+                color_order_t order;
+                if (nvs_color_order_from_string(color_order_item->valuestring,
+                                                &order) == ESP_OK) {
+                  nvs_set_color_order(order);
+                  ESP_LOGI(TAG, "Updated color_order to %s",
+                           nvs_color_order_to_string(order));
+                  settings_changed = true;
+                } else {
+                  ESP_LOGW(TAG, "Ignoring unknown color_order '%s'",
+                           color_order_item->valuestring);
+                }
               }
 
               // Check for "wifi_power_save"

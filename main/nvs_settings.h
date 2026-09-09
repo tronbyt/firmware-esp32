@@ -32,6 +32,23 @@ esp_err_t nvs_get_sntp_server(char *server, size_t max_len);
 const char *nvs_get_image_url(void);
 esp_err_t nvs_get_api_key(char *api_key, size_t max_len);
 bool nvs_get_swap_colors(void);
+
+// Physical RGB channel order of the panel. The name gives, for each output
+// channel in R,G,B order, which source channel feeds it: "GBR" means red is
+// driven from the source's green, green from blue, and blue from red.
+typedef enum {
+  COLOR_ORDER_RGB = 0,
+  COLOR_ORDER_RBG = 1,
+  COLOR_ORDER_GRB = 2,
+  COLOR_ORDER_GBR = 3,
+  COLOR_ORDER_BRG = 4,
+  COLOR_ORDER_BGR = 5,
+  COLOR_ORDER_MAX = 6,
+} color_order_t;
+
+color_order_t nvs_get_color_order(void);
+const char *nvs_color_order_to_string(color_order_t order);
+esp_err_t nvs_color_order_from_string(const char *name, color_order_t *out);
 wifi_ps_type_t nvs_get_wifi_power_save(void);
 bool nvs_get_skip_display_version(void);
 bool nvs_get_skip_boot_animation(void);
@@ -49,6 +66,7 @@ esp_err_t nvs_set_sntp_server(const char *server);
 esp_err_t nvs_set_image_url(const char *image_url);
 esp_err_t nvs_set_api_key(const char *api_key);
 esp_err_t nvs_set_swap_colors(bool swap_colors);
+esp_err_t nvs_set_color_order(color_order_t order);
 esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save);
 esp_err_t nvs_set_skip_display_version(bool skip);
 esp_err_t nvs_set_skip_boot_animation(bool skip);

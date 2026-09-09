@@ -12,6 +12,42 @@ menu "Application Configuration"
         help
             Swap RGB colors.
 
+    choice COLOR_ORDER
+        prompt "Panel RGB channel order"
+        default COLOR_ORDER_RGB
+        help
+            Physical RGB channel order of the attached panel, applied to the
+            pixel data at draw time.
+
+            Most panels are RGB. Some third-party panels have their channels
+            permuted. SWAP_COLORS only expresses a single two-way exchange and
+            its meaning differs per board, so it cannot describe a three-way
+            rotation - which is what BGR and GBR ordered panels need.
+
+            This is applied to the data rather than the pins, so one setting
+            behaves identically on every board, and it composes with whatever
+            SWAP_COLORS already does. Also settable at runtime over the
+            WebSocket or from the config portal.
+
+        config COLOR_ORDER_RGB
+            bool "RGB (standard)"
+
+        config COLOR_ORDER_RBG
+            bool "RBG"
+
+        config COLOR_ORDER_GRB
+            bool "GRB"
+
+        config COLOR_ORDER_GBR
+            bool "GBR"
+
+        config COLOR_ORDER_BRG
+            bool "BRG"
+
+        config COLOR_ORDER_BGR
+            bool "BGR"
+    endchoice
+
     config NO_INVERT_CLOCK_PHASE
         bool "No Invert Clock Phase"
         default n
