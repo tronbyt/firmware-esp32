@@ -33,7 +33,9 @@ const char *nvs_get_image_url(void);
 esp_err_t nvs_get_api_key(char *api_key, size_t max_len);
 bool nvs_get_swap_colors(void);
 
-// Physical RGB channel order of the panel. The name gives, for each output
+// Channel remap applied to every pixel at draw time, after the board's pin
+// mapping and any swap_colors swap - a correction relative to the board's
+// output, not an absolute panel description. The name gives, for each output
 // channel in R,G,B order, which source channel feeds it: "GBR" means red is
 // driven from the source's green, green from blue, and blue from red.
 typedef enum {

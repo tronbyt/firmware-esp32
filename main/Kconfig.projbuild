@@ -13,21 +13,24 @@ menu "Application Configuration"
             Swap RGB colors.
 
     choice COLOR_ORDER
-        prompt "Panel RGB channel order"
+        prompt "Pixel channel order (applied after Swap Colors)"
         default COLOR_ORDER_RGB
         help
-            Physical RGB channel order of the attached panel, applied to the
-            pixel data at draw time.
+            Remaps the R, G and B channels of every pixel at draw time, after
+            the board's pin mapping and any SWAP_COLORS swap have been applied.
+            Leave at RGB unless colors are wrong.
 
-            Most panels are RGB. Some third-party panels have their channels
-            permuted. SWAP_COLORS only expresses a single two-way exchange and
-            its meaning differs per board, so it cannot describe a three-way
-            rotation - which is what BGR and GBR ordered panels need.
+            This is a correction relative to the board's current output, not
+            an absolute description of the panel: the value a panel needs
+            depends on whether SWAP_COLORS is set. For example, a MatrixPortal
+            S3 driving an original Tidbyt Gen1 panel needs SWAP_COLORS=y plus
+            BGR.
 
-            This is applied to the data rather than the pins, so one setting
-            behaves identically on every board, and it composes with whatever
-            SWAP_COLORS already does. Also settable at runtime over the
-            WebSocket or from the config portal.
+            SWAP_COLORS only expresses a single two-way exchange and its
+            meaning differs per board, so it cannot fix panels that need a
+            three-way rotation. Because this remaps data rather than pins, one
+            setting behaves the same on every board. Also settable at runtime
+            from the WiFi config portal or over the WebSocket.
 
         config COLOR_ORDER_RGB
             bool "RGB (standard)"

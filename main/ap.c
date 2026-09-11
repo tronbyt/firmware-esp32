@@ -82,6 +82,21 @@ static const char *s_html_part3_end =
     "</div>";
 #endif
 
+// Shown on every board: colour order is remapped in software, so it applies
+// regardless of which pins a board uses.
+static const char *s_html_color_order_start =
+    "<div class='form-group'>"
+    "<label for='color_order'>Color Order (change only if colors are wrong - "
+    "requires reboot):</label>"
+    "<select id='color_order' name='color_order'>";
+
+static const char *s_html_color_order_end =
+    "</select>"
+    "</div>";
+
+static const char *const kColorOrderLabels[COLOR_ORDER_MAX] = {
+    "RGB (default)", "RBG", "GRB", "GBR", "BRG", "BGR"};
+
 #if CONFIG_BOARD_TIDBYT_GEN2
 static const char *s_html_gen2_start =
     "<div class='form-group'>"
@@ -413,6 +428,31 @@ static esp_err_t root_handler(httpd_req_t *req) {
       break;
 #endif
 
+    // Send Color Order select (all boards)
+    if ((ret = httpd_resp_send_chunk(req, s_html_color_order_start,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+    {
+      const color_order_t current = nvs_get_color_order();
+      bool opt_failed = false;
+      for (int i = 0; i < COLOR_ORDER_MAX; i++) {
+        char opt[64];
+        snprintf(opt, sizeof(opt), "<option value='%s'%s>%s</option>",
+                 nvs_color_order_to_string((color_order_t)i),
+                 (color_order_t)i == current ? " selected" : "",
+                 kColorOrderLabels[i]);
+        if ((ret = httpd_resp_send_chunk(req, opt, HTTPD_RESP_USE_STRLEN)) !=
+            ESP_OK) {
+          opt_failed = true;
+          break;
+        }
+      }
+      if (opt_failed) break;
+    }
+    if ((ret = httpd_resp_send_chunk(req, s_html_color_order_end,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+
 #if CONFIG_BOARD_TIDBYT_GEN2
     // Send Disable Touch Checkbox (Conditional)
     if ((ret = httpd_resp_send_chunk(req, s_html_gen2_start,
@@ -578,6 +618,17 @@ static esp_err_t save_handler(httpd_req_t *req) {
     skip_boot_animation = (strcmp(skip_boot_val, "1") == 0);
   }
 
+  // Keep the stored value if a client omits the field, rather than resetting.
+  color_order_t color_order = nvs_get_color_order();
+  char color_order_val[8] = {0};
+  if (httpd_query_key_value(buf, "color_order", color_order_val,
+                            sizeof(color_order_val)) == ESP_OK) {
+    if (nvs_color_order_from_string(color_order_val, &color_order) != ESP_OK) {
+      ESP_LOGW(TAG, "Ignoring unknown color_order '%s'", color_order_val);
+      color_order = nvs_get_color_order();
+    }
+  }
+
   url_decode(ssid);
   url_decode(password);
   url_decode(image_url);
@@ -597,6 +648,8 @@ static esp_err_t save_handler(httpd_req_t *req) {
   nvs_set_disable_touch(disable_touch);
   nvs_set_skip_display_version(skip_display_version);
   nvs_set_skip_boot_animation(skip_boot_animation);
+  nvs_set_color_order(color_order);
+  ESP_LOGI(TAG, "Color Order: %s", nvs_color_order_to_string(color_order));
   nvs_save_settings();
 
   free(buf);
