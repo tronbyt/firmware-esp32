@@ -24,13 +24,15 @@ menu "Application Configuration"
             an absolute description of the panel: the value a panel needs
             depends on whether SWAP_COLORS is set. For example, a MatrixPortal
             S3 driving an original Tidbyt Gen1 panel needs SWAP_COLORS=y plus
-            BGR.
+            BGR, or equivalently SWAP_COLORS=n plus BRG.
 
-            SWAP_COLORS only expresses a single two-way exchange and its
-            meaning differs per board, so it cannot fix panels that need a
-            three-way rotation. Because this remaps data rather than pins, one
-            setting behaves the same on every board. Also settable at runtime
-            from the WiFi config portal or over the WebSocket.
+            SWAP_COLORS applies one fixed pin permutation that differs per
+            board - a green/blue exchange on MatrixPortal S3 and Tronbyt S3, a
+            three-way rotation on Tidbyt Gen1, and no effect on other boards -
+            so it can correct at most one channel order per board. Because this
+            remaps data rather than pins, one setting behaves the same on every
+            board. Also settable at runtime from the WiFi config portal or over
+            the WebSocket.
 
         config COLOR_ORDER_RGB
             bool "RGB (standard)"
