@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "display.h"
 #include "esp_log.h"
@@ -22,6 +23,7 @@
 #define NVS_KEY_SNTP_SERVER "sntp_server"
 #define NVS_KEY_IMAGE_URL "image_url"
 #define NVS_KEY_SWAP_COLORS "swap_colors"
+#define NVS_KEY_COLOR_ORDER "color_order"
 #define NVS_KEY_WIFI_POWER_SAVE "wifi_ps"
 #define NVS_KEY_SKIP_VERSION "skip_ver"
 #define NVS_KEY_SKIP_BOOT "skip_boot"
@@ -39,6 +41,7 @@ static char s_syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
 static char s_sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
 static bool s_swap_colors = false;
+static color_order_t s_color_order = COLOR_ORDER_RGB;
 static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
 static bool s_skip_display_version = false;
 static bool s_skip_boot_animation = false;
@@ -78,6 +81,20 @@ esp_err_t nvs_settings_init(void) {
   s_swap_colors = true;
 #else
   s_swap_colors = false;
+#endif
+
+#if defined(CONFIG_COLOR_ORDER_RBG)
+  s_color_order = COLOR_ORDER_RBG;
+#elif defined(CONFIG_COLOR_ORDER_GRB)
+  s_color_order = COLOR_ORDER_GRB;
+#elif defined(CONFIG_COLOR_ORDER_GBR)
+  s_color_order = COLOR_ORDER_GBR;
+#elif defined(CONFIG_COLOR_ORDER_BRG)
+  s_color_order = COLOR_ORDER_BRG;
+#elif defined(CONFIG_COLOR_ORDER_BGR)
+  s_color_order = COLOR_ORDER_BGR;
+#else
+  s_color_order = COLOR_ORDER_RGB;
 #endif
 
 #ifdef CONFIG_ENABLE_WIFI_POWER_SAVE
@@ -152,6 +169,11 @@ esp_err_t nvs_settings_init(void) {
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &val_u8) == ESP_OK) {
       s_swap_colors = (val_u8 != 0);
+    }
+
+    if (nvs_get_u8(nvs_handle, NVS_KEY_COLOR_ORDER, &val_u8) == ESP_OK &&
+        val_u8 < COLOR_ORDER_MAX) {
+      s_color_order = (color_order_t)val_u8;
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, &val_u8) == ESP_OK) {
@@ -270,6 +292,27 @@ const char *nvs_get_image_url(void) {
 }
 
 bool nvs_get_swap_colors(void) { return s_swap_colors; }
+
+color_order_t nvs_get_color_order(void) { return s_color_order; }
+
+static const char *const kColorOrderNames[COLOR_ORDER_MAX] = {
+    "rgb", "rbg", "grb", "gbr", "brg", "bgr"};
+
+const char *nvs_color_order_to_string(color_order_t order) {
+  if (order >= COLOR_ORDER_MAX) return kColorOrderNames[COLOR_ORDER_RGB];
+  return kColorOrderNames[order];
+}
+
+esp_err_t nvs_color_order_from_string(const char *name, color_order_t *out) {
+  if (name == NULL || out == NULL) return ESP_ERR_INVALID_ARG;
+  for (int i = 0; i < COLOR_ORDER_MAX; i++) {
+    if (strcasecmp(name, kColorOrderNames[i]) == 0) {
+      *out = (color_order_t)i;
+      return ESP_OK;
+    }
+  }
+  return ESP_ERR_INVALID_ARG;
+}
 
 wifi_ps_type_t nvs_get_wifi_power_save(void) { return s_wifi_power_save; }
 
@@ -390,6 +433,12 @@ esp_err_t nvs_set_swap_colors(bool swap_colors) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_color_order(color_order_t order) {
+  if (order >= COLOR_ORDER_MAX) return ESP_ERR_INVALID_ARG;
+  s_color_order = order;
+  return ESP_OK;
+}
+
 esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save) {
   s_wifi_power_save = power_save;
   return ESP_OK;
@@ -457,6 +506,7 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_str(nvs_handle, NVS_KEY_API_KEY, s_api_key);
 
   nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_COLOR_ORDER, (uint8_t)s_color_order);
   nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);
   nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION, s_skip_display_version ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_SKIP_BOOT, s_skip_boot_animation ? 1 : 0);

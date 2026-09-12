@@ -284,8 +284,41 @@ void display_shutdown(void) {
   _matrix = NULL;
 }
 
+// For each output channel in R,G,B order, which source channel feeds it.
+// Indexed by color_order_t; "gbr" means red is driven from the source's green,
+// green from blue, blue from red. Applied to the data rather than the pins so
+// a single table covers every board, and composes with any board-specific pin
+// swap done in display_initialize().
+static const uint8_t kChannelOrder[COLOR_ORDER_MAX][3] = {
+    {0, 1, 2},  // rgb
+    {0, 2, 1},  // rbg
+    {1, 0, 2},  // grb
+    {1, 2, 0},  // gbr
+    {2, 0, 1},  // brg
+    {2, 1, 0},  // bgr
+};
+
+// Remap a colour triple for panels whose RGB lines are permuted. display_draw()
+// applies the same table to its source indices instead, so its per-pixel loop
+// pays nothing; the helpers below receive a colour directly and permute once.
+static inline void apply_color_order(uint8_t *r, uint8_t *g, uint8_t *b) {
+  color_order_t order = nvs_get_color_order();
+  if (order >= COLOR_ORDER_MAX || order == COLOR_ORDER_RGB) return;
+  const uint8_t ch[3] = {*r, *g, *b};
+  *r = ch[kChannelOrder[order][0]];
+  *g = ch[kChannelOrder[order][1]];
+  *b = ch[kChannelOrder[order][2]];
+}
+
 void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB) {
+  color_order_t order = nvs_get_color_order();
+  if (order >= COLOR_ORDER_MAX) order = COLOR_ORDER_RGB;
+  const int src[3] = {ixR, ixG, ixB};
+  const int srcR = src[kChannelOrder[order][0]];
+  const int srcG = src[kChannelOrder[order][1]];
+  const int srcB = src[kChannelOrder[order][2]];
+
   int scale = 1;
 #if CONFIG_BOARD_TRONBYT_S3_WIDE || CONFIG_BOARD_MATRIXPORTAL_S3_WIDE
   if (width == 64 && height == 32) {
@@ -296,9 +329,9 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
   for (unsigned int i = 0; i < height; i++) {
     for (unsigned int j = 0; j < width; j++) {
       const uint8_t *p = &pix[(i * width + j) * channels];
-      uint8_t r = p[ixR];
-      uint8_t g = p[ixG];
-      uint8_t b = p[ixB];
+      uint8_t r = p[srcR];
+      uint8_t g = p[srcG];
+      uint8_t b = p[srcB];
 
       // Draw each pixel scaled up (2x2 pixels for each original pixel)
       for (int sy = 0; sy < scale; sy++) {
@@ -314,6 +347,7 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
 void display_clear(void) { _matrix->clearScreen(); }
 
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+  apply_color_order(&r, &g, &b);
   if (_matrix != NULL) {
     _matrix->drawPixelRGB888(x, y, r, g, b);
     _matrix->flipDMABuffer();
@@ -324,6 +358,7 @@ void draw_error_indicator_pixel(void) { display_draw_pixel(0, 0, 100, 0, 0); }
 
 void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
                        uint8_t b) {
+  apply_color_order(&r, &g, &b);
   if (_matrix != NULL) {
     for (int iy = y; iy < y + h; iy++) {
       for (int ix = x; ix < x + w; ix++) {
@@ -335,6 +370,7 @@ void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
 
 void display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
                   uint8_t b, int scale) {
+  apply_color_order(&r, &g, &b);
   if (_matrix == NULL || text == NULL) {
     return;
   }
