@@ -108,6 +108,17 @@ static const char *s_html_gen2_end =
     " Disable Touch Button (Gen2 only - requires reboot)"
     "</label>"
     "</div>";
+
+static const char *s_html_touch_beep_start =
+    "<div class='form-group'>"
+    "<label>"
+    "<input type='checkbox' id='touch_beep' name='touch_beep' value='1' ";
+
+static const char *s_html_touch_beep_end =
+    ">"
+    " Beep On Touch (Gen2 only)"
+    "</label>"
+    "</div>";
 #endif
 
 static const char *s_html_skip_version_start =
@@ -466,6 +477,19 @@ static esp_err_t root_handler(httpd_req_t *req) {
     if ((ret = httpd_resp_send_chunk(req, s_html_gen2_end,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
+
+    // Send Beep On Touch Checkbox (Conditional)
+    if ((ret = httpd_resp_send_chunk(req, s_html_touch_beep_start,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+    if (nvs_get_touch_beep()) {
+      if ((ret = httpd_resp_send_chunk(req, "checked",
+                                       HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+        break;
+    }
+    if ((ret = httpd_resp_send_chunk(req, s_html_touch_beep_end,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
 #endif
 
     if ((ret = httpd_resp_send_chunk(req, s_html_skip_version_start,
@@ -576,10 +600,12 @@ static esp_err_t save_handler(httpd_req_t *req) {
   char image_url[400] = {0};
   char swap_val[2] = {0};
   char touch_val[4] = {0};
+  char touch_beep_val[4] = {0};
   char skip_version_val[4] = {0};
   char skip_boot_val[4] = {0};
   bool swap_colors = false;
   bool disable_touch = false;
+  bool touch_beep = false;
   bool skip_display_version = false;
   bool skip_boot_animation = false;
 
@@ -606,6 +632,11 @@ static esp_err_t save_handler(httpd_req_t *req) {
   if (httpd_query_key_value(buf, "disable_touch", touch_val,
                             sizeof(touch_val)) == ESP_OK) {
     disable_touch = (strcmp(touch_val, "1") == 0);
+  }
+
+  if (httpd_query_key_value(buf, "touch_beep", touch_beep_val,
+                            sizeof(touch_beep_val)) == ESP_OK) {
+    touch_beep = (strcmp(touch_beep_val, "1") == 0);
   }
 
   if (httpd_query_key_value(buf, "skip_display_version", skip_version_val,
@@ -646,6 +677,7 @@ static esp_err_t save_handler(httpd_req_t *req) {
   nvs_set_image_url(strlen(image_url) < 6 ? NULL : image_url);
   nvs_set_swap_colors(swap_colors);
   nvs_set_disable_touch(disable_touch);
+  nvs_set_touch_beep(touch_beep);
   nvs_set_skip_display_version(skip_display_version);
   nvs_set_skip_boot_animation(skip_boot_animation);
   nvs_set_color_order(color_order);

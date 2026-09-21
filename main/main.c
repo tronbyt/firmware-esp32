@@ -128,6 +128,7 @@ static esp_err_t send_client_info(void) {
       cJSON_AddBoolToObject(ci, "ap_mode", nvs_get_ap_mode());
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
       cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
+      cJSON_AddBoolToObject(ci, "touch_beep", nvs_get_touch_beep());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -319,6 +320,15 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 bool val = cJSON_IsTrue(disable_touch_item);
                 nvs_set_disable_touch(val);
                 ESP_LOGI(TAG, "Updated disable_touch to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for "touch_beep"
+              cJSON* touch_beep_item = cJSON_GetObjectItem(root, "touch_beep");
+              if (cJSON_IsBool(touch_beep_item)) {
+                bool val = cJSON_IsTrue(touch_beep_item);
+                nvs_set_touch_beep(val);
+                ESP_LOGI(TAG, "Updated touch_beep to %d", val);
                 settings_changed = true;
               }
 
