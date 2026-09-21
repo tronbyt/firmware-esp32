@@ -116,7 +116,11 @@ esp_err_t touch_control_init(void) {
   g_touch.init_time = get_time_ms();
 
   ESP_LOGI(TAG, "Touch control ready (GPIO33)");
-  ESP_LOGI(TAG, "  TAP = Next app | DOUBLE-TAP = Brightness | HOLD 2s = Toggle display");
+#ifdef CONFIG_TOUCH_DOUBLE_TAP
+  ESP_LOGI(TAG, "  TAP = Next app | DOUBLE-TAP = (unassigned) | HOLD 2s = Toggle display");
+#else
+  ESP_LOGI(TAG, "  TAP = Next app | HOLD 2s = Toggle display");
+#endif
 
   return ESP_OK;
 }
@@ -171,11 +175,17 @@ touch_event_t touch_control_check(void) {
         } else if (g_touch.is_late_tap) {
           g_touch.state = STATE_IDLE;
         } else if (duration >= MIN_TAP_DURATION_MS) {
-          // Feedback on release: TOUCH_EVENT_TAP only fires once the
-          // double-tap window has expired, too late to feel responsive
-          touch_feedback(BEEP_TAP);
+#ifdef CONFIG_TOUCH_DOUBLE_TAP
           g_touch.release_time = now;
           g_touch.state = STATE_WAIT_FOR_DOUBLE_TAP;
+#else
+          // No second tap to wait for: report the tap as soon as it ends
+          g_touch.state = STATE_IDLE;
+          if (now - g_touch.last_event_time >= g_touch.debounce_ms) {
+            event = TOUCH_EVENT_TAP;
+            g_touch.last_event_time = now;
+          }
+#endif
         } else {
           g_touch.state = STATE_IDLE;
         }

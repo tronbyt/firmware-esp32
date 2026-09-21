@@ -104,6 +104,15 @@ menu "Application Configuration"
             is tapped or held (Tidbyt Gen2).
             Can still be toggled via NVS, WebSocket, or the config portal.
 
+    config TOUCH_DOUBLE_TAP
+        bool "Detect Double Tap"
+        default n
+        help
+            Wait for a possible second tap before reporting a tap (Tidbyt Gen2).
+            Double tap has no action assigned yet, and waiting for it delays
+            every single tap by the double-tap window (500 ms), so a tap is
+            reported as soon as the finger lifts unless this is enabled.
+
     config PATCH_I2S_DIVIDER
         bool "Patch HUB75 I2S Divider"
         default n
