@@ -69,10 +69,15 @@ static int syslog_vprintf(const char* fmt, va_list args) {
       s_log_len += written;
       s_log_buffer[s_log_len] = '\0';
 
-      // Check for newline (indicates end of log message)
-      if (s_log_buffer[s_log_len - 1] == '\n') {
-        // Remove trailing newline
-        s_log_buffer[--s_log_len] = '\0';
+      // Check for newline (indicates end of log message). A message that
+      // fills the buffer lost its newline to truncation: send what fits,
+      // otherwise the buffer stays full and nothing is ever forwarded again.
+      bool full = s_log_len >= sizeof(s_log_buffer) - 1;
+      if (s_log_buffer[s_log_len - 1] == '\n' || full) {
+        if (s_log_buffer[s_log_len - 1] == '\n') {
+          // Remove trailing newline
+          s_log_buffer[--s_log_len] = '\0';
+        }
 
         // Determine log level (simplified)
         int severity = 6;

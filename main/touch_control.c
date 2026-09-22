@@ -14,6 +14,9 @@
 
 #include <string.h>
 
+#include "beep.h"
+#include "nvs_settings.h"
+
 static const char* TAG = "TouchControl";
 
 #define TOUCH_HOLD_MS 2000
@@ -61,6 +64,12 @@ static touch_state_t g_touch = {.threshold = TOUCH_THRESHOLD_DEFAULT,
                                 .release_time = 0,
                                 .last_event_time = 0,
                                 .is_late_tap = false};
+
+static void touch_feedback(beep_kind_t kind) {
+  if (nvs_get_touch_beep()) {
+    beep_play(kind);
+  }
+}
 
 static uint32_t get_time_ms(void) {
   return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
@@ -162,6 +171,9 @@ touch_event_t touch_control_check(void) {
         } else if (g_touch.is_late_tap) {
           g_touch.state = STATE_IDLE;
         } else if (duration >= MIN_TAP_DURATION_MS) {
+          // Feedback on release: TOUCH_EVENT_TAP only fires once the
+          // double-tap window has expired, too late to feel responsive
+          touch_feedback(BEEP_TAP);
           g_touch.release_time = now;
           g_touch.state = STATE_WAIT_FOR_DOUBLE_TAP;
         } else {
@@ -171,6 +183,7 @@ touch_event_t touch_control_check(void) {
         uint32_t duration = now - g_touch.touch_start_time;
         if (duration >= TOUCH_HOLD_MS) {
           event = TOUCH_EVENT_HOLD;
+          touch_feedback(BEEP_HOLD);
           g_touch.state = STATE_HOLD_FIRED;
           g_touch.last_event_time = now;
         }

@@ -96,6 +96,14 @@ menu "Application Configuration"
             Disable the capacitive touch button by default (e.g., Tidbyt Gen2).
             Can still be toggled via NVS, WebSocket, or the config portal.
 
+    config TOUCH_BEEP_DEFAULT
+        bool "Beep On Touch By Default"
+        default n
+        help
+            Play a short tone on the built-in speaker when the touch button
+            is tapped or held (Tidbyt Gen2).
+            Can still be toggled via NVS, WebSocket, or the config portal.
+
     config PATCH_I2S_DIVIDER
         bool "Patch HUB75 I2S Divider"
         default n

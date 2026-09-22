@@ -30,6 +30,7 @@
 #define NVS_KEY_AP_MODE "ap_mode"
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
 #define NVS_KEY_DISABLE_TOUCH "dis_touch"
+#define NVS_KEY_TOUCH_BEEP "touch_beep"
 #define NVS_KEY_API_KEY "api_key"
 #define NVS_KEY_BRIGHTNESS "brightness"
 
@@ -48,6 +49,7 @@ static bool s_skip_boot_animation = false;
 static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
 static bool s_disable_touch = false;
+static bool s_touch_beep = false;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 static uint8_t s_brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 
@@ -127,6 +129,12 @@ esp_err_t nvs_settings_init(void) {
   s_disable_touch = false;
 #endif
 
+#ifdef CONFIG_TOUCH_BEEP_DEFAULT
+  s_touch_beep = true;
+#else
+  s_touch_beep = false;
+#endif
+
   if (ret == ESP_OK) {
     // Load from NVS
     size_t required_size = sizeof(s_wifi_ssid);
@@ -198,6 +206,10 @@ esp_err_t nvs_settings_init(void) {
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, &val_u8) == ESP_OK) {
       s_disable_touch = (val_u8 != 0);
+    }
+
+    if (nvs_get_u8(nvs_handle, NVS_KEY_TOUCH_BEEP, &val_u8) == ESP_OK) {
+      s_touch_beep = (val_u8 != 0);
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_BRIGHTNESS, &val_u8) == ESP_OK) {
@@ -325,6 +337,8 @@ bool nvs_get_ap_mode(void) { return s_ap_mode; }
 bool nvs_get_prefer_ipv6(void) { return s_prefer_ipv6; }
 
 bool nvs_get_disable_touch(void) { return s_disable_touch; }
+
+bool nvs_get_touch_beep(void) { return s_touch_beep; }
 
 uint8_t nvs_get_brightness(void) { return s_brightness; }
 
@@ -469,6 +483,11 @@ esp_err_t nvs_set_disable_touch(bool disable_touch) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_touch_beep(bool touch_beep) {
+  s_touch_beep = touch_beep;
+  return ESP_OK;
+}
+
 esp_err_t nvs_set_brightness(uint8_t brightness) {
   if (brightness > DISPLAY_MAX_BRIGHTNESS) {
     return ESP_ERR_INVALID_ARG;
@@ -513,6 +532,7 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, s_disable_touch ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_TOUCH_BEEP, s_touch_beep ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
 
   err = nvs_commit(nvs_handle);

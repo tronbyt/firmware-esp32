@@ -27,7 +27,7 @@ set(SRCS "main.c"
          "sntp.c")
 
 if(CONFIG_BOARD_TIDBYT_GEN2)
-    list(APPEND SRCS "touch_control.c")
+    list(APPEND SRCS "touch_control.c" "beep.c")
 endif()
 
 idf_component_register(SRCS ${SRCS}
