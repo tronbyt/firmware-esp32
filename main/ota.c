@@ -305,6 +305,22 @@ void run_ota(const char *url) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 
+  // esp_https_ota_finish() only switches the boot partition when the whole
+  // image was received, but returns ESP_OK either way. With
+  // partial_http_download that means Content-Length must match the bytes
+  // read: a reverse proxy that compresses the response (chunked, no length)
+  // would otherwise end in "successful", a reboot and the old firmware.
+  if (err == ESP_OK &&
+      !esp_https_ota_is_complete_data_received(https_ota_handle)) {
+    ESP_LOGE(TAG,
+             "Incomplete OTA image: read %d bytes, server announced %d. The "
+             "server must send Content-Length and honour Range requests "
+             "(check for compression in a reverse proxy)",
+             esp_https_ota_get_image_len_read(https_ota_handle),
+             esp_https_ota_get_image_size(https_ota_handle));
+    err = ESP_ERR_INVALID_SIZE;
+  }
+
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "OTA Update failed: %s", esp_err_to_name(err));
     esp_https_ota_finish(https_ota_handle);
