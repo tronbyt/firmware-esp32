@@ -23,6 +23,7 @@
 #include "sntp.h"
 #include "syslog.h"
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+#include "beep.h"
 #include "touch_control.h"
 #endif
 #include "version.h"
@@ -392,6 +393,15 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 }
               }
 
+              // Check for "sound"
+              cJSON* sound_item = cJSON_GetObjectItem(root, "sound");
+              if (cJSON_IsString(sound_item) && (sound_item->valuestring != NULL)) {
+                ESP_LOGI(TAG, "Sound command received via WS: %s", sound_item->valuestring);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+                beep_play_sequence(sound_item->valuestring);
+#endif
+              }
+
               // Check for "reboot"
               cJSON* reboot_item = cJSON_GetObjectItem(root, "reboot");
               if (cJSON_IsBool(reboot_item) && cJSON_IsTrue(reboot_item)) {
@@ -572,6 +582,7 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+  beep_init();
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
   if (!nvs_get_disable_touch()) {
     ESP_LOGI(TAG, "Initializing touch control...");
@@ -885,6 +896,7 @@ void app_main(void) {
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
       char* new_image_url = NULL;
+      char* sound = NULL;
       bool reboot_requested = false;
 
       // Start timing the HTTP fetch
@@ -892,11 +904,20 @@ void app_main(void) {
       bool fetch_failed = !wifi_is_connected() ||
                           remote_get(image_url, &webp, &len, &brightness_pct,
                                      &app_dwell_secs, &status_code, &ota_url,
-                                     &new_image_url, &reboot_requested);
+                                     &new_image_url, &reboot_requested,
+                                     &sound);
       int64_t fetch_duration_ms =
           (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
+
+      if (sound != NULL) {
+        ESP_LOGI(TAG, "Sound received via HTTP: %s", sound);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+        beep_play_sequence(sound);
+#endif
+        free(sound);
+      }
 
       if (ota_url != NULL) {
         ESP_LOGI(TAG, "OTA URL received via HTTP: %s", ota_url);

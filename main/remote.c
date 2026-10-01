@@ -26,6 +26,7 @@ struct remote_state {
   int32_t dwell_secs;
   char* ota_url;
   char* image_url;
+  char* sound;
   bool reboot_requested;
   bool oversize_detected;
 };
@@ -102,6 +103,10 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         if (state->image_url != NULL) free(state->image_url);
         state->image_url = strdup(event->header_value);
         ESP_LOGI(TAG, "Found Image URL: %s", state->image_url);
+      } else if (strcasecmp(event->header_key, "Tronbyt-Sound") == 0) {
+        if (state->sound != NULL) free(state->sound);
+        state->sound = strdup(event->header_value);
+        ESP_LOGI(TAG, "Found Sound header: %s", state->sound);
       } else if (strcasecmp(event->header_key, "Tronbyt-Reboot") == 0) {
         state->reboot_requested = parse_header_bool(event->header_value);
         ESP_LOGI(TAG, "Tronbyt-Reboot value: %s", event->header_value);
@@ -198,7 +203,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 int remote_get(const char* url, uint8_t** buf, size_t* len,
                uint8_t* brightness_pct, int32_t* dwell_secs,
                int* return_status_code, char** ota_url, char** image_url,
-               bool* reboot_requested) {
+               bool* reboot_requested, char** sound) {
   // State for processing the response
   struct remote_state state = {
       .buf =
@@ -210,6 +215,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
       .dwell_secs = -1,
       .ota_url = NULL,
       .image_url = NULL,
+      .sound = NULL,
       .reboot_requested = false,
       .oversize_detected = false,
   };
@@ -263,6 +269,10 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
       free(state.image_url);
       state.image_url = NULL;
     }
+    if (state.sound != NULL) {
+      free(state.sound);
+      state.sound = NULL;
+    }
     esp_http_client_cleanup(http);
     return 1;
   }
@@ -278,6 +288,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
     }
     if (state.image_url != NULL) {
       free(state.image_url);
+    }
+    if (state.sound != NULL) {
+      free(state.sound);
     }
     esp_http_client_cleanup(http);
     *return_status_code = 413;  // HTTP 413 Payload Too Large
@@ -297,6 +310,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
     if (state.image_url != NULL) {
       free(state.image_url);
     }
+    if (state.sound != NULL) {
+      free(state.sound);
+    }
     esp_http_client_cleanup(http);
     return 1;
   }
@@ -312,6 +328,11 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
   *ota_url = state.ota_url;
   *image_url = state.image_url;
   *reboot_requested = state.reboot_requested;
+  if (sound != NULL) {
+    *sound = state.sound;
+  } else if (state.sound != NULL) {
+    free(state.sound);
+  }
 
   esp_http_client_cleanup(http);
   // ESP_LOGI(TAG,"fetched new webp");
