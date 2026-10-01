@@ -130,6 +130,7 @@ static esp_err_t send_client_info(void) {
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
       cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
       cJSON_AddBoolToObject(ci, "touch_beep", nvs_get_touch_beep());
+      cJSON_AddBoolToObject(ci, "startup_sound", nvs_get_startup_sound());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -330,6 +331,16 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 bool val = cJSON_IsTrue(touch_beep_item);
                 nvs_set_touch_beep(val);
                 ESP_LOGI(TAG, "Updated touch_beep to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for "startup_sound"
+              cJSON* startup_sound_item =
+                  cJSON_GetObjectItem(root, "startup_sound");
+              if (cJSON_IsBool(startup_sound_item)) {
+                bool val = cJSON_IsTrue(startup_sound_item);
+                nvs_set_startup_sound(val);
+                ESP_LOGI(TAG, "Updated startup_sound to %d", val);
                 settings_changed = true;
               }
 
@@ -583,7 +594,7 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   beep_init();
-  if (!nvs_get_skip_boot_animation()) {
+  if (!nvs_get_skip_boot_animation() && nvs_get_startup_sound()) {
     beep_play_startup();
   }
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
