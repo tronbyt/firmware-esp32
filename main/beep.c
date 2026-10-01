@@ -259,7 +259,7 @@ void beep_play_sequence(const char* pattern) {
 }
 
 #define BEEP_STARTUP_JINGLE \
-  "1047:40,0:15,1319:40,0:15,1568:40,0:15,2093:60,0:20,1568:50,0:15,2093:150"
+  "262:120,392:120,523:140,659:140,784:160,988:160,1047:250,0:80,1568:120,2093:400"
 
 void beep_play_startup(void) {
   beep_play_sequence(BEEP_STARTUP_JINGLE);
