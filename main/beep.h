@@ -27,6 +27,9 @@ void beep_play(beep_kind_t kind);
 // Queue a tone sequence (comma-separated "hz:ms" pairs, e.g. "523:120,659:120,784:220")
 void beep_play_sequence(const char* pattern);
 
+// Queue the Tron/Bit inspired startup jingle
+void beep_play_startup(void);
+
 #ifdef __cplusplus
 }
 #endif

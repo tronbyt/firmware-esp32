@@ -583,6 +583,9 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   beep_init();
+  if (!nvs_get_skip_boot_animation()) {
+    beep_play_startup();
+  }
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
   if (!nvs_get_disable_touch()) {
     ESP_LOGI(TAG, "Initializing touch control...");
