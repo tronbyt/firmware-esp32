@@ -23,6 +23,7 @@
 #include "sntp.h"
 #include "syslog.h"
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+#include "beep.h"
 #include "touch_control.h"
 #endif
 #include "version.h"
@@ -129,6 +130,7 @@ static esp_err_t send_client_info(void) {
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
       cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
       cJSON_AddBoolToObject(ci, "touch_beep", nvs_get_touch_beep());
+      cJSON_AddBoolToObject(ci, "startup_sound", nvs_get_startup_sound());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -332,6 +334,16 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 settings_changed = true;
               }
 
+              // Check for "startup_sound"
+              cJSON* startup_sound_item =
+                  cJSON_GetObjectItem(root, "startup_sound");
+              if (cJSON_IsBool(startup_sound_item)) {
+                bool val = cJSON_IsTrue(startup_sound_item);
+                nvs_set_startup_sound(val);
+                ESP_LOGI(TAG, "Updated startup_sound to %d", val);
+                settings_changed = true;
+              }
+
               // Check for "hostname"
               cJSON* hostname_item = cJSON_GetObjectItem(root, "hostname");
               if (cJSON_IsString(hostname_item) &&
@@ -390,6 +402,15 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                   ESP_LOGE(TAG, "Failed to save settings: %s",
                            esp_err_to_name(err));
                 }
+              }
+
+              // Check for "sound"
+              cJSON* sound_item = cJSON_GetObjectItem(root, "sound");
+              if (cJSON_IsString(sound_item) && (sound_item->valuestring != NULL)) {
+                ESP_LOGI(TAG, "Sound command received via WS: %s", sound_item->valuestring);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+                beep_play_sequence(sound_item->valuestring);
+#endif
               }
 
               // Check for "reboot"
@@ -572,6 +593,10 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+  beep_init();
+  if (!nvs_get_skip_boot_animation() && nvs_get_startup_sound()) {
+    beep_play_startup();
+  }
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
   if (!nvs_get_disable_touch()) {
     ESP_LOGI(TAG, "Initializing touch control...");
@@ -885,6 +910,7 @@ void app_main(void) {
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
       char* new_image_url = NULL;
+      char* sound = NULL;
       bool reboot_requested = false;
 
       // Start timing the HTTP fetch
@@ -892,11 +918,20 @@ void app_main(void) {
       bool fetch_failed = !wifi_is_connected() ||
                           remote_get(image_url, &webp, &len, &brightness_pct,
                                      &app_dwell_secs, &status_code, &ota_url,
-                                     &new_image_url, &reboot_requested);
+                                     &new_image_url, &reboot_requested,
+                                     &sound);
       int64_t fetch_duration_ms =
           (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
+
+      if (sound != NULL) {
+        ESP_LOGI(TAG, "Sound received via HTTP: %s", sound);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+        beep_play_sequence(sound);
+#endif
+        free(sound);
+      }
 
       if (ota_url != NULL) {
         ESP_LOGI(TAG, "OTA URL received via HTTP: %s", ota_url);

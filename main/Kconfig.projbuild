@@ -104,6 +104,14 @@ menu "Application Configuration"
             is tapped or held (Tidbyt Gen2).
             Can still be toggled via NVS, WebSocket, or the config portal.
 
+    config STARTUP_SOUND_DEFAULT
+        bool "Play Startup Sound By Default"
+        default y
+        help
+            Play a short Tron/Bit-inspired jingle on the built-in speaker when the
+            device starts up (Tidbyt Gen2).
+            Can still be toggled via NVS, WebSocket, or the config portal.
+
     config TOUCH_DOUBLE_TAP
         bool "Detect Double Tap"
         default n
