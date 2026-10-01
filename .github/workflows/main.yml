@@ -30,6 +30,7 @@ jobs:
           - pixoticker
           - matrixportal-s3
           - matrixportal-s3-square
+          - matrixportal-s3-wide
           - matrixportal-s3-waveshare
           - waveshare-s3
 

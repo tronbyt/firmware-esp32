@@ -103,7 +103,12 @@
 #define CH_B 36
 #define CH_C 48
 #define CH_D 35
-#define CH_E 8      // The crucial update mapping address E to GPIO 8
+// Address E is GPIO 21 on the MatrixPortal S3, as in the 64x32/64x64 block
+// below: same board, same HUB75 header. Adafruit's Address-E solder jumper
+// picks which HUB75 CONNECTOR pin (8 or 16) GPIO 21 reaches - "8" is a
+// connector pin number, not a GPIO. With GPIO 8 a 1/32-scan 128x64 panel
+// loses its top address bit, so rows 32-63 alias onto rows 0-31.
+#define CH_E 21
 #define CLK 2
 #define LAT 47
 #define OE 14
