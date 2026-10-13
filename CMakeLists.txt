@@ -1,8 +1,17 @@
 cmake_minimum_required(VERSION 3.16.0)
 
+# PYTHON is set by project.cmake, but secrets run before that include. Resolve interpreter here.
+if(DEFINED ENV{PYTHON} AND NOT "$ENV{PYTHON}" STREQUAL "")
+    set(_idf_python "$ENV{PYTHON}")
+elseif(DEFINED ENV{IDF_PYTHON_ENV_PATH} AND NOT "$ENV{IDF_PYTHON_ENV_PATH}" STREQUAL "")
+    set(_idf_python "$ENV{IDF_PYTHON_ENV_PATH}/bin/python")
+else()
+    set(_idf_python "python3")
+endif()
+
 # Generate secrets.cmake from secrets.json if it exists
 execute_process(
-    COMMAND ${PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/generate_secrets_cmake.py
+    COMMAND ${_idf_python} ${CMAKE_CURRENT_SOURCE_DIR}/generate_secrets_cmake.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     RESULT_VARIABLE _generate_secrets_result
 )
@@ -22,7 +31,7 @@ else()
     set(_patch_i2s_mode "--revert")
 endif()
 execute_process(
-    COMMAND ${PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/patch_i2s_divider.py ${_patch_i2s_mode}
+    COMMAND ${_idf_python} ${CMAKE_CURRENT_SOURCE_DIR}/tools/patch_i2s_divider.py ${_patch_i2s_mode}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     RESULT_VARIABLE _patch_i2s_result
 )
