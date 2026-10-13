@@ -153,6 +153,31 @@ static esp_err_t send_client_info(void) {
   return ret;
 }
 
+static void save_settings_and_report(void* arg1, uint32_t arg2) {
+  esp_err_t err = nvs_save_settings();
+  if (err == ESP_OK) {
+    send_client_info();
+  } else {
+    ESP_LOGE(TAG, "Failed to save settings: %s", esp_err_to_name(err));
+  }
+}
+
+static void reboot_now(void* arg1, uint32_t arg2) { esp_restart(); }
+
+// Run work that writes flash from the WebSocket event handler. With
+// ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM the WebSocket task's stack is in PSRAM,
+// which is inaccessible while flash writes disable the cache, so hand the work
+// to the timer task (internal-RAM stack). Calls run in the order queued.
+static void run_off_ws_task(PendedFunction_t fn) {
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+  if (xTimerPendFunctionCall(fn, NULL, 0, pdMS_TO_TICKS(1000)) != pdPASS) {
+    ESP_LOGE(TAG, "Failed to queue deferred WebSocket work");
+  }
+#else
+  fn(NULL, 0);
+#endif
+}
+
 static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                                     int32_t event_id, void* event_data) {
   esp_websocket_event_data_t* data = (esp_websocket_event_data_t*)event_data;
@@ -383,20 +408,15 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               }
 
               if (settings_changed) {
-                esp_err_t err = nvs_save_settings();
-                if (err == ESP_OK) {
-                  send_client_info();
-                } else {
-                  ESP_LOGE(TAG, "Failed to save settings: %s",
-                           esp_err_to_name(err));
-                }
+                run_off_ws_task(save_settings_and_report);
               }
 
               // Check for "reboot"
               cJSON* reboot_item = cJSON_GetObjectItem(root, "reboot");
               if (cJSON_IsBool(reboot_item) && cJSON_IsTrue(reboot_item)) {
                 ESP_LOGI(TAG, "Reboot command received via WS");
-                esp_restart();
+                // Queued behind any settings save above
+                run_off_ws_task(reboot_now);
               }
 
               cJSON_Delete(root);
