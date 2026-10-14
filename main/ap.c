@@ -14,6 +14,9 @@
 
 #include "nvs_settings.h"
 #include "wifi.h"
+#if CONFIG_BOARD_TIDBYT_GEN2
+#include "beep.h"
+#endif
 
 #define TAG "AP"
 
@@ -39,7 +42,7 @@ static const char *s_html_part1 =
     ".form-container { max-width: 400px; margin: 0 auto; }"
     ".form-group { margin-bottom: 15px; }"
     "label { display: block; margin-bottom: 5px; font-weight: bold; }"
-    "input[type='text'], input[type='password'] { width: 100%; padding: 8px; "
+    "input[type='text'], input[type='password'], input[type='number'] { width: 100%; padding: 8px; "
     "box-sizing: border-box; }"
     "button { background-color: #4CAF50; color: white; padding: 10px 15px; "
     "border: none; cursor: pointer; }"
@@ -129,6 +132,15 @@ static const char *s_html_startup_sound_end =
     ">"
     " Play Startup Sound (Gen2 only)"
     "</label>"
+    "</div>";
+
+static const char *s_html_volume_start =
+    "<div class='form-group'>"
+    "<label for='volume'>Speaker Volume (0-100%):</label>"
+    "<input type='number' id='volume' name='volume' min='0' max='100' value='";
+
+static const char *s_html_volume_end =
+    "'>"
     "</div>";
 #endif
 
@@ -514,6 +526,21 @@ static esp_err_t root_handler(httpd_req_t *req) {
     if ((ret = httpd_resp_send_chunk(req, s_html_startup_sound_end,
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
+
+    // Send Volume Input (Conditional)
+    if ((ret = httpd_resp_send_chunk(req, s_html_volume_start,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
+    {
+      char vol_str[8];
+      snprintf(vol_str, sizeof(vol_str), "%u", nvs_get_volume());
+      if ((ret = httpd_resp_send_chunk(req, vol_str,
+                                       HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+        break;
+    }
+    if ((ret = httpd_resp_send_chunk(req, s_html_volume_end,
+                                     HTTPD_RESP_USE_STRLEN)) != ESP_OK)
+      break;
 #endif
 
     if ((ret = httpd_resp_send_chunk(req, s_html_skip_version_start,
@@ -669,6 +696,19 @@ static esp_err_t save_handler(httpd_req_t *req) {
                             sizeof(startup_sound_val)) == ESP_OK) {
     startup_sound = (strcmp(startup_sound_val, "1") == 0);
   }
+
+#if CONFIG_BOARD_TIDBYT_GEN2
+  char volume_val[8] = {0};
+  if (httpd_query_key_value(buf, "volume", volume_val, sizeof(volume_val)) ==
+      ESP_OK) {
+    int vol = atoi(volume_val);
+    if (vol >= 0 && vol <= 100) {
+      nvs_set_volume((uint8_t)vol);
+      beep_set_volume((uint8_t)vol);
+      ESP_LOGI(TAG, "Volume set from AP portal: %d%%", vol);
+    }
+  }
+#endif
 
   if (httpd_query_key_value(buf, "skip_display_version", skip_version_val,
                             sizeof(skip_version_val)) == ESP_OK) {

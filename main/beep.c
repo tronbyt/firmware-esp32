@@ -47,6 +47,7 @@ typedef enum {
 
 typedef struct {
   beep_msg_type_t type;
+  uint8_t volume;
   union {
     beep_kind_t kind;
     char sequence[128];
@@ -57,6 +58,7 @@ static TaskHandle_t s_task = NULL;
 static QueueHandle_t s_queue = NULL;
 static i2s_chan_handle_t s_tx = NULL;
 static bool s_failed = false;
+static uint8_t s_volume = 100;
 
 static esp_err_t i2s_setup(void) {
   i2s_chan_config_t chan_cfg =
@@ -104,8 +106,14 @@ static void write_silence(int ms) {
   }
 }
 
-static void write_tone(uint16_t hz, int ms) {
+static void write_tone(uint16_t hz, int ms, uint8_t volume) {
   if (ms <= 0) return;
+  if (volume > 100) volume = 100;
+  if (volume == 0) {
+    write_silence(ms);
+    return;
+  }
+  const int amplitude = (BEEP_AMPLITUDE * volume) / 100;
   const int total_frames = BEEP_SAMPLE_RATE * ms / 1000;
   if (total_frames <= 0) return;
   const int attack = BEEP_SAMPLE_RATE * BEEP_ATTACK_MS / 1000;
@@ -124,7 +132,7 @@ static void write_tone(uint16_t hz, int ms) {
         envelope *= (float)cur / attack;
       }
       float phase = 2.0f * (float)M_PI * hz * cur / BEEP_SAMPLE_RATE;
-      int16_t sample = (int16_t)(BEEP_AMPLITUDE * envelope * sinf(phase));
+      int16_t sample = (int16_t)(amplitude * envelope * sinf(phase));
       buf[i * 2] = sample;
       buf[i * 2 + 1] = sample;
     }
@@ -139,18 +147,19 @@ static void write_pad(void) {
   write_silence(BEEP_PAD_MS);
 }
 
-static void play(const tone_t* tone) {
+static void play(const tone_t* tone, uint8_t volume) {
+  if (volume == 0) return;
   if (i2s_channel_enable(s_tx) == ESP_OK) {
     write_pad();
-    write_tone(tone->hz, tone->ms);
+    write_tone(tone->hz, tone->ms, volume);
     write_pad();
     vTaskDelay(pdMS_TO_TICKS(BEEP_PAD_MS));
     i2s_channel_disable(s_tx);
   }
 }
 
-static void play_sequence(const char* pattern) {
-  if (pattern == NULL || *pattern == '\0') {
+static void play_sequence(const char* pattern, uint8_t volume) {
+  if (volume == 0 || pattern == NULL || *pattern == '\0') {
     return;
   }
   char copy[128];
@@ -174,7 +183,7 @@ static void play_sequence(const char* pattern) {
           if (hz > 20000) {
             hz = 20000;
           }
-          write_tone((uint16_t)hz, ms);
+          write_tone((uint16_t)hz, ms, volume);
         }
       }
       token = strtok_r(NULL, ",", &saveptr);
@@ -193,7 +202,7 @@ static void beep_task(void* arg) {
       continue;
     }
 
-    if (s_tx == NULL && !s_failed) {
+    if (s_tx == NULL && !s_failed && msg.volume > 0) {
       esp_err_t err = i2s_setup();
       if (err != ESP_OK) {
         ESP_LOGW(TAG, "I2S setup failed: %s (audio stays silent)",
@@ -204,10 +213,10 @@ static void beep_task(void* arg) {
     if (s_tx != NULL) {
       if (msg.type == BEEP_MSG_KIND) {
         if (msg.kind < sizeof(TONES) / sizeof(TONES[0])) {
-          play(&TONES[msg.kind]);
+          play(&TONES[msg.kind], msg.volume);
         }
       } else if (msg.type == BEEP_MSG_SEQUENCE) {
-        play_sequence(msg.sequence);
+        play_sequence(msg.sequence, msg.volume);
       }
     }
   }
@@ -226,6 +235,15 @@ void beep_init(void) {
   taskEXIT_CRITICAL(&s_beep_mux);
 }
 
+void beep_set_volume(uint8_t volume) {
+  if (volume > 100) volume = 100;
+  s_volume = volume;
+}
+
+uint8_t beep_get_volume(void) {
+  return s_volume;
+}
+
 void beep_play(beep_kind_t kind) {
   if (s_queue == NULL) {
     beep_init();
@@ -235,15 +253,21 @@ void beep_play(beep_kind_t kind) {
   }
   beep_msg_t msg = {
       .type = BEEP_MSG_KIND,
+      .volume = s_volume,
       .kind = kind,
   };
   xQueueSend(s_queue, &msg, 0);
 }
 
 void beep_play_sequence(const char* pattern) {
+  beep_play_sequence_with_volume(pattern, s_volume);
+}
+
+void beep_play_sequence_with_volume(const char* pattern, uint8_t volume) {
   if (pattern == NULL || *pattern == '\0') {
     return;
   }
+  if (volume > 100) volume = 100;
   if (s_queue == NULL) {
     beep_init();
     if (s_queue == NULL) {
@@ -252,6 +276,7 @@ void beep_play_sequence(const char* pattern) {
   }
   beep_msg_t msg = {
       .type = BEEP_MSG_SEQUENCE,
+      .volume = volume,
   };
   strncpy(msg.sequence, pattern, sizeof(msg.sequence) - 1);
   msg.sequence[sizeof(msg.sequence) - 1] = '\0';

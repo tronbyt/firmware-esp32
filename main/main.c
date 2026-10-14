@@ -131,6 +131,7 @@ static esp_err_t send_client_info(void) {
       cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
       cJSON_AddBoolToObject(ci, "touch_beep", nvs_get_touch_beep());
       cJSON_AddBoolToObject(ci, "startup_sound", nvs_get_startup_sound());
+      cJSON_AddNumberToObject(ci, "volume", nvs_get_volume());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -344,6 +345,20 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 settings_changed = true;
               }
 
+              // Check for "volume"
+              cJSON* volume_item = cJSON_GetObjectItem(root, "volume");
+              if (cJSON_IsNumber(volume_item)) {
+                int volume_value = volume_item->valueint;
+                if (volume_value < 0) volume_value = 0;
+                if (volume_value > 100) volume_value = 100;
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+                beep_set_volume((uint8_t)volume_value);
+#endif
+                nvs_set_volume((uint8_t)volume_value);
+                ESP_LOGI(TAG, "Updated volume to %d", volume_value);
+                settings_changed = true;
+              }
+
               // Check for "hostname"
               cJSON* hostname_item = cJSON_GetObjectItem(root, "hostname");
               if (cJSON_IsString(hostname_item) &&
@@ -409,7 +424,14 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               if (cJSON_IsString(sound_item) && (sound_item->valuestring != NULL)) {
                 ESP_LOGI(TAG, "Sound command received via WS: %s", sound_item->valuestring);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
-                beep_play_sequence(sound_item->valuestring);
+                uint8_t sound_vol = nvs_get_volume();
+                if (cJSON_IsNumber(volume_item)) {
+                  int v = volume_item->valueint;
+                  if (v >= 0 && v <= 100) {
+                    sound_vol = (uint8_t)v;
+                  }
+                }
+                beep_play_sequence_with_volume(sound_item->valuestring, sound_vol);
 #endif
               }
 
@@ -594,6 +616,7 @@ void app_main(void) {
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   beep_init();
+  beep_set_volume(nvs_get_volume());
   if (!nvs_get_skip_boot_animation() && nvs_get_startup_sound()) {
     beep_play_startup();
   }
@@ -912,6 +935,7 @@ void app_main(void) {
       char* new_image_url = NULL;
       char* sound = NULL;
       bool reboot_requested = false;
+      int16_t http_volume = -1;
 
       // Start timing the HTTP fetch
       int64_t fetch_start_us = esp_timer_get_time();
@@ -919,16 +943,30 @@ void app_main(void) {
                           remote_get(image_url, &webp, &len, &brightness_pct,
                                      &app_dwell_secs, &status_code, &ota_url,
                                      &new_image_url, &reboot_requested,
-                                     &sound);
+                                     &sound, &http_volume);
       int64_t fetch_duration_ms =
           (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
 
+      if (http_volume >= 0 && http_volume <= 100) {
+        if ((uint8_t)http_volume != nvs_get_volume()) {
+          ESP_LOGI(TAG, "Volume received via HTTP: %d%%", http_volume);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+          beep_set_volume((uint8_t)http_volume);
+#endif
+          nvs_set_volume((uint8_t)http_volume);
+          nvs_persist_volume();
+        }
+      }
+
       if (sound != NULL) {
         ESP_LOGI(TAG, "Sound received via HTTP: %s", sound);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
-        beep_play_sequence(sound);
+        uint8_t sound_vol = (http_volume >= 0 && http_volume <= 100)
+                                ? (uint8_t)http_volume
+                                : nvs_get_volume();
+        beep_play_sequence_with_volume(sound, sound_vol);
 #endif
         free(sound);
       }

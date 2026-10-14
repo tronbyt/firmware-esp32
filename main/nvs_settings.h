@@ -60,6 +60,7 @@ bool nvs_get_disable_touch(void);
 bool nvs_get_touch_beep(void);
 bool nvs_get_startup_sound(void);
 uint8_t nvs_get_brightness(void);
+uint8_t nvs_get_volume(void);
 
 // Setters
 esp_err_t nvs_set_ssid(const char *ssid);
@@ -80,10 +81,12 @@ esp_err_t nvs_set_disable_touch(bool disable_touch);
 esp_err_t nvs_set_touch_beep(bool touch_beep);
 esp_err_t nvs_set_startup_sound(bool startup_sound);
 esp_err_t nvs_set_brightness(uint8_t brightness);
+esp_err_t nvs_set_volume(uint8_t volume);
 
 // Save all modified settings to NVS
 esp_err_t nvs_save_settings(void);
 esp_err_t nvs_persist_brightness(void);
+esp_err_t nvs_persist_volume(void);
 
 #ifdef __cplusplus
 }

@@ -112,6 +112,14 @@ menu "Application Configuration"
             device starts up (Tidbyt Gen2).
             Can still be toggled via NVS, WebSocket, or the config portal.
 
+    config VOLUME_DEFAULT
+        int "Default Speaker Volume (0-100%)"
+        range 0 100
+        default 100
+        help
+            Default speaker volume percentage (Tidbyt Gen2).
+            Can still be adjusted via NVS, WebSocket, HTTP header, or the config portal.
+
     config TOUCH_DOUBLE_TAP
         bool "Detect Double Tap"
         default n

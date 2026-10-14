@@ -23,6 +23,7 @@ struct remote_state {
   size_t size;
   size_t max;
   int16_t brightness;
+  int16_t volume;
   int32_t dwell_secs;
   char* ota_url;
   char* image_url;
@@ -107,6 +108,15 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         if (state->sound != NULL) free(state->sound);
         state->sound = strdup(event->header_value);
         ESP_LOGI(TAG, "Found Sound header: %s", state->sound);
+      } else if (strcasecmp(event->header_key, "Tronbyt-Volume") == 0) {
+        int value = atoi(event->header_value);
+        if (value >= 0 && value <= 100) {
+          state->volume = (int16_t)value;
+          ESP_LOGD(TAG, "Tronbyt-Volume value: %d%%", value);
+        } else {
+          ESP_LOGW(TAG, "Ignoring invalid Tronbyt-Volume: %s",
+                   event->header_value);
+        }
       } else if (strcasecmp(event->header_key, "Tronbyt-Reboot") == 0) {
         state->reboot_requested = parse_header_bool(event->header_value);
         ESP_LOGI(TAG, "Tronbyt-Reboot value: %s", event->header_value);
@@ -203,7 +213,7 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
 int remote_get(const char* url, uint8_t** buf, size_t* len,
                uint8_t* brightness_pct, int32_t* dwell_secs,
                int* return_status_code, char** ota_url, char** image_url,
-               bool* reboot_requested, char** sound) {
+               bool* reboot_requested, char** sound, int16_t* volume) {
   // State for processing the response
   struct remote_state state = {
       .buf =
@@ -212,6 +222,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
       .size = CONFIG_HTTP_BUFFER_SIZE_DEFAULT,
       .max = CONFIG_HTTP_BUFFER_SIZE_MAX,
       .brightness = -1,
+      .volume = -1,
       .dwell_secs = -1,
       .ota_url = NULL,
       .image_url = NULL,
@@ -332,6 +343,9 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
     *sound = state.sound;
   } else if (state.sound != NULL) {
     free(state.sound);
+  }
+  if (volume != NULL) {
+    *volume = state.volume;
   }
 
   esp_http_client_cleanup(http);
