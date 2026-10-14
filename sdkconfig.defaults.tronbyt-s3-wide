@@ -7,3 +7,9 @@ CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_40M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_NO_INVERT_CLOCK_PHASE=y
+# WebSocket client task stack and client struct in PSRAM (esp_websocket_client
+# >= 1.8.0): the 8 KiB stack otherwise cannot be created from the little
+# internal RAM left after the 128x64 DMA framebuffers. Flash writes from the
+# WebSocket event handler are deferred to the timer task (see main.c).
+CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM=y
+CONFIG_ESP_WS_CLIENT_ALLOC_IN_EXT_RAM=y

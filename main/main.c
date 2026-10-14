@@ -79,6 +79,15 @@ static void ota_task_entry(void* pvParameter) {
 // Globals for WebSocket reassembly
 static size_t ws_accumulated_len = 0;
 
+// With the PSRAM WebSocket stack, settings saves (and the client info that
+// follows) run on the FreeRTOS timer task; bound the send so a stalled
+// connection cannot hold up other timer work such as a queued reboot.
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+#define CLIENT_INFO_SEND_TIMEOUT pdMS_TO_TICKS(5000)
+#else
+#define CLIENT_INFO_SEND_TIMEOUT portMAX_DELAY
+#endif
+
 static esp_err_t send_client_info(void) {
   esp_err_t ret = ESP_OK;
   uint8_t mac[6];
@@ -134,7 +143,7 @@ static esp_err_t send_client_info(void) {
       if (json_str) {
         ESP_LOGI(TAG, "Sending client info: %s", json_str);
         int sent = esp_websocket_client_send_text(
-            ws_handle, json_str, strlen(json_str), portMAX_DELAY);
+            ws_handle, json_str, strlen(json_str), CLIENT_INFO_SEND_TIMEOUT);
         if (sent < 0) {
           ESP_LOGE(TAG, "Failed to send client info: %d", sent);
           ret = ESP_FAIL;
@@ -151,6 +160,39 @@ static esp_err_t send_client_info(void) {
     ret = ESP_ERR_NO_MEM;
   }
   return ret;
+}
+
+static void save_settings_and_report(void* arg1, uint32_t arg2) {
+  esp_err_t err = nvs_save_settings();
+  if (err == ESP_OK) {
+    send_client_info();
+  } else {
+    ESP_LOGE(TAG, "Failed to save settings: %s", esp_err_to_name(err));
+  }
+}
+
+static void reboot_now(void* arg1, uint32_t arg2) { esp_restart(); }
+
+// The PSRAM WebSocket stack has only been validated on the Tronbyt S3 Wide.
+// Enabling it on another board is safe as far as this file is concerned (the
+// deferral below keys off the option), but should be a deliberate change here.
+#if defined(CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM) && \
+    !defined(CONFIG_BOARD_TRONBYT_S3_WIDE)
+#error "ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM is only enabled for the Tronbyt S3 Wide"
+#endif
+
+// Run work that writes flash from the WebSocket event handler. With
+// ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM the WebSocket task's stack is in PSRAM,
+// which is inaccessible while flash writes disable the cache, so hand the work
+// to the timer task (internal-RAM stack). Calls run in the order queued.
+static void run_off_ws_task(PendedFunction_t fn) {
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+  if (xTimerPendFunctionCall(fn, NULL, 0, pdMS_TO_TICKS(1000)) != pdPASS) {
+    ESP_LOGE(TAG, "Failed to queue deferred WebSocket work");
+  }
+#else
+  fn(NULL, 0);
+#endif
 }
 
 static void websocket_event_handler(void* handler_args, esp_event_base_t base,
@@ -383,20 +425,15 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               }
 
               if (settings_changed) {
-                esp_err_t err = nvs_save_settings();
-                if (err == ESP_OK) {
-                  send_client_info();
-                } else {
-                  ESP_LOGE(TAG, "Failed to save settings: %s",
-                           esp_err_to_name(err));
-                }
+                run_off_ws_task(save_settings_and_report);
               }
 
               // Check for "reboot"
               cJSON* reboot_item = cJSON_GetObjectItem(root, "reboot");
               if (cJSON_IsBool(reboot_item) && cJSON_IsTrue(reboot_item)) {
                 ESP_LOGI(TAG, "Reboot command received via WS");
-                esp_restart();
+                // Queued behind any settings save above
+                run_off_ws_task(reboot_now);
               }
 
               cJSON_Delete(root);
