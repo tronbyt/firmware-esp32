@@ -79,6 +79,15 @@ static void ota_task_entry(void* pvParameter) {
 // Globals for WebSocket reassembly
 static size_t ws_accumulated_len = 0;
 
+// With the PSRAM WebSocket stack, settings saves (and the client info that
+// follows) run on the FreeRTOS timer task; bound the send so a stalled
+// connection cannot hold up other timer work such as a queued reboot.
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+#define CLIENT_INFO_SEND_TIMEOUT pdMS_TO_TICKS(5000)
+#else
+#define CLIENT_INFO_SEND_TIMEOUT portMAX_DELAY
+#endif
+
 static esp_err_t send_client_info(void) {
   esp_err_t ret = ESP_OK;
   uint8_t mac[6];
@@ -134,7 +143,7 @@ static esp_err_t send_client_info(void) {
       if (json_str) {
         ESP_LOGI(TAG, "Sending client info: %s", json_str);
         int sent = esp_websocket_client_send_text(
-            ws_handle, json_str, strlen(json_str), portMAX_DELAY);
+            ws_handle, json_str, strlen(json_str), CLIENT_INFO_SEND_TIMEOUT);
         if (sent < 0) {
           ESP_LOGE(TAG, "Failed to send client info: %d", sent);
           ret = ESP_FAIL;
