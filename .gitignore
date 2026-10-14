@@ -6,7 +6,7 @@ _secrets.json.injected
 .DS_Store
 .production
 .vscode/*
-build
+build*
 dependencies.lock
 eim_config.toml
 managed_components
