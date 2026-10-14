@@ -345,18 +345,23 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 settings_changed = true;
               }
 
-              // Check for "volume"
+              // Check for standalone "volume" update (e.g. from device settings slider)
+              // If this is a sound notification message, volume is handled per-sound below
+              // and should not trigger an NVS commit or client_info response on every chime.
+              cJSON* sound_item = cJSON_GetObjectItem(root, "sound");
               cJSON* volume_item = cJSON_GetObjectItem(root, "volume");
-              if (cJSON_IsNumber(volume_item)) {
+              if (cJSON_IsNumber(volume_item) && sound_item == NULL) {
                 int volume_value = volume_item->valueint;
                 if (volume_value < 0) volume_value = 0;
                 if (volume_value > 100) volume_value = 100;
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
                 beep_set_volume((uint8_t)volume_value);
 #endif
-                nvs_set_volume((uint8_t)volume_value);
-                ESP_LOGI(TAG, "Updated volume to %d", volume_value);
-                settings_changed = true;
+                if ((uint8_t)volume_value != nvs_get_volume()) {
+                  nvs_set_volume((uint8_t)volume_value);
+                  ESP_LOGI(TAG, "Updated volume to %d", volume_value);
+                  settings_changed = true;
+                }
               }
 
               // Check for "hostname"
@@ -420,7 +425,6 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               }
 
               // Check for "sound"
-              cJSON* sound_item = cJSON_GetObjectItem(root, "sound");
               if (cJSON_IsString(sound_item) && (sound_item->valuestring != NULL)) {
                 ESP_LOGI(TAG, "Sound command received via WS: %s", sound_item->valuestring);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
