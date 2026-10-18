@@ -24,14 +24,25 @@ set(SRCS "main.c"
          "nvs_settings.c"
          "dns_wrapper.c"
          "syslog.c"
-         "sntp.c")
+         "sntp.c"
+         "apps.c"
+         "api_server.c"
+         "canvas.c"
+         "fonts.c"
+         "http_util.c"
+         "app_clock.c"
+         "app_weather.c"
+         "app_departures.c"
+         "app_spotify.c"
+         "app_message.c")
 
 if(CONFIG_BOARD_TIDBYT_GEN2)
     list(APPEND SRCS "touch_control.c" "beep.c")
 endif()
 
 idf_component_register(SRCS ${SRCS}
-                       INCLUDE_DIRS ".")
+                       INCLUDE_DIRS "."
+                       EMBED_TXTFILES "web/index.html")
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 

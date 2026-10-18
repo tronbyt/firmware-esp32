@@ -282,11 +282,15 @@ void display_set_brightness(uint8_t brightness_pct) {
   }
 }
 
+// Runs from esp_restart() while the gfx/apps tasks may still be drawing, so
+// the matrix object is deliberately not deleted: freeing its DMA buffers under
+// a concurrent display_draw() corrupted the heap. The chip resets right after.
+static volatile bool _stopped = false;
+
 void display_shutdown(void) {
+  _stopped = true;
   _matrix->clearScreen();
   _matrix->stopDMAoutput();
-  delete _matrix;
-  _matrix = NULL;
 }
 
 // For each output channel in R,G,B order, which source channel feeds it.
@@ -317,6 +321,7 @@ static inline void apply_color_order(uint8_t *r, uint8_t *g, uint8_t *b) {
 
 void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB) {
+  if (_stopped) return;
   color_order_t order = nvs_get_color_order();
   if (order >= COLOR_ORDER_MAX) order = COLOR_ORDER_RGB;
   const int src[3] = {ixR, ixG, ixB};

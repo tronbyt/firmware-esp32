@@ -1,5 +1,12 @@
 # Tronbyt Firmware
 
+> **Fork note:** this is a fork of [tronbyt/firmware-esp32](https://github.com/tronbyt/firmware-esp32)
+> (v1.7.1) that adds **local mode**: the device renders a rotation of built-in apps
+> (clock, weather, live departures, Spotify, notifications) without a server, plus a
+> settings page and JSON API on port 8080. See [LOCAL_APPS.md](LOCAL_APPS.md) for
+> details and the commit history for all changes to the original files. The
+> original README follows.
+
 [![Discord Server](https://img.shields.io/discord/928484660785336380?style=flat-square)](https://discord.gg/U6h6CD6MYM)
 
 This repository contains a community supported firmware for the Tidbyt hardware 🤓.

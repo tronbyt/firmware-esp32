@@ -18,3 +18,9 @@ secrets.json.injected*
 main/certs/custom_ca.pem
 .cache/clangd/*
 CMakePresets.json
+
+# local-apps branch
+build-apps/
+build-gen2/
+build-apps.log
+test/host/out/

@@ -12,6 +12,8 @@
 #include <webp/demux.h>
 
 #include "ap.h"
+#include "api_server.h"
+#include "apps.h"
 #include "display.h"
 #include "esp_sntp.h"
 #include "flash.h"
@@ -703,6 +705,34 @@ void app_main(void) {
     ap_start_shutdown_timer();
   }
 
+  // Settings API runs in both modes so the mode itself can be switched.
+  apps_init();
+  api_server_start();
+
+  // Local mode: render the built-in apps on the device, no server needed.
+  if (apps_local_mode(nvs_get_image_url())) {
+    ESP_LOGI(TAG, "Local mode - running on-device apps");
+    apps_start();
+    for (;;) {
+      wifi_health_check();
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+      if (nvs_get_disable_touch()) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+      } else {
+        for (int i = 0; i < 100; i++) {
+          touch_event_t touch_event = touch_control_check();
+          if (touch_event != TOUCH_EVENT_NONE) {
+            handle_touch_event(touch_event);
+          }
+          vTaskDelay(pdMS_TO_TICKS(50));
+        }
+      }
+#else
+      vTaskDelay(pdMS_TO_TICKS(5000));
+#endif
+    }
+  }
+
   while (true) {
     image_url = nvs_get_image_url();
 
@@ -1024,6 +1054,7 @@ static void handle_touch_event(touch_event_t event) {
 
     case TOUCH_EVENT_HOLD:
       display_power_on = !display_power_on;
+      apps_set_display_power(display_power_on);
 
       if (display_power_on) {
         ESP_LOGI(TAG, "HOLD - Display ON");

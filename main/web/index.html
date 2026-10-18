@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tidbyt</title>
+<style>
+  :root { --bg:#111; --card:#1c1c1e; --line:#2c2c2e; --text:#eee; --muted:#999; --accent:#4cd964; --warn:#ff9f0a; --err:#ff453a; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 12px; } h2 { font-size: 16px; margin: 0 0 10px; }
+  section { background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .muted { color:var(--muted); } .small { font-size: 13px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select, textarea, button { font:inherit; color:var(--text); background:#2a2a2d; border:1px solid var(--line); border-radius:8px; padding:7px 9px; }
+  textarea { width:100%; font-family: ui-monospace, monospace; font-size: 13px; }
+  button { cursor:pointer; background:#333; } button.primary { background:var(--accent); color:#000; border:none; }
+  button.icon { padding:4px 9px; }
+  .item { border-top:1px solid var(--line); padding:9px 0; }
+  .item:first-child { border-top:none; }
+  .item .name { font-weight:600; min-width: 90px; }
+  .item input[type=number] { width: 70px; }
+  .grow { flex:1; }
+  #toast { position:sticky; bottom:12px; display:none; padding:10px 14px; border-radius:10px; background:#333; }
+  dl { display:grid; grid-template-columns: auto 1fr; gap:2px 12px; margin:0; } dt { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tidbyt</h1>
+
+  <section>
+    <h2>Status</h2>
+    <dl id="status"><dt>loading</dt><dd></dd></dl>
+    <div class="row" style="margin-top:10px"><button onclick="post('/api/next').then(()=>toast('Skipped'))">Next app</button></div>
+  </section>
+
+  <section>
+    <h2>Send a notification</h2>
+    <div class="row">
+      <input id="n-title" placeholder="Title (optional)" style="width:130px">
+      <input id="n-text" placeholder="Message" class="grow">
+      <input id="n-color" type="color" value="#ffffff">
+      <button class="primary" onclick="notify()">Send</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Rotation</h2>
+    <div id="rotation"></div>
+    <div class="row" style="margin-top:10px">
+      <select id="add-app"></select><button onclick="addItem()">Add</button>
+      <span class="grow"></span><button class="primary" onclick="save()">Save</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>General</h2>
+    <div class="row small">
+      Brightness day <input id="b-day" type="number" min="0" max="100" style="width:64px">
+      night <input id="b-night" type="number" min="0" max="100" style="width:64px">
+      from <input id="b-start" type="number" min="0" max="23" style="width:56px">
+      to <input id="b-end" type="number" min="0" max="23" style="width:56px"> h
+    </div>
+    <div class="row small" style="margin-top:8px">Timezone (POSIX) <input id="tz" class="grow"></div>
+    <div class="row" style="margin-top:10px"><span class="grow"></span><button class="primary" onclick="save()">Save</button></div>
+  </section>
+
+  <section>
+    <h2>Spotify</h2>
+    <p class="muted small">Run <code>tools/spotify_auth.py</code> on your computer once; it fills this in for you.</p>
+    <div class="row">
+      <input id="sp-id" placeholder="Client ID" class="grow">
+      <input id="sp-rt" placeholder="Refresh token" type="password" class="grow">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" onclick="spotify()">Save</button>
+      <button onclick="del('/api/spotify').then(()=>{toast('Spotify disconnected');load()})">Disconnect</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Advanced</h2>
+    <details><summary>Raw config JSON</summary>
+      <textarea id="raw" rows="14"></textarea>
+      <div class="row" style="margin-top:8px"><button onclick="saveRaw()">Save JSON</button></div>
+    </details>
+    <details style="margin-top:8px"><summary>Mode</summary>
+      <p class="muted small">"local" runs the apps on the device. A URL switches back to a server (Tronbyt protocol). The device reboots.</p>
+      <div class="row"><input id="mode-url" class="grow" placeholder="local"><button onclick="setMode()">Apply</button></div>
+    </details>
+    <details style="margin-top:8px"><summary>Firmware update</summary>
+      <div class="row" style="margin-top:8px"><input type="file" id="fw" accept=".bin"><button onclick="ota()">Upload</button><span id="ota-progress" class="muted small"></span></div>
+    </details>
+    <div class="row" style="margin-top:10px"><button onclick="post('/api/reboot').then(()=>toast('Rebooting'))">Reboot</button></div>
+  </section>
+  <div id="toast"></div>
+</main>
+<script>
+const TEMPLATES = {
+  clock: {"24h": true},
+  weather: {latitude: null, longitude: null, units: "celsius"},
+  departures: {title: "Bus", stop_id: "", platform_ids: [], lines: [], exclude_headsigns: [], rename: {}, rows: 3, min_minutes: 0},
+  spotify: {show_paused: false},
+  message: {title: "", text: "Hello", color: "#ffffff"},
+};
+let cfg = null;
+const $ = id => document.getElementById(id);
+
+function toast(msg, err) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  t.style.background = err ? 'var(--err)' : '#333';
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3000);
+}
+async function req(method, url, body, raw) {
+  const r = await fetch(url, {method, body: raw ? body : body && JSON.stringify(body),
+    headers: raw ? {} : {'Content-Type': 'application/json'}});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(data.error || r.statusText, true); throw new Error(data.error); }
+  return data;
+}
+const post = (u, b) => req('POST', u, b || {});
+const del = u => req('DELETE', u);
+
+async function load() {
+  const [status, apps, config] = await Promise.all([req('GET', '/api/status'), req('GET', '/api/apps'), req('GET', '/api/config')]);
+  cfg = config;
+  $('status').innerHTML = [
+    ['Mode', status.mode], ['Showing', status.current_app || '-'], ['Firmware', status.firmware],
+    ['Network', `${status.ssid || '-'} (${status.rssi || '?'} dBm), ${status.ip || ''}`],
+    ['Spotify', status.spotify_configured ? 'connected' : 'not connected'],
+    ['Uptime', `${Math.round(status.uptime_s / 60)} min`],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${esc(String(v))}</dd>`).join('');
+  $('mode-url').value = status.image_url || 'local';
+  $('add-app').innerHTML = apps.map(a => `<option>${a}</option>`).join('');
+  const b = cfg.brightness || {};
+  $('b-day').value = b.day ?? 60; $('b-night').value = b.night ?? 10;
+  $('b-start').value = b.night_start ?? 22; $('b-end').value = b.night_end ?? 7;
+  $('tz').value = cfg.timezone || '';
+  render();
+}
+function esc(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function render() {
+  $('raw').value = JSON.stringify(cfg, null, 2);
+  $('rotation').innerHTML = cfg.rotation.map((it, i) => `
+    <div class="item">
+      <div class="row">
+        <input type="checkbox" ${it.enabled !== false ? 'checked' : ''} onchange="cfg.rotation[${i}].enabled=this.checked">
+        <span class="name">${esc(it.app)}</span>
+        <input type="number" min="1" max="3600" value="${it.dwell || 10}" onchange="cfg.rotation[${i}].dwell=+this.value"> s
+        <span class="grow"></span>
+        <button class="icon" onclick="move(${i},-1)" aria-label="Up">&uarr;</button>
+        <button class="icon" onclick="move(${i},1)" aria-label="Down">&darr;</button>
+        <button class="icon" onclick="toggle(${i})">Edit</button>
+        <button class="icon" onclick="removeItem(${i})" aria-label="Remove">&times;</button>
+      </div>
+      <textarea id="c${i}" rows="6" style="display:none;margin-top:8px">${esc(JSON.stringify(it.config || {}, null, 2))}</textarea>
+    </div>`).join('');
+}
+function toggle(i) { const t = $('c' + i); t.style.display = t.style.display === 'none' ? 'block' : 'none'; }
+function move(i, d) { const j = i + d; if (j < 0 || j >= cfg.rotation.length) return; collect(); [cfg.rotation[i], cfg.rotation[j]] = [cfg.rotation[j], cfg.rotation[i]]; render(); }
+function removeItem(i) { collect(); cfg.rotation.splice(i, 1); render(); }
+function addItem() { collect(); const app = $('add-app').value; cfg.rotation.push({app, dwell: 10, enabled: true, config: structuredClone(TEMPLATES[app] || {})}); render(); }
+function collect() {
+  cfg.rotation.forEach((it, i) => { it.config = JSON.parse($('c' + i).value || '{}'); });
+  cfg.brightness = {day: +$('b-day').value, night: +$('b-night').value, night_start: +$('b-start').value, night_end: +$('b-end').value};
+  if ($('tz').value) cfg.timezone = $('tz').value;
+}
+async function save() {
+  try { collect(); } catch (e) { return toast('Invalid JSON in an app config: ' + e.message, true); }
+  await req('PUT', '/api/config', cfg); toast('Saved'); render();
+}
+async function saveRaw() {
+  let c; try { c = JSON.parse($('raw').value); } catch (e) { return toast('Invalid JSON: ' + e.message, true); }
+  await req('PUT', '/api/config', c); cfg = c; toast('Saved'); load();
+}
+async function notify() {
+  if (!$('n-text').value) return toast('Enter a message', true);
+  await post('/api/notify', {title: $('n-title').value, text: $('n-text').value, color: $('n-color').value});
+  toast('Sent'); $('n-text').value = '';
+}
+async function spotify() {
+  await post('/api/spotify', {client_id: $('sp-id').value.trim(), refresh_token: $('sp-rt').value.trim()});
+  $('sp-rt').value = ''; toast('Spotify saved'); load();
+}
+async function setMode() {
+  if (!confirm('Switch mode and reboot?')) return;
+  await post('/api/mode', {image_url: $('mode-url').value.trim() || 'local'}); toast('Rebooting');
+}
+function ota() {
+  const f = $('fw').files[0]; if (!f) return toast('Choose a .bin file', true);
+  if (!confirm(`Flash ${f.name} (${Math.round(f.size / 1024)} KB)?`)) return;
+  const x = new XMLHttpRequest();
+  x.upload.onprogress = e => $('ota-progress').textContent = Math.round(100 * e.loaded / e.total) + '%';
+  x.onload = () => x.status === 200 ? toast('Updated - rebooting') : toast('Update failed: ' + x.responseText, true);
+  x.onerror = () => toast('Upload failed', true);
+  x.open('POST', '/api/ota'); x.send(f);
+}
+load().catch(() => {});
+</script>
+</body>
+</html>
