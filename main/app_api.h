@@ -41,7 +41,7 @@ bool cfg_has_number(const cJSON *cfg, const char *key);
 // Parse "#rrggbb" / "rrggbb"; returns def if missing or invalid.
 rgb_t parse_color(const char *hex, rgb_t def);
 
-// "2026-10-11T17:46:00Z" -> time_t, or 0 if unparsable.
+// UTC timestamp "2026-10-11T17:46:00Z" -> time_t, or 0 if unparsable.
 time_t parse_iso8601_utc(const char *s);
 // True once SNTP has set the clock.
 bool time_is_valid(void);

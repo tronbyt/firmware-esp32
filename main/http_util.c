@@ -64,8 +64,6 @@ esp_err_t http_request(const char *method, const char *url,
 
   if (strcmp(method, "POST") == 0) {
     esp_http_client_set_method(client, HTTP_METHOD_POST);
-  } else if (strcmp(method, "PUT") == 0) {
-    esp_http_client_set_method(client, HTTP_METHOD_PUT);
   }
   for (int i = 0; headers && headers[i] && headers[i + 1]; i += 2) {
     esp_http_client_set_header(client, headers[i], headers[i + 1]);

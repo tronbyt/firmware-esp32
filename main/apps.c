@@ -37,7 +37,7 @@ static const char *DEFAULT_CONFIG =
     "\"rotation\":["
     "{\"app\":\"clock\",\"dwell\":10,\"enabled\":true,\"config\":{\"24h\":true}},"
     "{\"app\":\"weather\",\"dwell\":10,\"enabled\":false,"
-    "\"config\":{\"latitude\":null,\"longitude\":null,\"units\":\"celsius\"}},"
+    "\"config\":{\"latitude\":null,\"longitude\":null}},"
     "{\"app\":\"spotify\",\"dwell\":10,\"enabled\":true,\"config\":{}}"
     "]}";
 
@@ -108,16 +108,7 @@ time_t parse_iso8601_utc(const char *s) {
   int y, mo, d, h, mi, sec;
   if (!s || sscanf(s, "%4d-%2d-%2dT%2d:%2d:%2d", &y, &mo, &d, &h, &mi, &sec) != 6)
     return 0;
-  time_t t = days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec;
-  // Optional offset after the seconds (and fraction): Z, +hh:mm, -hh:mm
-  const char *p = s + 19;
-  while (*p == '.' || (*p >= '0' && *p <= '9')) p++;
-  int oh, om;
-  if ((*p == '+' || *p == '-') && sscanf(p + 1, "%2d:%2d", &oh, &om) == 2) {
-    int offset = oh * 3600 + om * 60;
-    t += *p == '+' ? -offset : offset;
-  }
-  return t;
+  return days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec;
 }
 
 bool time_is_valid(void) { return time(NULL) > 1700000000; }
@@ -397,8 +388,6 @@ void apps_start(void) {
   xTaskCreatePinnedToCore(apps_task, "apps", TASK_STACK, NULL, 2, &s_task, 1);
   ESP_LOGI(TAG, "local apps started");
 }
-
-bool apps_running(void) { return s_task != NULL; }
 
 esp_err_t apps_notify(const char *title, const char *text, const char *color,
                       int secs) {

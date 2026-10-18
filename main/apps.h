@@ -24,7 +24,6 @@ void apps_init(void);
 
 // Start the rendering task (local mode). Call once WiFi is up.
 void apps_start(void);
-bool apps_running(void);
 
 // Current config as JSON (caller frees).
 char *apps_get_config_json(void);

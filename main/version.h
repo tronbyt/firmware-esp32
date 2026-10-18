@@ -5,5 +5,5 @@
 #pragma once
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "1.7.1-apps.1"
+#define FIRMWARE_VERSION "1.7.1-apps.2"
 #endif

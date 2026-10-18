@@ -1,8 +1,7 @@
 // Live departures from Transitous (MOTIS, open DELFI data incl. HVV realtime).
 //
 // cfg: stop_id (station), platform_ids (only these platforms), optional lines
-// and exclude_headsigns filters, rename {headsign: short name}, rows,
-// min_minutes, title.
+// filter, rename {headsign: short name}, rows, title.
 
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -59,8 +58,7 @@ static void fetch(const cJSON *cfg) {
 
   char url[200];
   snprintf(url, sizeof(url),
-           "https://api.transitous.org/api/v5/stoptimes?stopId=%s&n=%d",
-           stop_id, cfg_int(cfg, "fetch", 20));
+           "https://api.transitous.org/api/v5/stoptimes?stopId=%s&n=20", stop_id);
   http_response_t resp;
   if (http_request("GET", url, NULL, NULL, 256 * 1024, &resp) != ESP_OK ||
       resp.status != 200) {
@@ -79,7 +77,6 @@ static void fetch(const cJSON *cfg) {
 
   const cJSON *platforms = cJSON_GetObjectItem(cfg, "platform_ids");
   const cJSON *lines = cJSON_GetObjectItem(cfg, "lines");
-  const cJSON *excluded = cJSON_GetObjectItem(cfg, "exclude_headsigns");
   int count = 0;
   const cJSON *st;
   cJSON_ArrayForEach(st, stop_times) {
@@ -91,7 +88,6 @@ static void fetch(const cJSON *cfg) {
     if (cJSON_GetArraySize(platforms) > 0 && !in_string_array(platforms, platform))
       continue;
     if (cJSON_GetArraySize(lines) > 0 && !in_string_array(lines, line)) continue;
-    if (in_string_array(excluded, headsign)) continue;
 
     time_t dep = parse_iso8601_utc(cfg_str(place, "departure", ""));
     time_t sched = parse_iso8601_utc(cfg_str(place, "scheduledDeparture", ""));
@@ -140,7 +136,6 @@ static uint32_t departures_draw(const cJSON *cfg, uint32_t t_ms) {
     return message_draw(title, "Set stop_id in the settings", RGB(255, 255, 255), t_ms);
   }
   time_t now = time(NULL);
-  int min_minutes = cfg_int(cfg, "min_minutes", 0);
   int max_rows = cfg_int(cfg, "rows", 3);
   const cJSON *rename = cJSON_GetObjectItem(cfg, "rename");
 
@@ -149,7 +144,7 @@ static uint32_t departures_draw(const cJSON *cfg, uint32_t t_ms) {
     const row_t *r = &s.rows[i];
     int minutes = (int)((r->dep - now) / 60);
     if (r->dep < now) minutes = -1;  // already gone
-    if (minutes < min_minutes) continue;
+    if (minutes < 0) continue;
     int y = 1 + shown++ * 11;
 
     // line badge in the route's colour

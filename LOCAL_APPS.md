@@ -7,8 +7,8 @@ built-in apps; any other URL keeps the normal Tronbyt server behaviour.
 | App | Data source | Notes |
 |---|---|---|
 | `clock` | SNTP | blinking colon, `24h` option |
-| `weather` | Open-Meteo | `latitude`, `longitude`, `units` |
-| `departures` | Transitous (DELFI incl. HVV realtime) | `stop_id`, `platform_ids`, `lines`, `exclude_headsigns`, `rename`, `rows` |
+| `weather` | Open-Meteo | `latitude`, `longitude` (°C) |
+| `departures` | Transitous (DELFI incl. HVV realtime) | `stop_id`, `platform_ids`, `lines`, `rename`, `rows` |
 | `spotify` | Spotify Web API | needs a one-time login, skipped while nothing plays |
 | `message` | config | static `title`/`text`/`color` |
 
@@ -21,7 +21,7 @@ Open `http://<device-ip>:8080/` for the settings page. The same JSON API is
 meant for the Android app:
 
 ```
-GET  /api/status            firmware, mode, IP, current app, heap_ok
+GET  /api/status            firmware, mode, IP, current app
 GET  /api/apps              built-in app names
 GET  /api/config            {"timezone", "brightness", "rotation": [...]}
 PUT  /api/config            replace (validated, stored in NVS)

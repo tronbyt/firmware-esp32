@@ -194,7 +194,7 @@ static void poll(void) {
   http_response_t resp;
   esp_err_t err = http_request(
       "GET",
-      "https://api.spotify.com/v1/me/player/currently-playing?additional_types=episode",
+      "https://api.spotify.com/v1/me/player/currently-playing",
       headers, NULL, 64 * 1024, &resp);
   if (err != ESP_OK) {
     http_response_free(&resp);
@@ -217,7 +217,6 @@ static void poll(void) {
       snprintf(s.track_id, sizeof(s.track_id), "%s", cfg_str(item, "id", ""));
       snprintf(s.title, sizeof(s.title), "%s", cfg_str(item, "name", ""));
 
-      // Track: join artist names. Podcast episode: the show's name.
       s.artist[0] = '\0';
       const cJSON *artist;
       cJSON_ArrayForEach(artist, cJSON_GetObjectItem(item, "artists")) {
@@ -225,13 +224,8 @@ static void poll(void) {
         snprintf(s.artist + used, sizeof(s.artist) - used, "%s%s",
                  used ? ", " : "", cfg_str(artist, "name", ""));
       }
-      const cJSON *show = cJSON_GetObjectItem(item, "show");
-      if (!s.artist[0] && show) {
-        snprintf(s.artist, sizeof(s.artist), "%s", cfg_str(show, "name", ""));
-      }
       const cJSON *images =
           cJSON_GetObjectItem(cJSON_GetObjectItem(item, "album"), "images");
-      if (!images) images = cJSON_GetObjectItem(item, "images");
       char url[160];
       snprintf(url, sizeof(url), "%s", pick_image(images));
       cJSON_Delete(root);

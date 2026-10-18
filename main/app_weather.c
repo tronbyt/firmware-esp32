@@ -34,11 +34,8 @@ static void fetch(const cJSON *cfg) {
            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
            "&current=temperature_2m,weather_code"
            "&daily=temperature_2m_max,temperature_2m_min"
-           "&temperature_unit=%s&timezone=auto&forecast_days=1",
-           lat, lon,
-           strcmp(cfg_str(cfg, "units", "celsius"), "fahrenheit") == 0
-               ? "fahrenheit"
-               : "celsius");
+           "&timezone=auto&forecast_days=1",
+           lat, lon);
   http_response_t resp;
   if (http_request("GET", url, NULL, NULL, 16 * 1024, &resp) != ESP_OK ||
       resp.status != 200) {

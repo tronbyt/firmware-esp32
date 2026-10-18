@@ -33,7 +33,6 @@ static httpd_handle_t s_server;
 static esp_err_t send_json(httpd_req_t *req, const char *status, const char *json) {
   httpd_resp_set_status(req, status);
   httpd_resp_set_type(req, "application/json");
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   return httpd_resp_sendstr(req, json);
 }
 
@@ -104,7 +103,6 @@ static esp_err_t status_handler(httpd_req_t *req) {
   cJSON_AddNumberToObject(o, "free_internal", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   cJSON_AddNumberToObject(o, "free_psram", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
   cJSON_AddBoolToObject(o, "time_valid", time_is_valid());
-  cJSON_AddBoolToObject(o, "heap_ok", heap_caps_check_integrity_all(true));
   cJSON_AddBoolToObject(o, "spotify_configured", spotify_is_configured());
 
   wifi_ap_record_t ap;
@@ -272,14 +270,6 @@ static esp_err_t ota_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-static esp_err_t options_handler(httpd_req_t *req) {
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS");
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
-  httpd_resp_set_status(req, "204 No Content");
-  return httpd_resp_send(req, NULL, 0);
-}
-
 esp_err_t api_server_start(void) {
   if (s_server) return ESP_OK;
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -311,7 +301,6 @@ esp_err_t api_server_start(void) {
       {"/api/mode", HTTP_POST, mode_handler, NULL},
       {"/api/ota", HTTP_POST, ota_handler, NULL},
       {"/api/reboot", HTTP_POST, reboot_handler, NULL},
-      {"/api/*", HTTP_OPTIONS, options_handler, NULL},
   };
   for (size_t i = 0; i < sizeof(routes) / sizeof(routes[0]); i++) {
     httpd_register_uri_handler(s_server, &routes[i]);
