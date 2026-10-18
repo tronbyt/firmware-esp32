@@ -4,6 +4,10 @@
 
 #include "font5x7.h"
 #include "nvs_settings.h"
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+#include <freertos/FreeRTOS.h>
+#include <freertos/timers.h>
+#endif
 #if CONFIG_BOARD_TIDBYT_GEN2
 #define R1 5
 #define G1 23
@@ -259,6 +263,15 @@ int display_initialize(void) {
   return 0;
 }
 
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+static void persist_brightness(void *, uint32_t) {
+  esp_err_t err = nvs_persist_brightness();
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Failed to persist brightness: %s", esp_err_to_name(err));
+  }
+}
+#endif
+
 void display_set_brightness(uint8_t brightness_pct) {
   if (brightness_pct > DISPLAY_MAX_BRIGHTNESS) {
     ESP_LOGW(TAG, "Ignoring invalid brightness %u (valid range %d-%d)",
@@ -274,11 +287,22 @@ void display_set_brightness(uint8_t brightness_pct) {
     _matrix->clearScreen();
     _brightness = brightness_pct;
     esp_err_t err = nvs_set_brightness(brightness_pct);
+#ifdef CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM
+    // Callers include the WebSocket task, whose stack is in PSRAM and so must
+    // not write flash; persist from the timer task's internal-RAM stack.
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to store brightness: %s", esp_err_to_name(err));
+    } else if (xTimerPendFunctionCall(persist_brightness, NULL, 0, 0) !=
+               pdPASS) {
+      ESP_LOGW(TAG, "Failed to queue brightness persist");
+    }
+#else
     if (err != ESP_OK) {
       ESP_LOGW(TAG, "Failed to store brightness: %s", esp_err_to_name(err));
     } else if ((err = nvs_persist_brightness()) != ESP_OK) {
       ESP_LOGW(TAG, "Failed to persist brightness: %s", esp_err_to_name(err));
     }
+#endif
   }
 }
 

@@ -1,6 +1,12 @@
 dependencies:
   espressif/esp_jpeg: "^1.3.0"
-  espressif/esp_websocket_client: "1.6.0"
+  # Official espressif/esp-protocols master: 1.8.0 plus the PSRAM allocation
+  # options (25129502, unreleased as of 1.8.0) and the cfg->host leak fix.
+  # Switch back to a registry version once a release includes them.
+  esp_websocket_client:
+    git: https://github.com/espressif/esp-protocols.git
+    path: components/esp_websocket_client
+    version: 730838fac89064b4460be0ece1f799978afc50df
   esp32-hub75-matrixpanel-dma:
     git: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA.git
     version: "3.0.14"
