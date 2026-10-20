@@ -109,10 +109,14 @@ static esp_err_t _httpCallback(esp_http_client_event_t* event) {
         state->sound = strdup(event->header_value);
         ESP_LOGI(TAG, "Found Sound header: %s", state->sound);
       } else if (strcasecmp(event->header_key, "Tronbyt-Volume") == 0) {
-        int value = atoi(event->header_value);
-        if (value >= 0 && value <= 100) {
+        char* end = NULL;
+        long value = strtol(event->header_value, &end, 10);
+        if (end != event->header_value && *end == '\0' &&
+            strspn(event->header_value, "0123456789") ==
+                strlen(event->header_value) &&
+            value >= 0 && value <= 100) {
           state->volume = (int16_t)value;
-          ESP_LOGD(TAG, "Tronbyt-Volume value: %d%%", value);
+          ESP_LOGD(TAG, "Tronbyt-Volume value: %ld%%", value);
         } else {
           ESP_LOGW(TAG, "Ignoring invalid Tronbyt-Volume: %s",
                    event->header_value);

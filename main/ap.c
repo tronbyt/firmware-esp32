@@ -701,11 +701,12 @@ static esp_err_t save_handler(httpd_req_t *req) {
   char volume_val[8] = {0};
   if (httpd_query_key_value(buf, "volume", volume_val, sizeof(volume_val)) ==
       ESP_OK) {
-    int vol = atoi(volume_val);
-    if (vol >= 0 && vol <= 100) {
+    char *end = NULL;
+    long vol = strtol(volume_val, &end, 10);
+    if (end != volume_val && *end == '\0' && vol >= 0 && vol <= 100) {
       nvs_set_volume((uint8_t)vol);
       beep_set_volume((uint8_t)vol);
-      ESP_LOGI(TAG, "Volume set from AP portal: %d%%", vol);
+      ESP_LOGI(TAG, "Volume set from AP portal: %ld%%", vol);
     }
   }
 #endif

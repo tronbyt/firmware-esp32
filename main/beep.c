@@ -195,10 +195,10 @@ static void play_sequence(const char* pattern, uint8_t volume) {
 }
 
 static void beep_task(void* arg) {
-  (void)arg;
+  QueueHandle_t queue = (QueueHandle_t)arg;
   beep_msg_t msg;
   while (true) {
-    if (xQueueReceive(s_queue, &msg, portMAX_DELAY) != pdPASS) {
+    if (xQueueReceive(queue, &msg, portMAX_DELAY) != pdPASS) {
       continue;
     }
 
@@ -223,15 +223,40 @@ static void beep_task(void* arg) {
 }
 
 static portMUX_TYPE s_beep_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_initializing = false;
 
 void beep_init(void) {
   taskENTER_CRITICAL(&s_beep_mux);
-  if (s_queue == NULL) {
-    s_queue = xQueueCreate(4, sizeof(beep_msg_t));
+  if (s_queue != NULL || s_initializing) {
+    taskEXIT_CRITICAL(&s_beep_mux);
+    return;
   }
-  if (s_task == NULL && s_queue != NULL) {
-    xTaskCreate(beep_task, "beep", 4096, NULL, 3, &s_task);
+  s_initializing = true;
+  taskEXIT_CRITICAL(&s_beep_mux);
+
+  QueueHandle_t queue = xQueueCreate(4, sizeof(beep_msg_t));
+  if (queue == NULL) {
+    taskENTER_CRITICAL(&s_beep_mux);
+    s_initializing = false;
+    taskEXIT_CRITICAL(&s_beep_mux);
+    return;
   }
+
+  TaskHandle_t task = NULL;
+  BaseType_t ret =
+      xTaskCreate(beep_task, "beep", 4096, (void*)queue, 3, &task);
+  if (ret != pdPASS || task == NULL) {
+    vQueueDelete(queue);
+    taskENTER_CRITICAL(&s_beep_mux);
+    s_initializing = false;
+    taskEXIT_CRITICAL(&s_beep_mux);
+    return;
+  }
+
+  taskENTER_CRITICAL(&s_beep_mux);
+  s_queue = queue;
+  s_task = task;
+  s_initializing = false;
   taskEXIT_CRITICAL(&s_beep_mux);
 }
 
