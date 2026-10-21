@@ -89,9 +89,14 @@ The firmware supports several advanced settings stored in Non-Volatile Storage (
 | **Syslog Address** | `syslog_addr` | Remote Syslog (RFC 5424) server in `host:port` format (e.g., `192.168.1.10:1517`). |
 | **SNTP Server** | `sntp_server` | Custom NTP server for time synchronization. Defaults to DHCP provided servers or `pool.ntp.org`. |
 | **Swap Colors** | `swap_colors` | Boolean (0/1) to swap RGB color order. Useful for specific panel variants. |
+| **Color Order** | `color_order` | Color channel remap order (`rgb`, `rbg`, `grb`, `gbr`, `brg`, `bgr`). Defaults to `rgb`. |
 | **AP Mode** | `ap_mode` | Boolean (0/1) to enable/disable the fallback WiFi configuration portal. |
 | **WiFi Power Save**| `wifi_ps` | WiFi power management mode (0: None, 1: Min, 2: Max). |
 | **Prefer IPv6** | `prefer_ipv6` | Boolean (0/1) to prefer IPv6 connectivity over IPv4. |
+| **Speaker Volume** | `volume` | Speaker volume percentage (0-100). Defaults to 100 (Tidbyt Gen2). |
+| **Beep On Touch** | `touch_beep` | Boolean (0/1) to play a tone on touch tap or hold (Tidbyt Gen2). Defaults to 0. |
+| **Startup Sound** | `start_sound` | Boolean (0/1) to play Tron/Bit jingle on startup (Tidbyt Gen2). Defaults to 1. |
+| **Disable Touch** | `dis_touch` | Boolean (0/1) to disable touch button (Tidbyt Gen2). Defaults to 0. |
 
 ## Back to Normal
 

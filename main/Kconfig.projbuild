@@ -104,6 +104,22 @@ menu "Application Configuration"
             is tapped or held (Tidbyt Gen2).
             Can still be toggled via NVS, WebSocket, or the config portal.
 
+    config STARTUP_SOUND_DEFAULT
+        bool "Play Startup Sound By Default"
+        default y
+        help
+            Play a short Tron/Bit-inspired jingle on the built-in speaker when the
+            device starts up (Tidbyt Gen2).
+            Can still be toggled via NVS, WebSocket, or the config portal.
+
+    config VOLUME_DEFAULT
+        int "Default Speaker Volume (0-100%)"
+        range 0 100
+        default 100
+        help
+            Default speaker volume percentage (Tidbyt Gen2).
+            Can still be adjusted via NVS, WebSocket, HTTP header, or the config portal.
+
     config TOUCH_DOUBLE_TAP
         bool "Detect Double Tap"
         default n

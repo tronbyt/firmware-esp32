@@ -31,8 +31,16 @@
 #define NVS_KEY_PREFER_IPV6 "prefer_ipv6"
 #define NVS_KEY_DISABLE_TOUCH "dis_touch"
 #define NVS_KEY_TOUCH_BEEP "touch_beep"
+#define NVS_KEY_STARTUP_SOUND "start_sound"
 #define NVS_KEY_API_KEY "api_key"
 #define NVS_KEY_BRIGHTNESS "brightness"
+#define NVS_KEY_VOLUME "volume"
+
+#ifdef CONFIG_VOLUME_DEFAULT
+#define DEFAULT_VOLUME CONFIG_VOLUME_DEFAULT
+#else
+#define DEFAULT_VOLUME 100
+#endif
 
 // Internal storage
 static char s_wifi_ssid[MAX_SSID_LEN + 1] = {0};
@@ -50,8 +58,10 @@ static bool s_ap_mode = true;
 static bool s_prefer_ipv6 = false;
 static bool s_disable_touch = false;
 static bool s_touch_beep = false;
+static bool s_startup_sound = true;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 static uint8_t s_brightness = DISPLAY_DEFAULT_BRIGHTNESS;
+static uint8_t s_volume = DEFAULT_VOLUME;
 
 // Hardcoded defaults (from secrets.json via generated secrets_gen.h)
 #include "secrets_gen.h"
@@ -135,6 +145,12 @@ esp_err_t nvs_settings_init(void) {
   s_touch_beep = false;
 #endif
 
+#ifdef CONFIG_STARTUP_SOUND_DEFAULT
+  s_startup_sound = true;
+#else
+  s_startup_sound = false;
+#endif
+
   if (ret == ESP_OK) {
     // Load from NVS
     size_t required_size = sizeof(s_wifi_ssid);
@@ -212,8 +228,17 @@ esp_err_t nvs_settings_init(void) {
       s_touch_beep = (val_u8 != 0);
     }
 
+    if (nvs_get_u8(nvs_handle, NVS_KEY_STARTUP_SOUND, &val_u8) == ESP_OK) {
+      s_startup_sound = (val_u8 != 0);
+    }
+
     if (nvs_get_u8(nvs_handle, NVS_KEY_BRIGHTNESS, &val_u8) == ESP_OK) {
       s_brightness = val_u8;
+    }
+
+    if (nvs_get_u8(nvs_handle, NVS_KEY_VOLUME, &val_u8) == ESP_OK &&
+        val_u8 <= 100) {
+      s_volume = val_u8;
     }
 
     required_size = sizeof(s_api_key);
@@ -340,7 +365,11 @@ bool nvs_get_disable_touch(void) { return s_disable_touch; }
 
 bool nvs_get_touch_beep(void) { return s_touch_beep; }
 
+bool nvs_get_startup_sound(void) { return s_startup_sound; }
+
 uint8_t nvs_get_brightness(void) { return s_brightness; }
+ 
+uint8_t nvs_get_volume(void) { return s_volume; }
 
 esp_err_t nvs_get_api_key(char *api_key, size_t max_len) {
   if (!api_key) return ESP_ERR_INVALID_ARG;
@@ -488,11 +517,24 @@ esp_err_t nvs_set_touch_beep(bool touch_beep) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_startup_sound(bool startup_sound) {
+  s_startup_sound = startup_sound;
+  return ESP_OK;
+}
+
 esp_err_t nvs_set_brightness(uint8_t brightness) {
   if (brightness > DISPLAY_MAX_BRIGHTNESS) {
     return ESP_ERR_INVALID_ARG;
   }
   s_brightness = brightness;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_volume(uint8_t volume) {
+  if (volume > 100) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  s_volume = volume;
   return ESP_OK;
 }
 
@@ -502,6 +544,19 @@ esp_err_t nvs_persist_brightness(void) {
   if (err != ESP_OK) return err;
 
   err = nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
+  if (err == ESP_OK) {
+    err = nvs_commit(nvs_handle);
+  }
+  nvs_close(nvs_handle);
+  return err;
+}
+
+esp_err_t nvs_persist_volume(void) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+  if (err != ESP_OK) return err;
+
+  err = nvs_set_u8(nvs_handle, NVS_KEY_VOLUME, s_volume);
   if (err == ESP_OK) {
     err = nvs_commit(nvs_handle);
   }
@@ -533,7 +588,9 @@ esp_err_t nvs_save_settings(void) {
   nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, s_disable_touch ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_TOUCH_BEEP, s_touch_beep ? 1 : 0);
+  nvs_set_u8(nvs_handle, NVS_KEY_STARTUP_SOUND, s_startup_sound ? 1 : 0);
   nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
+  nvs_set_u8(nvs_handle, NVS_KEY_VOLUME, s_volume);
 
   err = nvs_commit(nvs_handle);
   nvs_close(nvs_handle);

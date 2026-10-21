@@ -14,10 +14,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "driver/i2s_std.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
 
 static const char* TAG = "beep";
@@ -26,6 +28,7 @@ static const char* TAG = "beep";
 #define BEEP_AMPLITUDE 5000  // out of 32767: a small speaker needs little
 #define BEEP_ATTACK_MS 3     // ramps at both ends keep the amp from popping
 #define BEEP_PAD_MS 20       // silence around the tone, flushes the DMA
+#define CHUNK_FRAMES 128
 
 typedef struct {
   uint16_t hz;
@@ -37,9 +40,25 @@ static const tone_t TONES[] = {
     [BEEP_HOLD] = {.hz = 1000, .ms = 120},
 };
 
+typedef enum {
+  BEEP_MSG_KIND = 0,
+  BEEP_MSG_SEQUENCE,
+} beep_msg_type_t;
+
+typedef struct {
+  beep_msg_type_t type;
+  uint8_t volume;
+  union {
+    beep_kind_t kind;
+    char sequence[128];
+  };
+} beep_msg_t;
+
 static TaskHandle_t s_task = NULL;
+static QueueHandle_t s_queue = NULL;
 static i2s_chan_handle_t s_tx = NULL;
 static bool s_failed = false;
+static uint8_t s_volume = 100;
 
 static esp_err_t i2s_setup(void) {
   i2s_chan_config_t chan_cfg =
@@ -75,68 +94,223 @@ static esp_err_t i2s_setup(void) {
   return err;
 }
 
-static void play(const tone_t* tone) {
-  const int pad = BEEP_SAMPLE_RATE * BEEP_PAD_MS / 1000;
-  const int body = BEEP_SAMPLE_RATE * tone->ms / 1000;
-  const int attack = BEEP_SAMPLE_RATE * BEEP_ATTACK_MS / 1000;
-  const int frames = pad + body + pad;
+static void write_silence(int ms) {
+  int total_frames = BEEP_SAMPLE_RATE * ms / 1000;
+  int16_t zero_buf[CHUNK_FRAMES * 2] = {0};
+  while (total_frames > 0) {
+    int chunk = (total_frames > CHUNK_FRAMES) ? CHUNK_FRAMES : total_frames;
+    size_t written = 0;
+    i2s_channel_write(s_tx, zero_buf, chunk * 2 * sizeof(int16_t), &written,
+                      pdMS_TO_TICKS(500));
+    total_frames -= chunk;
+  }
+}
 
-  // stereo frames, zeroed: the padding stays silent
-  int16_t* buf = calloc(frames * 2, sizeof(int16_t));
-  if (buf == NULL) {
-    ESP_LOGW(TAG, "No memory for tone");
+static void write_tone(uint16_t hz, int ms, uint8_t volume) {
+  if (ms <= 0) return;
+  if (volume > 100) volume = 100;
+  if (volume == 0) {
+    write_silence(ms);
     return;
   }
+  const int amplitude = (BEEP_AMPLITUDE * volume) / 100;
+  const int total_frames = BEEP_SAMPLE_RATE * ms / 1000;
+  if (total_frames <= 0) return;
+  const int attack = BEEP_SAMPLE_RATE * BEEP_ATTACK_MS / 1000;
 
-  for (int i = 0; i < body; i++) {
-    float envelope = 1.0f - (float)i / body;  // linear decay to zero
-    if (i < attack) {
-      envelope *= (float)i / attack;
+  int16_t buf[CHUNK_FRAMES * 2];
+  int frame_idx = 0;
+  while (frame_idx < total_frames) {
+    int chunk = total_frames - frame_idx;
+    if (chunk > CHUNK_FRAMES) {
+      chunk = CHUNK_FRAMES;
     }
-    float phase = 2.0f * (float)M_PI * tone->hz * i / BEEP_SAMPLE_RATE;
-    int16_t sample = (int16_t)(BEEP_AMPLITUDE * envelope * sinf(phase));
-    buf[(pad + i) * 2] = sample;
-    buf[(pad + i) * 2 + 1] = sample;
-  }
-
-  // The clocks only run while a tone plays: the amp idles without BCLK
-  if (i2s_channel_enable(s_tx) == ESP_OK) {
+    for (int i = 0; i < chunk; i++) {
+      int cur = frame_idx + i;
+      float envelope = 1.0f - (float)cur / total_frames;
+      if (cur < attack) {
+        envelope *= (float)cur / attack;
+      }
+      float phase = 2.0f * (float)M_PI * hz * cur / BEEP_SAMPLE_RATE;
+      int16_t sample = (int16_t)(amplitude * envelope * sinf(phase));
+      buf[i * 2] = sample;
+      buf[i * 2 + 1] = sample;
+    }
     size_t written = 0;
-    i2s_channel_write(s_tx, buf, frames * 2 * sizeof(int16_t), &written,
+    i2s_channel_write(s_tx, buf, chunk * 2 * sizeof(int16_t), &written,
                       pdMS_TO_TICKS(500));
-    // let the DMA drain what it buffered before stopping the clocks
+    frame_idx += chunk;
+  }
+}
+
+static void write_pad(void) {
+  write_silence(BEEP_PAD_MS);
+}
+
+static void play(const tone_t* tone, uint8_t volume) {
+  if (volume == 0) return;
+  if (i2s_channel_enable(s_tx) == ESP_OK) {
+    write_pad();
+    write_tone(tone->hz, tone->ms, volume);
+    write_pad();
     vTaskDelay(pdMS_TO_TICKS(BEEP_PAD_MS));
     i2s_channel_disable(s_tx);
   }
-  free(buf);
+}
+
+static void play_sequence(const char* pattern, uint8_t volume) {
+  if (volume == 0 || pattern == NULL || *pattern == '\0') {
+    return;
+  }
+  char copy[128];
+  strncpy(copy, pattern, sizeof(copy) - 1);
+  copy[sizeof(copy) - 1] = '\0';
+
+  if (i2s_channel_enable(s_tx) == ESP_OK) {
+    write_pad();
+    char* saveptr = NULL;
+    char* token = strtok_r(copy, ",", &saveptr);
+    while (token != NULL) {
+      int hz = 0, ms = 0;
+      if (sscanf(token, "%d:%d", &hz, &ms) == 2 && ms > 0) {
+        // Clamp duration to prevent integer overflow and soft-lock
+        if (ms > 10000) {
+          ms = 10000;
+        }
+        if (hz <= 0) {
+          write_silence(ms);
+        } else {
+          if (hz > 20000) {
+            hz = 20000;
+          }
+          write_tone((uint16_t)hz, ms, volume);
+        }
+      }
+      token = strtok_r(NULL, ",", &saveptr);
+    }
+    write_pad();
+    vTaskDelay(pdMS_TO_TICKS(BEEP_PAD_MS));
+    i2s_channel_disable(s_tx);
+  }
 }
 
 static void beep_task(void* arg) {
-  (void)arg;
+  QueueHandle_t queue = (QueueHandle_t)arg;
+  beep_msg_t msg;
   while (true) {
-    uint32_t kind = 0;
-    xTaskNotifyWait(0, UINT32_MAX, &kind, portMAX_DELAY);
+    if (xQueueReceive(queue, &msg, portMAX_DELAY) != pdPASS) {
+      continue;
+    }
 
-    if (s_tx == NULL && !s_failed) {
+    if (s_tx == NULL && !s_failed && msg.volume > 0) {
       esp_err_t err = i2s_setup();
       if (err != ESP_OK) {
-        ESP_LOGW(TAG, "I2S setup failed: %s (touch stays silent)",
+        ESP_LOGW(TAG, "I2S setup failed: %s (audio stays silent)",
                  esp_err_to_name(err));
         s_failed = true;
       }
     }
-    if (s_tx != NULL && kind < sizeof(TONES) / sizeof(TONES[0])) {
-      play(&TONES[kind]);
+    if (s_tx != NULL) {
+      if (msg.type == BEEP_MSG_KIND) {
+        if (msg.kind < sizeof(TONES) / sizeof(TONES[0])) {
+          play(&TONES[msg.kind], msg.volume);
+        }
+      } else if (msg.type == BEEP_MSG_SEQUENCE) {
+        play_sequence(msg.sequence, msg.volume);
+      }
     }
   }
 }
 
+static portMUX_TYPE s_beep_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_initializing = false;
+
+void beep_init(void) {
+  taskENTER_CRITICAL(&s_beep_mux);
+  if (s_queue != NULL || s_initializing) {
+    taskEXIT_CRITICAL(&s_beep_mux);
+    return;
+  }
+  s_initializing = true;
+  taskEXIT_CRITICAL(&s_beep_mux);
+
+  QueueHandle_t queue = xQueueCreate(4, sizeof(beep_msg_t));
+  if (queue == NULL) {
+    taskENTER_CRITICAL(&s_beep_mux);
+    s_initializing = false;
+    taskEXIT_CRITICAL(&s_beep_mux);
+    return;
+  }
+
+  TaskHandle_t task = NULL;
+  BaseType_t ret =
+      xTaskCreate(beep_task, "beep", 4096, (void*)queue, 3, &task);
+  if (ret != pdPASS || task == NULL) {
+    vQueueDelete(queue);
+    taskENTER_CRITICAL(&s_beep_mux);
+    s_initializing = false;
+    taskEXIT_CRITICAL(&s_beep_mux);
+    return;
+  }
+
+  taskENTER_CRITICAL(&s_beep_mux);
+  s_queue = queue;
+  s_task = task;
+  s_initializing = false;
+  taskEXIT_CRITICAL(&s_beep_mux);
+}
+
+void beep_set_volume(uint8_t volume) {
+  if (volume > 100) volume = 100;
+  s_volume = volume;
+}
+
+uint8_t beep_get_volume(void) {
+  return s_volume;
+}
+
 void beep_play(beep_kind_t kind) {
-  if (s_task == NULL) {
-    if (xTaskCreate(beep_task, "beep", 3072, NULL, 3, &s_task) != pdPASS) {
-      s_task = NULL;
+  if (s_queue == NULL) {
+    beep_init();
+    if (s_queue == NULL) {
       return;
     }
   }
-  xTaskNotify(s_task, (uint32_t)kind, eSetValueWithOverwrite);
+  beep_msg_t msg = {
+      .type = BEEP_MSG_KIND,
+      .volume = s_volume,
+      .kind = kind,
+  };
+  xQueueSend(s_queue, &msg, 0);
+}
+
+void beep_play_sequence(const char* pattern) {
+  beep_play_sequence_with_volume(pattern, s_volume);
+}
+
+void beep_play_sequence_with_volume(const char* pattern, uint8_t volume) {
+  if (pattern == NULL || *pattern == '\0') {
+    return;
+  }
+  if (volume > 100) volume = 100;
+  if (s_queue == NULL) {
+    beep_init();
+    if (s_queue == NULL) {
+      return;
+    }
+  }
+  beep_msg_t msg = {
+      .type = BEEP_MSG_SEQUENCE,
+      .volume = volume,
+  };
+  strncpy(msg.sequence, pattern, sizeof(msg.sequence) - 1);
+  msg.sequence[sizeof(msg.sequence) - 1] = '\0';
+  xQueueSend(s_queue, &msg, 0);
+}
+
+#define BEEP_STARTUP_JINGLE \
+  "147:90,147:90,175:90,147:90,196:90,220:90,262:100,294:100,349:110,440:120,587:380"
+
+void beep_play_startup(void) {
+  beep_play_sequence(BEEP_STARTUP_JINGLE);
 }

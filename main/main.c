@@ -23,6 +23,7 @@
 #include "sntp.h"
 #include "syslog.h"
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+#include "beep.h"
 #include "touch_control.h"
 #endif
 #include "version.h"
@@ -138,6 +139,8 @@ static esp_err_t send_client_info(void) {
       cJSON_AddBoolToObject(ci, "prefer_ipv6", nvs_get_prefer_ipv6());
       cJSON_AddBoolToObject(ci, "disable_touch", nvs_get_disable_touch());
       cJSON_AddBoolToObject(ci, "touch_beep", nvs_get_touch_beep());
+      cJSON_AddBoolToObject(ci, "startup_sound", nvs_get_startup_sound());
+      cJSON_AddNumberToObject(ci, "volume", nvs_get_volume());
 
       char* json_str = cJSON_PrintUnformatted(root);
       if (json_str) {
@@ -374,6 +377,35 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 settings_changed = true;
               }
 
+              // Check for "startup_sound"
+              cJSON* startup_sound_item =
+                  cJSON_GetObjectItem(root, "startup_sound");
+              if (cJSON_IsBool(startup_sound_item)) {
+                bool val = cJSON_IsTrue(startup_sound_item);
+                nvs_set_startup_sound(val);
+                ESP_LOGI(TAG, "Updated startup_sound to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for standalone "volume" update (e.g. from device settings slider)
+              // If this is a sound notification message, volume is handled per-sound below
+              // and should not trigger an NVS commit or client_info response on every chime.
+              cJSON* sound_item = cJSON_GetObjectItem(root, "sound");
+              cJSON* volume_item = cJSON_GetObjectItem(root, "volume");
+              if (cJSON_IsNumber(volume_item) && sound_item == NULL) {
+                int volume_value = volume_item->valueint;
+                if (volume_value < 0) volume_value = 0;
+                if (volume_value > 100) volume_value = 100;
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+                beep_set_volume((uint8_t)volume_value);
+#endif
+                if ((uint8_t)volume_value != nvs_get_volume()) {
+                  nvs_set_volume((uint8_t)volume_value);
+                  ESP_LOGI(TAG, "Updated volume to %d", volume_value);
+                  settings_changed = true;
+                }
+              }
+
               // Check for "hostname"
               cJSON* hostname_item = cJSON_GetObjectItem(root, "hostname");
               if (cJSON_IsString(hostname_item) &&
@@ -426,6 +458,21 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
 
               if (settings_changed) {
                 run_off_ws_task(save_settings_and_report);
+              }
+
+              // Check for "sound"
+              if (cJSON_IsString(sound_item) && (sound_item->valuestring != NULL)) {
+                ESP_LOGI(TAG, "Sound command received via WS: %s", sound_item->valuestring);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+                uint8_t sound_vol = nvs_get_volume();
+                if (cJSON_IsNumber(volume_item)) {
+                  int v = volume_item->valueint;
+                  if (v >= 0 && v <= 100) {
+                    sound_vol = (uint8_t)v;
+                  }
+                }
+                beep_play_sequence_with_volume(sound_item->valuestring, sound_vol);
+#endif
               }
 
               // Check for "reboot"
@@ -609,6 +656,11 @@ void app_main(void) {
   esp_register_shutdown_handler(&display_shutdown);
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+  beep_init();
+  beep_set_volume(nvs_get_volume());
+  if (!nvs_get_skip_boot_animation() && nvs_get_startup_sound()) {
+    beep_play_startup();
+  }
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
   if (!nvs_get_disable_touch()) {
     ESP_LOGI(TAG, "Initializing touch control...");
@@ -922,18 +974,43 @@ void app_main(void) {
       ESP_LOGI(TAG, "Fetching from URL: %s", image_url);
       char* ota_url = NULL;
       char* new_image_url = NULL;
+      char* sound = NULL;
       bool reboot_requested = false;
+      int16_t http_volume = -1;
 
       // Start timing the HTTP fetch
       int64_t fetch_start_us = esp_timer_get_time();
       bool fetch_failed = !wifi_is_connected() ||
                           remote_get(image_url, &webp, &len, &brightness_pct,
                                      &app_dwell_secs, &status_code, &ota_url,
-                                     &new_image_url, &reboot_requested);
+                                     &new_image_url, &reboot_requested,
+                                     &sound, &http_volume);
       int64_t fetch_duration_ms =
           (esp_timer_get_time() - fetch_start_us) / 1000;
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
+
+      if (http_volume >= 0 && http_volume <= 100) {
+        if ((uint8_t)http_volume != nvs_get_volume()) {
+          ESP_LOGI(TAG, "Volume received via HTTP: %d%%", http_volume);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+          beep_set_volume((uint8_t)http_volume);
+#endif
+          nvs_set_volume((uint8_t)http_volume);
+          nvs_persist_volume();
+        }
+      }
+
+      if (sound != NULL) {
+        ESP_LOGI(TAG, "Sound received via HTTP: %s", sound);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+        uint8_t sound_vol = (http_volume >= 0 && http_volume <= 100)
+                                ? (uint8_t)http_volume
+                                : nvs_get_volume();
+        beep_play_sequence_with_volume(sound, sound_vol);
+#endif
+        free(sound);
+      }
 
       if (ota_url != NULL) {
         ESP_LOGI(TAG, "OTA URL received via HTTP: %s", ota_url);
