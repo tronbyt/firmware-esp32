@@ -1145,7 +1145,6 @@ static void handle_touch_event(touch_event_t event) {
         isAnimating = 1;
       } else {
         ESP_LOGI(TAG, "HOLD - Display OFF");
-        saved_brightness = 30;
         display_set_brightness(0);
         isAnimating = 0;
       }
