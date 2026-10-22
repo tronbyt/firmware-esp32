@@ -384,6 +384,8 @@ static void gfx_loop(void *args) {
       break;
     }
 
+    bool loaded = false;
+
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
       ESP_LOGI(TAG, "Displaying image counter=%d", _state->counter);
@@ -395,14 +397,17 @@ static void gfx_loop(void *args) {
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (isAnimating == -1 && !_state->paused) isAnimating = 1;
-
-      // Send websocket notification that we're now displaying this image
-      send_websocket_notification(counter);
+      loaded = true;
     }
 
     if (pdTRUE != xSemaphoreGive(_state->mutex)) {
       ESP_LOGE(TAG, "Could not give gfx mutex");
       continue;
+    }
+
+    if (loaded) {
+      // Send websocket notification that we're now displaying this image
+      send_websocket_notification(counter);
     }
 
     static UBaseType_t last_stack_free = 0;
