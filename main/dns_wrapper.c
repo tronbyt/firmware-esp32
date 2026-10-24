@@ -21,7 +21,12 @@ int __wrap_esp_getaddrinfo(const char *nodename, const char *servname,
     struct in6_addr ipv6;
     if (inet_pton(AF_INET, nodename, &ipv4) == 1 ||
         inet_pton(AF_INET6, nodename, &ipv6) == 1) {
-      return lwip_getaddrinfo(nodename, servname, hints, res);
+      struct addrinfo numeric_hints = {.ai_family = AF_UNSPEC};
+      if (hints != NULL) {
+        numeric_hints = *hints;
+      }
+      numeric_hints.ai_flags |= AI_NUMERICHOST;
+      return lwip_getaddrinfo(nodename, servname, &numeric_hints, res);
     }
 
     const char *mdns_suffix = ".local";

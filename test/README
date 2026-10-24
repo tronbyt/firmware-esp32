@@ -14,6 +14,7 @@ Numeric-address resolver regression check (host C compiler required):
 
     python3 test/run_dns_wrapper_test.py
 
-Covers numeric IPv4/IPv6 addresses, service ports, address-family constraints,
-null hints, ordinary DNS names and mDNS routing. The host check verifies wrapper
+Covers numeric IPv4/IPv6 addresses, service ports, numeric-host flags,
+address-family mismatches, unchanged caller hints, null hints, ordinary DNS
+names and mDNS routing. The host check verifies wrapper
 dispatch and uses the host resolver for numeric-address results.
