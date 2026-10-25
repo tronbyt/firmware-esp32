@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <esp_log.h>
 #include <netdb.h>
 #include <string.h>
@@ -16,6 +17,18 @@ int __wrap_esp_getaddrinfo(const char *nodename, const char *servname,
                            const struct addrinfo *hints,
                            struct addrinfo **res) {
   if (nodename != NULL) {
+    struct in_addr ipv4;
+    struct in6_addr ipv6;
+    if (inet_pton(AF_INET, nodename, &ipv4) == 1 ||
+        inet_pton(AF_INET6, nodename, &ipv6) == 1) {
+      struct addrinfo numeric_hints = {.ai_family = AF_UNSPEC};
+      if (hints != NULL) {
+        numeric_hints = *hints;
+      }
+      numeric_hints.ai_flags |= AI_NUMERICHOST;
+      return lwip_getaddrinfo(nodename, servname, &numeric_hints, res);
+    }
+
     const char *mdns_suffix = ".local";
     const size_t mdns_suffix_len = strlen(mdns_suffix);
     size_t len = strlen(nodename);
