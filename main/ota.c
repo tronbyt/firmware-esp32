@@ -227,7 +227,7 @@ static bool validate_and_rewrite_url(const char *url, char *out_url,
 static const char *ota_fail_detail(esp_err_t err) {
   switch (err) {
     case ESP_ERR_INVALID_VERSION:
-      return "Wrong chip";
+      return "Chip mismatch";
     case ESP_ERR_OTA_VALIDATE_FAILED:
       return "Bad image";
     case ESP_ERR_INVALID_SIZE:
