@@ -2,17 +2,21 @@
 
 #include <arpa/inet.h>
 #include <esp_crt_bundle.h>
+#include <esp_err.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
+#include <spi_flash_mmap.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <http_parser.h>
 #include <lwip/netdb.h>
 #include <lwip/sockets.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "display.h"
 #include "gfx.h"
@@ -219,6 +223,49 @@ static bool validate_and_rewrite_url(const char *url, char *out_url,
   return true;
 }
 
+// Short second-line text for the matrix (64px wide ≈ 10 chars at scale 1).
+static const char *ota_fail_detail(esp_err_t err) {
+  switch (err) {
+    case ESP_ERR_INVALID_VERSION:
+      return "Wrong chip";
+    case ESP_ERR_OTA_VALIDATE_FAILED:
+      return "Bad image";
+    case ESP_ERR_INVALID_SIZE:
+      return "Incomplete";
+    case ESP_ERR_NO_MEM:
+      return "No memory";
+    case ESP_ERR_FLASH_OP_FAIL:
+    case ESP_ERR_FLASH_OP_TIMEOUT:
+      return "Flash err";
+    case ESP_ERR_HTTP_CONNECT:
+    case ESP_ERR_HTTP_FETCH_HEADER:
+    case ESP_ERR_HTTP_INVALID_TRANSPORT:
+      return "HTTP fail";
+    case ESP_FAIL:
+      return "Failed";
+    default:
+      return NULL;
+  }
+}
+
+static void display_ota_fail(esp_err_t err) {
+  char detail_buf[16];
+  const char *detail = ota_fail_detail(err);
+  if (detail == NULL) {
+    const char *name = esp_err_to_name(err);
+    if (strncmp(name, "ESP_ERR_", 8) == 0) {
+      name += 8;
+    }
+    snprintf(detail_buf, sizeof(detail_buf), "%.10s", name);
+    detail = detail_buf;
+  }
+
+  display_clear();
+  display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
+  display_text(detail, 2, 18, 255, 200, 0, 1);
+  display_flip();
+}
+
 void run_ota(const char *url) {
   char final_url[512] = {0};
   if (!validate_and_rewrite_url(url, final_url, sizeof(final_url))) {
@@ -263,9 +310,7 @@ void run_ota(const char *url) {
   esp_err_t err = esp_https_ota_begin(&ota_config, &https_ota_handle);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "ESP HTTPS OTA Begin failed: %s", esp_err_to_name(err));
-    display_clear();
-    display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
-    display_flip();
+    display_ota_fail(err);
     vTaskDelay(pdMS_TO_TICKS(2000));
     gfx_start();
     return;
@@ -324,9 +369,7 @@ void run_ota(const char *url) {
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "OTA Update failed: %s", esp_err_to_name(err));
     esp_https_ota_finish(https_ota_handle);
-    display_clear();
-    display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
-    display_flip();
+    display_ota_fail(err);
     vTaskDelay(pdMS_TO_TICKS(2000));
     gfx_start();
   } else {
@@ -340,9 +383,7 @@ void run_ota(const char *url) {
       esp_restart();
     } else {
       ESP_LOGE(TAG, "OTA Finish failed: %s", esp_err_to_name(err));
-      display_clear();
-      display_text("OTA Fail", 2, 10, 255, 0, 0, 1);
-      display_flip();
+      display_ota_fail(err);
       vTaskDelay(pdMS_TO_TICKS(2000));
       gfx_start();
     }
