@@ -79,7 +79,7 @@ jobs:
           
           # Determine chip type based on target
           case "$target" in
-            tronbyt-s3*|matrixportal-s3*)
+            *s3*|*S3*)
               chip="esp32s3"
               ;;
             *)
