@@ -78,7 +78,7 @@
 #define LAT 26
 #define OE 25
 
-#elif CONFIG_BOARD_WAVESHARE_S3
+#elif CONFIG_BOARD_WAVESHARE_S3 || CONFIG_BOARD_WAVESHARE_S3_WIDE
 #define R1 4
 #define G1 5
 #define BL1 6
@@ -95,6 +95,11 @@
 #define LAT 40
 #define OE 2
 #define CLK 41
+
+#if CONFIG_BOARD_WAVESHARE_S3_WIDE
+#define WIDTH 128
+#define HEIGHT 64
+#endif
 
 #elif CONFIG_BOARD_MATRIXPORTAL_S3_WIDE
 #define R1 42
@@ -349,7 +354,8 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
   const int srcB = src[kChannelOrder[order][2]];
 
   int scale = 1;
-#if CONFIG_BOARD_TRONBYT_S3_WIDE || CONFIG_BOARD_MATRIXPORTAL_S3_WIDE
+#if CONFIG_BOARD_TRONBYT_S3_WIDE || CONFIG_BOARD_MATRIXPORTAL_S3_WIDE || \
+    CONFIG_BOARD_WAVESHARE_S3_WIDE
   if (width == 64 && height == 32) {
     scale = 2;  // Scale up to 128x64
   }

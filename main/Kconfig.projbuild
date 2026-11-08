@@ -194,6 +194,9 @@ menu "Application Configuration"
 
         config BOARD_WAVESHARE_S3
             bool "Waveshare ESP32-S3-RGB-Matrix"
+
+        config BOARD_WAVESHARE_S3_WIDE
+            bool "Waveshare ESP32-S3-RGB-Matrix (128x64)"
     endchoice
 
     config PANEL_HEIGHT_64

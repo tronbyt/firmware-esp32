@@ -176,12 +176,13 @@ static void save_settings_and_report(void* arg1, uint32_t arg2) {
 
 static void reboot_now(void* arg1, uint32_t arg2) { esp_restart(); }
 
-// The PSRAM WebSocket stack has only been validated on the Tronbyt S3 Wide.
-// Enabling it on another board is safe as far as this file is concerned (the
-// deferral below keys off the option), but should be a deliberate change here.
+// The PSRAM WebSocket stack has only been validated on boards with 128x64
+// framebuffers. Enabling it on another board is safe as far as this file is
+// concerned (the deferral below keys off the option), but should be deliberate.
 #if defined(CONFIG_ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM) && \
-    !defined(CONFIG_BOARD_TRONBYT_S3_WIDE)
-#error "ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM is only enabled for the Tronbyt S3 Wide"
+    !defined(CONFIG_BOARD_TRONBYT_S3_WIDE) &&              \
+    !defined(CONFIG_BOARD_WAVESHARE_S3_WIDE)
+#error "ESP_WS_CLIENT_TASK_STACK_IN_EXT_RAM is only enabled for 128x64 S3 boards"
 #endif
 
 // Run work that writes flash from the WebSocket event handler. With
