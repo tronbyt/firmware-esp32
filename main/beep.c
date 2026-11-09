@@ -50,7 +50,7 @@ typedef struct {
   uint8_t volume;
   union {
     beep_kind_t kind;
-    char sequence[128];
+    char sequence[256];
   };
 } beep_msg_t;
 
@@ -100,9 +100,14 @@ static void write_silence(int ms) {
   while (total_frames > 0) {
     int chunk = (total_frames > CHUNK_FRAMES) ? CHUNK_FRAMES : total_frames;
     size_t written = 0;
-    i2s_channel_write(s_tx, zero_buf, chunk * 2 * sizeof(int16_t), &written,
-                      pdMS_TO_TICKS(500));
-    total_frames -= chunk;
+    esp_err_t err = i2s_channel_write(
+        s_tx, zero_buf, chunk * 2 * sizeof(int16_t), &written,
+        pdMS_TO_TICKS(500));
+    if (err != ESP_OK || written == 0) {
+      break;
+    }
+    int frames_written = (int)(written / (2 * sizeof(int16_t)));
+    total_frames -= frames_written;
   }
 }
 
@@ -137,9 +142,13 @@ static void write_tone(uint16_t hz, int ms, uint8_t volume) {
       buf[i * 2 + 1] = sample;
     }
     size_t written = 0;
-    i2s_channel_write(s_tx, buf, chunk * 2 * sizeof(int16_t), &written,
-                      pdMS_TO_TICKS(500));
-    frame_idx += chunk;
+    esp_err_t err = i2s_channel_write(s_tx, buf, chunk * 2 * sizeof(int16_t),
+                                      &written, pdMS_TO_TICKS(500));
+    if (err != ESP_OK || written == 0) {
+      break;
+    }
+    int frames_written = (int)(written / (2 * sizeof(int16_t)));
+    frame_idx += frames_written;
   }
 }
 
@@ -162,7 +171,7 @@ static void play_sequence(const char* pattern, uint8_t volume) {
   if (volume == 0 || pattern == NULL || *pattern == '\0') {
     return;
   }
-  char copy[128];
+  char copy[256];
   strncpy(copy, pattern, sizeof(copy) - 1);
   copy[sizeof(copy) - 1] = '\0';
 
@@ -170,13 +179,22 @@ static void play_sequence(const char* pattern, uint8_t volume) {
     write_pad();
     char* saveptr = NULL;
     char* token = strtok_r(copy, ",", &saveptr);
+    int total_sequence_ms = 0;
+    const int max_sequence_ms = 10000;
     while (token != NULL) {
+      if (total_sequence_ms >= max_sequence_ms) {
+        break;
+      }
       int hz = 0, ms = 0;
       if (sscanf(token, "%d:%d", &hz, &ms) == 2 && ms > 0) {
         // Clamp duration to prevent integer overflow and soft-lock
         if (ms > 10000) {
           ms = 10000;
         }
+        if (total_sequence_ms + ms > max_sequence_ms) {
+          ms = max_sequence_ms - total_sequence_ms;
+        }
+        total_sequence_ms += ms;
         if (hz <= 0) {
           write_silence(ms);
         } else {
@@ -305,6 +323,12 @@ void beep_play_sequence_with_volume(const char* pattern, uint8_t volume) {
   };
   strncpy(msg.sequence, pattern, sizeof(msg.sequence) - 1);
   msg.sequence[sizeof(msg.sequence) - 1] = '\0';
+  if (strlen(pattern) >= sizeof(msg.sequence) - 1) {
+    char* last_comma = strrchr(msg.sequence, ',');
+    if (last_comma != NULL) {
+      *last_comma = '\0';
+    }
+  }
   xQueueSend(s_queue, &msg, 0);
 }
 

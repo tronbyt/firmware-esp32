@@ -393,7 +393,10 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               // and should not trigger an NVS commit or client_info response on every chime.
               cJSON* sound_item = cJSON_GetObjectItem(root, "sound");
               cJSON* volume_item = cJSON_GetObjectItem(root, "volume");
-              if (cJSON_IsNumber(volume_item) && sound_item == NULL) {
+              bool has_sound = cJSON_IsString(sound_item) &&
+                               (sound_item->valuestring != NULL) &&
+                               (sound_item->valuestring[0] != '\0');
+              if (cJSON_IsNumber(volume_item) && !has_sound) {
                 int volume_value = volume_item->valueint;
                 if (volume_value < 0) volume_value = 0;
                 if (volume_value > 100) volume_value = 100;
@@ -462,7 +465,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
               }
 
               // Check for "sound"
-              if (cJSON_IsString(sound_item) && (sound_item->valuestring != NULL)) {
+              if (has_sound) {
                 ESP_LOGI(TAG, "Sound command received via WS: %s", sound_item->valuestring);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
                 uint8_t sound_vol = nvs_get_volume();
@@ -472,10 +475,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                     sound_vol = (uint8_t)v;
                   }
                 }
-                if (gfx_has_queued_image()) {
-                  ESP_LOGI(TAG, "Queued image waiting to display - deferring WS sound until display");
-                  gfx_set_pending_sound(sound_item->valuestring, sound_vol);
-                } else {
+                if (!gfx_set_pending_sound_if_queued(sound_item->valuestring, sound_vol)) {
                   beep_play_sequence_with_volume(sound_item->valuestring, sound_vol);
                 }
 #endif
@@ -664,7 +664,7 @@ void app_main(void) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   beep_init();
   beep_set_volume(nvs_get_volume());
-  if (!nvs_get_skip_boot_animation() && nvs_get_startup_sound()) {
+  if (nvs_get_startup_sound()) {
     beep_play_startup();
   }
   // Initialize touch controls (GPIO33 on Tidbyt Gen2)
@@ -996,14 +996,16 @@ void app_main(void) {
 
       ESP_LOGI(TAG, "HTTP fetch returned in %lld ms", fetch_duration_ms);
 
-      if (http_volume >= 0 && http_volume <= 100) {
+      if (http_volume >= 0 && http_volume <= 100 && sound == NULL) {
         if ((uint8_t)http_volume != nvs_get_volume()) {
           ESP_LOGI(TAG, "Volume received via HTTP: %d%%", http_volume);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
           beep_set_volume((uint8_t)http_volume);
 #endif
           nvs_set_volume((uint8_t)http_volume);
-          nvs_persist_volume();
+          if (nvs_persist_volume() != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to persist volume to NVS");
+          }
         }
       }
 
@@ -1059,20 +1061,21 @@ void app_main(void) {
         display_set_brightness(brightness_pct);
         ESP_LOGI(TAG, "Queuing new webp (%d bytes)", len);
 
-        int queued_counter = gfx_update(webp, len, app_dwell_secs);
-        // Do not free(webp) here; ownership is transferred to gfx
-        webp = NULL;
-
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
+        uint8_t sound_vol = (http_volume >= 0 && http_volume <= 100)
+                                ? (uint8_t)http_volume
+                                : nvs_get_volume();
+        int queued_counter = gfx_update_with_sound(webp, len, app_dwell_secs,
+                                                   sound, sound_vol);
         if (sound != NULL) {
-          uint8_t sound_vol = (http_volume >= 0 && http_volume <= 100)
-                                  ? (uint8_t)http_volume
-                                  : nvs_get_volume();
-          gfx_set_pending_sound(sound, sound_vol);
           free(sound);
           sound = NULL;
         }
+#else
+        int queued_counter = gfx_update(webp, len, app_dwell_secs);
 #endif
+        // Do not free(webp) here; ownership is transferred to gfx
+        webp = NULL;
 
         // Wait for the current animation to finish (isAnimating will be 0)
         if (isAnimating > 0) {
