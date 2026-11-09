@@ -10,6 +10,9 @@
 #include <webp/demux.h>
 
 #include "assets.h"
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+#include "beep.h"
+#endif
 #include "display.h"
 #include "esp_timer.h"
 #include "nvs_settings.h"
@@ -33,6 +36,10 @@ struct gfx_state {
   esp_websocket_client_handle_t
       ws_handle;  // Websocket handle for sending notifications
   volatile bool paused;
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+  char *pending_sound;
+  uint8_t pending_volume;
+#endif
 };
 
 static struct gfx_state *_state = NULL;
@@ -237,7 +244,10 @@ static void send_websocket_notification(int counter) {
   }
 }
 
-int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
+int gfx_update_with_sound(void *webp, size_t len, int32_t dwell_secs,
+                          const char *sound, uint8_t volume) {
+  if (!_state) return -1;
+
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
     return -1;  // Return negative on error
@@ -253,6 +263,12 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
              _state->counter);
     free(_state->buf);
     _state->buf = NULL;
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+    if (_state->pending_sound) {
+      free(_state->pending_sound);
+      _state->pending_sound = NULL;
+    }
+#endif
   }
 
   // Take ownership of new buffer (no copy)
@@ -261,6 +277,20 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
   _state->dwell_secs = dwell_secs;
   _state->counter++;
   int counter = _state->counter;
+
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+  if (_state->pending_sound) {
+    free(_state->pending_sound);
+    _state->pending_sound = NULL;
+  }
+  if (sound != NULL && sound[0] != '\0') {
+    _state->pending_sound = strdup(sound);
+    _state->pending_volume = volume;
+    ESP_LOGI(TAG, "Attached pending sound to image counter=%d: %s (vol %u)",
+             counter, _state->pending_sound, _state->pending_volume);
+  }
+#endif
+
   ESP_LOGI(TAG, "Queued image counter=%d size=%zu dwell=%d", counter, len,
            dwell_secs);
 
@@ -286,6 +316,10 @@ int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
                    // to be loaded
 }
 
+int gfx_update(void *webp, size_t len, int32_t dwell_secs) {
+  return gfx_update_with_sound(webp, len, dwell_secs, NULL, 0);
+}
+
 int gfx_get_loaded_counter(void) {
   if (!_state) return -1;
 
@@ -303,6 +337,79 @@ int gfx_get_loaded_counter(void) {
 
   return loaded;
 }
+
+bool gfx_has_queued_image(void) {
+  if (!_state) return false;
+
+  if (pdTRUE != xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
+    ESP_LOGE(TAG, "Could not take gfx mutex to check queued image");
+    return false;
+  }
+
+  bool has_queued = (_state->buf != NULL);
+
+  if (pdTRUE != xSemaphoreGive(_state->mutex)) {
+    ESP_LOGE(TAG, "Could not give gfx mutex");
+  }
+
+  return has_queued;
+}
+
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+bool gfx_set_pending_sound_if_queued(const char *sound, uint8_t volume) {
+  if (!_state) return false;
+
+  if (pdTRUE != xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
+    ESP_LOGE(TAG, "Could not take gfx mutex to check and set pending sound");
+    return false;
+  }
+
+  bool queued = (_state->buf != NULL);
+  if (queued) {
+    if (_state->pending_sound) {
+      free(_state->pending_sound);
+      _state->pending_sound = NULL;
+    }
+    if (sound && sound[0] != '\0') {
+      _state->pending_sound = strdup(sound);
+      _state->pending_volume = volume;
+      ESP_LOGI(TAG, "Attached WS pending sound to queued image (vol %u): %s",
+               _state->pending_volume, _state->pending_sound);
+    }
+  }
+
+  if (pdTRUE != xSemaphoreGive(_state->mutex)) {
+    ESP_LOGE(TAG, "Could not give gfx mutex");
+  }
+
+  return queued;
+}
+
+void gfx_set_pending_sound(const char *sound, uint8_t volume) {
+  if (!_state) return;
+
+  if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
+    ESP_LOGE(TAG, "Could not take gfx mutex to set pending sound");
+    return;
+  }
+
+  if (_state->pending_sound) {
+    free(_state->pending_sound);
+    _state->pending_sound = NULL;
+  }
+
+  if (sound && sound[0] != '\0') {
+    _state->pending_sound = strdup(sound);
+    _state->pending_volume = volume;
+    ESP_LOGI(TAG, "Stored pending sound for next display: %s (vol %u)",
+             _state->pending_sound, _state->pending_volume);
+  }
+
+  if (pdTRUE != xSemaphoreGive(_state->mutex)) {
+    ESP_LOGE(TAG, "Could not give gfx mutex");
+  }
+}
+#endif
 
 int gfx_display_asset(const char *asset_type) {
   const uint8_t *asset_data = NULL;
@@ -359,7 +466,15 @@ void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
   display_text(text, x, y, r, g, b, scale);
 }
 
-void gfx_shutdown(void) { display_shutdown(); }
+void gfx_shutdown(void) {
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+  if (_state && _state->pending_sound) {
+    free(_state->pending_sound);
+    _state->pending_sound = NULL;
+  }
+#endif
+  display_shutdown();
+}
 
 static void gfx_loop(void *args) {
   ESP_LOGI(TAG, "gfx_loop ENTERED");
@@ -394,6 +509,9 @@ static void gfx_loop(void *args) {
       len = _state->len;
       dwell_secs = _state->dwell_secs;
       _state->buf = NULL;  // gfx_loop now owns the buffer
+      counter = _state->counter;
+      _state->loaded_counter = counter;  // Signal that we've loaded this image
+      if (isAnimating == -1 && !_state->paused) isAnimating = 1;
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (isAnimating == -1 && !_state->paused) isAnimating = 1;
@@ -466,6 +584,15 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   if (decoder == NULL) {
     ESP_LOGE(TAG, "Could not create WebP decoder");
     draw_error_indicator_pixel();
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+    if (pdTRUE == xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
+      if (_state->pending_sound) {
+        free(_state->pending_sound);
+        _state->pending_sound = NULL;
+      }
+      xSemaphoreGive(_state->mutex);
+    }
+#endif
     return 1;
   }
 
@@ -474,6 +601,15 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     ESP_LOGE(TAG, "Could not get WebP animation");
     draw_error_indicator_pixel();
     WebPAnimDecoderDelete(decoder);  // Clean up decoder before returning
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+    if (pdTRUE == xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
+      if (_state->pending_sound) {
+        free(_state->pending_sound);
+        _state->pending_sound = NULL;
+      }
+      xSemaphoreGive(_state->mutex);
+    }
+#endif
     return 1;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
@@ -497,6 +633,24 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
       drawStartTick = xTaskGetTickCount();
       display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0,
                    1, 2);
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+      char *sound_to_play = NULL;
+      uint8_t sound_vol = 0;
+      if (pdTRUE == xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
+        if (_state->pending_sound != NULL) {
+          sound_to_play = _state->pending_sound;
+          sound_vol = _state->pending_volume;
+          _state->pending_sound = NULL;
+        }
+        xSemaphoreGive(_state->mutex);
+      }
+      if (sound_to_play != NULL) {
+        ESP_LOGI(TAG, "Playing deferred notification sound on display: %s",
+                 sound_to_play);
+        beep_play_sequence_with_volume(sound_to_play, sound_vol);
+        free(sound_to_play);
+      }
+#endif
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }

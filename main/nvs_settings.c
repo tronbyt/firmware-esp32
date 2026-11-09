@@ -571,26 +571,38 @@ esp_err_t nvs_save_settings(void) {
   err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
   if (err != ESP_OK) return err;
 
-  nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid);
-  nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password);
-  nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname);
-  nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr);
-  nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server);
-  nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url);
-  nvs_set_str(nvs_handle, NVS_KEY_API_KEY, s_api_key);
+  esp_err_t set_err = ESP_OK;
+#define CHECK_NVS_SET(expr) do { \
+    esp_err_t _e = (expr); \
+    if (_e != ESP_OK && set_err == ESP_OK) set_err = _e; \
+  } while (0)
 
-  nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_COLOR_ORDER, (uint8_t)s_color_order);
-  nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save);
-  nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION, s_skip_display_version ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_SKIP_BOOT, s_skip_boot_animation ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, s_disable_touch ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_TOUCH_BEEP, s_touch_beep ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_STARTUP_SOUND, s_startup_sound ? 1 : 0);
-  nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness);
-  nvs_set_u8(nvs_handle, NVS_KEY_VOLUME, s_volume);
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_SSID, s_wifi_ssid));
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_PASSWORD, s_wifi_password));
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_HOSTNAME, s_hostname));
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_SYSLOG_ADDR, s_syslog_addr));
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_SNTP_SERVER, s_sntp_server));
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_IMAGE_URL, s_image_url));
+  CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_API_KEY, s_api_key));
+
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_COLOR_ORDER, (uint8_t)s_color_order));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION, s_skip_display_version ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_SKIP_BOOT, s_skip_boot_animation ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_AP_MODE, s_ap_mode ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_PREFER_IPV6, s_prefer_ipv6 ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_DISABLE_TOUCH, s_disable_touch ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_TOUCH_BEEP, s_touch_beep ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_STARTUP_SOUND, s_startup_sound ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_VOLUME, s_volume));
+#undef CHECK_NVS_SET
+
+  if (set_err != ESP_OK) {
+    nvs_close(nvs_handle);
+    return set_err;
+  }
 
   err = nvs_commit(nvs_handle);
   nvs_close(nvs_handle);
