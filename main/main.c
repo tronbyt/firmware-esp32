@@ -472,7 +472,12 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                     sound_vol = (uint8_t)v;
                   }
                 }
-                beep_play_sequence_with_volume(sound_item->valuestring, sound_vol);
+                if (gfx_has_queued_image()) {
+                  ESP_LOGI(TAG, "Queued image waiting to display - deferring WS sound until display");
+                  gfx_set_pending_sound(sound_item->valuestring, sound_vol);
+                } else {
+                  beep_play_sequence_with_volume(sound_item->valuestring, sound_vol);
+                }
 #endif
               }
 
@@ -1004,13 +1009,6 @@ void app_main(void) {
 
       if (sound != NULL) {
         ESP_LOGI(TAG, "Sound received via HTTP: %s", sound);
-#ifdef CONFIG_BOARD_TIDBYT_GEN2
-        uint8_t sound_vol = (http_volume >= 0 && http_volume <= 100)
-                                ? (uint8_t)http_volume
-                                : nvs_get_volume();
-        beep_play_sequence_with_volume(sound, sound_vol);
-#endif
-        free(sound);
       }
 
       if (ota_url != NULL) {
@@ -1035,6 +1033,10 @@ void app_main(void) {
       }
 
       if (fetch_failed) {
+        if (sound != NULL) {
+          free(sound);
+          sound = NULL;
+        }
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",
                  status_code);
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -1061,6 +1063,17 @@ void app_main(void) {
         // Do not free(webp) here; ownership is transferred to gfx
         webp = NULL;
 
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+        if (sound != NULL) {
+          uint8_t sound_vol = (http_volume >= 0 && http_volume <= 100)
+                                  ? (uint8_t)http_volume
+                                  : nvs_get_volume();
+          gfx_set_pending_sound(sound, sound_vol);
+          free(sound);
+          sound = NULL;
+        }
+#endif
+
         // Wait for the current animation to finish (isAnimating will be 0)
         if (isAnimating > 0) {
           ESP_LOGI(TAG, "Waiting for current webp to finish");
@@ -1083,6 +1096,11 @@ void app_main(void) {
           ESP_LOGE(TAG, "Timeout waiting for gfx task to load image");
         } else {
           ESP_LOGI(TAG, "Gfx task loaded image counter %d ms", queued_counter);
+        }
+
+        if (sound != NULL) {
+          free(sound);
+          sound = NULL;
         }
 
         // ESP_LOGD(TAG, "Setting isAnimating to 1");
