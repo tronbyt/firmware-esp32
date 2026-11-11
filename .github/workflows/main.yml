@@ -206,15 +206,15 @@ jobs:
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
              [ "${{ inputs.replace_existing }}" = "true" ]; then
-            if gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-              echo "Deleting existing release and tag: $tag"
-              gh release delete "$tag" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
-            else
-              repo="${GITHUB_REPOSITORY}"
-              if gh api "repos/${repo}/git/ref/tags/${tag}" >/dev/null 2>&1; then
-                echo "Deleting orphaned tag (no release): $tag"
-                gh api -X DELETE "repos/${repo}/git/refs/tags/${tag}"
-              fi
+            repo="${GITHUB_REPOSITORY}"
+            if gh release view "$tag" --repo "${repo}" >/dev/null 2>&1; then
+              echo "Deleting existing release: $tag"
+              # Draft releases may not have a git tag yet; avoid --cleanup-tag (HTTP 422).
+              gh release delete "$tag" --repo "${repo}" --yes
+            fi
+            if gh api "repos/${repo}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+              echo "Deleting git tag: $tag"
+              gh api -X DELETE "repos/${repo}/git/refs/tags/${tag}"
             fi
           fi
 
