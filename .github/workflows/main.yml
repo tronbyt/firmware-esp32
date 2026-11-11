@@ -9,6 +9,32 @@ on:
   pull_request:
     branches:
       - "**"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit SHA to build
+        required: false
+        default: main
+        type: string
+      release_tag:
+        description: >-
+          Git tag for the draft release (default alpha). replace_existing
+          overwrites the previous draft when the tag name is reused.
+        required: false
+        default: alpha
+        type: string
+      draft:
+        description: Create as draft (not public until you publish; use a token to download)
+        required: true
+        default: true
+        type: boolean
+      replace_existing:
+        description: >-
+          If a release (and tag) with release_tag already exists, delete it
+          before uploading new binaries (safe rolling "alpha" channel).
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -41,6 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
           fetch-depth: 0
 
       - name: Git Safe Directory
@@ -56,7 +83,9 @@ jobs:
 
       - name: Generate version header
         run: |
-          if git describe --tags --abbrev=0 2>/dev/null; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(git describe --tags --always --dirty | sed 's/^v//')
+          elif git describe --tags --abbrev=0 2>/dev/null; then
             VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
           else
             VERSION=$(git describe --always --dirty)
@@ -121,7 +150,9 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags/')
+    if: >-
+      startsWith(github.ref, 'refs/tags/') ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Download All Artifacts
@@ -134,14 +165,70 @@ jobs:
       - name: Display Artifacts
         run: ls -R release-artifacts/
 
+      - uses: actions/checkout@v6
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.release_tag }}"
+            if [ -z "$tag" ]; then
+              tag="alpha"
+            fi
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            title="${GITHUB_REPOSITORY#*/} ${tag}"
+            echo "title=$title" >> "$GITHUB_OUTPUT"
+            if [ "${{ inputs.draft }}" = "true" ]; then
+              echo "draft=1" >> "$GITHUB_OUTPUT"
+            else
+              echo "draft=0" >> "$GITHUB_OUTPUT"
+            fi
+            echo "target=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          else
+            tag="${GITHUB_REF_NAME}"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "title=${GITHUB_REPOSITORY#*/} ${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "draft=0" >> "$GITHUB_OUTPUT"
+            echo "target=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
         run: |
-          # Collect all artifacts and pass them to gh release create as positional arguments
-          gh release create "$tag" \
-              --repo="${GITHUB_REPOSITORY}" \
-              --title="${GITHUB_REPOSITORY#*/} ${tag#v}" \
-              --generate-notes \
-              $(find release-artifacts -type f -print0 | xargs -0)
+          tag="${{ steps.meta.outputs.tag }}"
+          title="${{ steps.meta.outputs.title }}"
+          target="${{ steps.meta.outputs.target }}"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ inputs.replace_existing }}" = "true" ]; then
+            if gh release view "$tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "Deleting existing release and tag: $tag"
+              gh release delete "$tag" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
+            else
+              repo="${GITHUB_REPOSITORY}"
+              if gh api "repos/${repo}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+                echo "Deleting orphaned tag (no release): $tag"
+                gh api -X DELETE "repos/${repo}/git/refs/tags/${tag}"
+              fi
+            fi
+          fi
+
+          args=(
+            "$tag"
+            --repo="${GITHUB_REPOSITORY}"
+            --title="$title"
+            --generate-notes
+          )
+          if [ "${{ steps.meta.outputs.draft }}" = "1" ]; then
+            args+=(--draft)
+          fi
+          if [ -n "$target" ]; then
+            args+=(--target "$target")
+          fi
+          mapfile -d '' files < <(find release-artifacts -type f -print0)
+          gh release create "${args[@]}" "${files[@]}"
