@@ -155,6 +155,12 @@ jobs:
       github.event_name == 'workflow_dispatch'
 
     steps:
+      - uses: actions/checkout@v6
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
       - name: Download All Artifacts
         uses: actions/download-artifact@v7
         with:
@@ -164,12 +170,6 @@ jobs:
 
       - name: Display Artifacts
         run: ls -R release-artifacts/
-
-      - uses: actions/checkout@v6
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
 
       - name: Resolve release metadata
         id: meta
@@ -231,4 +231,9 @@ jobs:
             args+=(--target "$target")
           fi
           mapfile -d '' files < <(find release-artifacts -type f -print0)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No firmware binaries found under release-artifacts/"
+            exit 1
+          fi
+          echo "Uploading ${#files[@]} files to release ${tag}"
           gh release create "${args[@]}" "${files[@]}"
