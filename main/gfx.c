@@ -543,6 +543,10 @@ static void gfx_loop(void *args) {
 
     if (pdTRUE != xSemaphoreGive(_state->mutex)) {
       ESP_LOGE(TAG, "Could not give gfx mutex");
+      if (notification_sound != NULL) {
+        free(notification_sound);
+        notification_sound = NULL;
+      }
       continue;
     }
 
@@ -686,6 +690,11 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     }
   }
   WebPAnimDecoderDelete(decoder);
+
+  if (notification_sound != NULL) {
+    free(notification_sound);
+    notification_sound = NULL;
+  }
 
   // ESP_LOGI(TAG, "Setting isAnimating to 0");
   if (*isAnimating != -1) {
