@@ -39,6 +39,7 @@ struct gfx_state {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   char *pending_sound;
   uint8_t pending_volume;
+  int pending_sound_counter;  // image counter that owns pending_sound (0 = none)
 #endif
 };
 
@@ -46,7 +47,8 @@ static struct gfx_state *_state = NULL;
 
 static void gfx_loop(void *arg);
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     volatile int32_t *isAnimating);
+                     volatile int32_t *isAnimating, char *notification_sound,
+                     uint8_t notification_volume);
 static void send_websocket_notification(int counter);
 
 int gfx_initialize(const char *img_url) {
@@ -267,6 +269,7 @@ int gfx_update_with_sound(void *webp, size_t len, int32_t dwell_secs,
     if (_state->pending_sound) {
       free(_state->pending_sound);
       _state->pending_sound = NULL;
+      _state->pending_sound_counter = 0;
     }
 #endif
   }
@@ -282,10 +285,12 @@ int gfx_update_with_sound(void *webp, size_t len, int32_t dwell_secs,
   if (_state->pending_sound) {
     free(_state->pending_sound);
     _state->pending_sound = NULL;
+    _state->pending_sound_counter = 0;
   }
   if (sound != NULL && sound[0] != '\0') {
     _state->pending_sound = strdup(sound);
     _state->pending_volume = volume;
+    _state->pending_sound_counter = counter;
     ESP_LOGI(TAG, "Attached pending sound to image counter=%d: %s (vol %u)",
              counter, _state->pending_sound, _state->pending_volume);
   }
@@ -369,12 +374,17 @@ bool gfx_set_pending_sound_if_queued(const char *sound, uint8_t volume) {
     if (_state->pending_sound) {
       free(_state->pending_sound);
       _state->pending_sound = NULL;
+      _state->pending_sound_counter = 0;
     }
     if (sound && sound[0] != '\0') {
       _state->pending_sound = strdup(sound);
       _state->pending_volume = volume;
-      ESP_LOGI(TAG, "Attached WS pending sound to queued image (vol %u): %s",
-               _state->pending_volume, _state->pending_sound);
+      _state->pending_sound_counter = _state->counter;
+      ESP_LOGI(TAG,
+               "Attached WS pending sound to queued image counter=%d "
+               "(vol %u): %s",
+               _state->pending_sound_counter, _state->pending_volume,
+               _state->pending_sound);
     }
   }
 
@@ -396,13 +406,17 @@ void gfx_set_pending_sound(const char *sound, uint8_t volume) {
   if (_state->pending_sound) {
     free(_state->pending_sound);
     _state->pending_sound = NULL;
+    _state->pending_sound_counter = 0;
   }
 
   if (sound && sound[0] != '\0') {
     _state->pending_sound = strdup(sound);
     _state->pending_volume = volume;
-    ESP_LOGI(TAG, "Stored pending sound for next display: %s (vol %u)",
-             _state->pending_sound, _state->pending_volume);
+    _state->pending_sound_counter =
+        _state->buf ? _state->counter : _state->counter + 1;
+    ESP_LOGI(TAG, "Stored pending sound for image counter=%d: %s (vol %u)",
+             _state->pending_sound_counter, _state->pending_sound,
+             _state->pending_volume);
   }
 
   if (pdTRUE != xSemaphoreGive(_state->mutex)) {
@@ -471,6 +485,7 @@ void gfx_shutdown(void) {
   if (_state && _state->pending_sound) {
     free(_state->pending_sound);
     _state->pending_sound = NULL;
+    _state->pending_sound_counter = 0;
   }
 #endif
   display_shutdown();
@@ -500,6 +515,8 @@ static void gfx_loop(void *args) {
     }
 
     bool loaded = false;
+    char *notification_sound = NULL;
+    uint8_t notification_volume = 0;
 
     // If there's new data, take ownership of buffer
     if (counter != _state->counter) {
@@ -512,9 +529,15 @@ static void gfx_loop(void *args) {
       counter = _state->counter;
       _state->loaded_counter = counter;  // Signal that we've loaded this image
       if (isAnimating == -1 && !_state->paused) isAnimating = 1;
-      counter = _state->counter;
-      _state->loaded_counter = counter;  // Signal that we've loaded this image
-      if (isAnimating == -1 && !_state->paused) isAnimating = 1;
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+      if (_state->pending_sound != NULL &&
+          _state->pending_sound_counter == counter) {
+        notification_sound = _state->pending_sound;
+        notification_volume = _state->pending_volume;
+        _state->pending_sound = NULL;
+        _state->pending_sound_counter = 0;
+      }
+#endif
       loaded = true;
     }
 
@@ -536,7 +559,8 @@ static void gfx_loop(void *args) {
     }
 
     if (webp && len > 0) {
-      if (draw_webp(webp, len, dwell_secs, &isAnimating)) {
+      if (draw_webp(webp, len, dwell_secs, &isAnimating, notification_sound,
+                    notification_volume)) {
         ESP_LOGE(TAG, "Could not draw webp");
         draw_error_indicator_pixel();
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
@@ -554,7 +578,8 @@ static void gfx_loop(void *args) {
 }
 
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
-                     volatile int32_t *isAnimating) {
+                     volatile int32_t *isAnimating, char *notification_sound,
+                     uint8_t notification_volume) {
   // Set up WebP decoder
   // ESP_LOGI(TAG, "starting draw_webp");
   int app_dwell_secs = dwell_secs;
@@ -584,15 +609,9 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   if (decoder == NULL) {
     ESP_LOGE(TAG, "Could not create WebP decoder");
     draw_error_indicator_pixel();
-#ifdef CONFIG_BOARD_TIDBYT_GEN2
-    if (pdTRUE == xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
-      if (_state->pending_sound) {
-        free(_state->pending_sound);
-        _state->pending_sound = NULL;
-      }
-      xSemaphoreGive(_state->mutex);
+    if (notification_sound != NULL) {
+      free(notification_sound);
     }
-#endif
     return 1;
   }
 
@@ -601,15 +620,9 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     ESP_LOGE(TAG, "Could not get WebP animation");
     draw_error_indicator_pixel();
     WebPAnimDecoderDelete(decoder);  // Clean up decoder before returning
-#ifdef CONFIG_BOARD_TIDBYT_GEN2
-    if (pdTRUE == xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
-      if (_state->pending_sound) {
-        free(_state->pending_sound);
-        _state->pending_sound = NULL;
-      }
-      xSemaphoreGive(_state->mutex);
+    if (notification_sound != NULL) {
+      free(notification_sound);
     }
-#endif
     return 1;
   }
   // ESP_LOGI(TAG, "frame count: %d", animation.frame_count);
@@ -633,24 +646,15 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
       drawStartTick = xTaskGetTickCount();
       display_draw(pix, animation.canvas_width, animation.canvas_height, 4, 0,
                    1, 2);
+      if (notification_sound != NULL) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
-      char *sound_to_play = NULL;
-      uint8_t sound_vol = 0;
-      if (pdTRUE == xSemaphoreTake(_state->mutex, pdMS_TO_TICKS(50))) {
-        if (_state->pending_sound != NULL) {
-          sound_to_play = _state->pending_sound;
-          sound_vol = _state->pending_volume;
-          _state->pending_sound = NULL;
-        }
-        xSemaphoreGive(_state->mutex);
-      }
-      if (sound_to_play != NULL) {
         ESP_LOGI(TAG, "Playing deferred notification sound on display: %s",
-                 sound_to_play);
-        beep_play_sequence_with_volume(sound_to_play, sound_vol);
-        free(sound_to_play);
-      }
+                 notification_sound);
+        beep_play_sequence_with_volume(notification_sound, notification_volume);
 #endif
+        free(notification_sound);
+        notification_sound = NULL;
+      }
       delay = timestamp - lastTimestamp;
       lastTimestamp = timestamp;
     }
