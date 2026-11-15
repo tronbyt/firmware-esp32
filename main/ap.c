@@ -664,7 +664,11 @@ static size_t json_string(char *out, size_t cap, const char *s) {
 // The answer is sent one network at a time, so no buffer has to hold the
 // whole list. A failed scan is answered with status 500.
 static esp_err_t scan_handler(httpd_req_t *req) {
-  wifi_ap_record_t *aps = calloc(SCAN_MAX_APS, sizeof(wifi_ap_record_t));
+  // Prefer external RAM where there is some: boards with a 128x64 panel have
+  // little internal RAM left
+  wifi_ap_record_t *aps =
+      heap_caps_calloc_prefer(SCAN_MAX_APS, sizeof(wifi_ap_record_t), 2,
+                              MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
   if (aps == NULL) {
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server Error");
     return ESP_FAIL;
