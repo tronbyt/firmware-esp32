@@ -77,16 +77,18 @@ static const char *s_html_part1 =
     "b=document.getElementById('scan_btn'),i=document.getElementById('ssid');"
     "b.disabled=true;n.innerHTML='';n.add(new Option('Scanning...',''));"
     "var x=new XMLHttpRequest();x.open('GET','/scan',true);x.timeout=20000;"
-    "x.onload=function(){b.disabled=false;n.innerHTML='';var d;"
-    "try{d=JSON.parse(x.responseText);}catch(e){d={aps:[]};}"
+    "function fail(){b.disabled=false;n.innerHTML='';"
+    "n.add(new Option('Scan failed - type the name below',''));}"
+    "x.onload=function(){var d;if(x.status!=200){fail();return;}"
+    "try{d=JSON.parse(x.responseText);}catch(e){fail();return;}"
+    "b.disabled=false;n.innerHTML='';"
     "if(d.cur&&!i.value){i.value=d.cur;}"
     "n.add(new Option(d.aps.length?'Choose a network ('+d.aps.length+' found)'"
     ":'No networks found',''));"
     "d.aps.forEach(function(a){var o=new Option(a.s+'  ('+a.r+' dBm'+"
     "(a.l?', secured':', open')+')',a.s);"
     "if(a.s==i.value){o.selected=true;}n.add(o);});};"
-    "x.onerror=x.ontimeout=function(){b.disabled=false;n.innerHTML='';"
-    "n.add(new Option('Scan failed - type the name below',''));};"
+    "x.onerror=x.ontimeout=fail;"
     "x.send();}"
     "window.addEventListener('load',scan);"
     "</script>"
@@ -622,50 +624,75 @@ static esp_err_t root_handler(httpd_req_t *req) {
   return ret;
 }
 
-// Appends s as a JSON string (with quotes) to out; returns the new length.
-static size_t json_append_string(char *out, size_t pos, size_t cap,
-                                 const char *s) {
-  if (pos + 1 < cap) out[pos++] = '"';
-  for (; *s && pos + 8 < cap; s++) {
+#define SCAN_MAX_APS 16
+// Longest JSON form of an SSID: 32 bytes, each as \u00XX, plus the quotes
+#define JSON_SSID_MAX (32 * 6 + 2)
+
+// Writes s as a JSON string (with quotes) to out and returns its length. It
+// never writes more than cap bytes; a string that does not fit is cut short.
+static size_t json_string(char *out, size_t cap, const char *s) {
+  static const char hex[] = "0123456789abcdef";
+  size_t pos = 0;
+  if (cap < 3) {
+    if (cap > 0) out[0] = '\0';
+    return 0;
+  }
+  out[pos++] = '"';
+  // 6 bytes for the longest escape, 2 for the closing quote and the NUL
+  for (; *s && pos + 8 <= cap; s++) {
     unsigned char ch = (unsigned char)*s;
     if (ch == '"' || ch == '\\') {
       out[pos++] = '\\';
       out[pos++] = (char)ch;
     } else if (ch < 0x20) {
-      pos += snprintf(out + pos, cap - pos, "\\u%04x", ch);
+      out[pos++] = '\\';
+      out[pos++] = 'u';
+      out[pos++] = '0';
+      out[pos++] = '0';
+      out[pos++] = hex[ch >> 4];
+      out[pos++] = hex[ch & 0x0f];
     } else {
       out[pos++] = (char)ch;
     }
   }
-  if (pos + 1 < cap) out[pos++] = '"';
+  out[pos++] = '"';
   out[pos] = '\0';
   return pos;
 }
 
-#define SCAN_MAX_APS 20
-
 // GET /scan -> {"cur":"<stored ssid>","aps":[{"s":"name","r":-60,"l":1},..]}
+// The answer is sent one network at a time, so no buffer has to hold the
+// whole list. A failed scan is answered with status 500.
 static esp_err_t scan_handler(httpd_req_t *req) {
-  const size_t cap = 2048;
   wifi_ap_record_t *aps = calloc(SCAN_MAX_APS, sizeof(wifi_ap_record_t));
-  char *out = malloc(cap);
-  if (aps == NULL || out == NULL) {
-    free(aps);
-    free(out);
+  if (aps == NULL) {
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server Error");
     return ESP_FAIL;
   }
 
   int count = wifi_scan(aps, SCAN_MAX_APS);
+  if (count < 0) {
+    free(aps);
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Scan failed");
+    return ESP_FAIL;
+  }
 
+  // Large enough for the longest possible piece: the stored name or one
+  // network, each with at most 32 bytes of fixed text around the name.
+  char chunk[JSON_SSID_MAX + 32 + 1];
   char cur[MAX_SSID_LEN + 1] = {0};
   nvs_get_ssid(cur, sizeof(cur));
 
-  size_t pos = snprintf(out, cap, "{\"cur\":");
-  pos = json_append_string(out, pos, cap, cur);
-  pos += snprintf(out + pos, cap - pos, ",\"aps\":[");
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+  size_t pos = strlcpy(chunk, "{\"cur\":", sizeof(chunk));
+  pos += json_string(chunk + pos, JSON_SSID_MAX + 1, cur);
+  pos += strlcpy(chunk + pos, ",\"aps\":[", sizeof(chunk) - pos);
+  esp_err_t ret = httpd_resp_send_chunk(req, chunk, pos);
+
   bool first = true;
-  for (int i = 0; i < count && pos + 80 < cap; i++) {
+  for (int i = 0; i < count && ret == ESP_OK; i++) {
     const char *ssid = (const char *)aps[i].ssid;
     if (ssid[0] == '\0') continue;  // hidden network
     bool seen = false;  // same name on several access points: keep strongest
@@ -676,19 +703,17 @@ static esp_err_t scan_handler(httpd_req_t *req) {
       }
     }
     if (seen) continue;
-    pos += snprintf(out + pos, cap - pos, "%s{\"s\":", first ? "" : ",");
-    pos = json_append_string(out, pos, cap, ssid);
-    pos += snprintf(out + pos, cap - pos, ",\"r\":%d,\"l\":%d}", aps[i].rssi,
-                    aps[i].authmode == WIFI_AUTH_OPEN ? 0 : 1);
+    pos = strlcpy(chunk, first ? "{\"s\":" : ",{\"s\":", sizeof(chunk));
+    pos += json_string(chunk + pos, JSON_SSID_MAX + 1, ssid);
+    pos += snprintf(chunk + pos, sizeof(chunk) - pos, ",\"r\":%d,\"l\":%d}",
+                    aps[i].rssi, aps[i].authmode == WIFI_AUTH_OPEN ? 0 : 1);
+    ret = httpd_resp_send_chunk(req, chunk, pos);
     first = false;
   }
-  snprintf(out + pos, cap - pos, "]}");
-
-  httpd_resp_set_type(req, "application/json");
-  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-  esp_err_t ret = httpd_resp_send(req, out, HTTPD_RESP_USE_STRLEN);
   free(aps);
-  free(out);
+
+  if (ret == ESP_OK) ret = httpd_resp_send_chunk(req, "]}", 2);
+  if (ret == ESP_OK) ret = httpd_resp_send_chunk(req, NULL, 0);
   return ret;
 }
 

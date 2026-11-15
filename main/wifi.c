@@ -343,13 +343,19 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         }
         break;
       case WIFI_EVENT_STA_DISCONNECTED:
-        // Increment reconnection counter
-        s_reconnect_attempts++;
-
         // Clear connection bit and set fail bit
         xEventGroupClearBits(s_wifi_event_group,
                              WIFI_CONNECTED_BIT | WIFI_CONNECTED_IPV6_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+
+        if (s_scanning) {
+          // wifi_scan() interrupted the connection attempt and resumes it
+          // itself; this is not a failed attempt and must not count as one
+          break;
+        }
+
+        // Increment reconnection counter
+        s_reconnect_attempts++;
 
         // Check if we've reached the maximum number of reconnection attempts
         if (nvs_get_ap_mode() &&
@@ -359,8 +365,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                    MAX_RECONNECT_ATTEMPTS);
           s_connection_given_up = true;
           // We'll continue in AP mode only at this point
-        } else if (s_scanning) {
-          // wifi_scan() paused the connection attempt and resumes it itself
         } else if (!s_connection_given_up) {
           // Only try to reconnect if we haven't given up yet
           ESP_LOGI(TAG,
