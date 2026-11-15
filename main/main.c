@@ -1058,7 +1058,18 @@ void app_main(void) {
         }
       } else {
         // Successful remote_get
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+        // While the panel is off (hold), keep saved_brightness in sync with
+        // the server but do not apply brightness — that would turn it back on.
+        if (display_power_on) {
+          display_set_brightness(brightness_pct);
+          saved_brightness = brightness_pct;
+        } else if (brightness_pct > 0) {
+          saved_brightness = brightness_pct;
+        }
+#else
         display_set_brightness(brightness_pct);
+#endif
         ESP_LOGI(TAG, "Queuing new webp (%d bytes)", len);
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
