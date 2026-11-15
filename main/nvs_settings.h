@@ -19,6 +19,9 @@ extern "C" {
 #define MAX_SYSLOG_ADDR_LEN 128
 #define MAX_SNTP_SERVER_LEN 64
 #define MAX_API_KEY_LEN 64
+#ifdef CONFIG_ENABLE_WIREGUARD
+#define MAX_WG_CONF_LEN 1023
+#endif
 
 // Initialize NVS settings
 esp_err_t nvs_settings_init(void);
@@ -61,6 +64,11 @@ bool nvs_get_touch_beep(void);
 bool nvs_get_startup_sound(void);
 uint8_t nvs_get_brightness(void);
 uint8_t nvs_get_volume(void);
+#ifdef CONFIG_ENABLE_WIREGUARD
+// WireGuard: raw .conf text (NULL if none) and mode (see wg.h)
+const char *nvs_get_wg_conf(void);
+uint8_t nvs_get_wg_mode(void);
+#endif
 
 // Setters
 esp_err_t nvs_set_ssid(const char *ssid);
@@ -82,6 +90,10 @@ esp_err_t nvs_set_touch_beep(bool touch_beep);
 esp_err_t nvs_set_startup_sound(bool startup_sound);
 esp_err_t nvs_set_brightness(uint8_t brightness);
 esp_err_t nvs_set_volume(uint8_t volume);
+#ifdef CONFIG_ENABLE_WIREGUARD
+esp_err_t nvs_set_wg_conf(const char *conf);
+esp_err_t nvs_set_wg_mode(uint8_t mode);
+#endif
 
 // Save all modified settings to NVS
 esp_err_t nvs_save_settings(void);

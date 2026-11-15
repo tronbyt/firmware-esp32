@@ -72,6 +72,27 @@ static const char *s_html_part2 =
     "'>"
     "</div>";
 
+#ifdef CONFIG_ENABLE_WIREGUARD
+// WireGuard section; the three %s mark the selected mode, the last one says
+// whether a configuration is stored. The stored keys are never sent back.
+static const char *s_html_wg_fmt =
+    "<div class='form-group'>"
+    "<label for='wg_mode'>WireGuard VPN:</label>"
+    "<select id='wg_mode' name='wg_mode' style='width:100%%;padding:8px'>"
+    "<option value='0'%s>Off</option>"
+    "<option value='1'%s>Auto (only if the server is not reachable)</option>"
+    "<option value='2'%s>Always</option>"
+    "</select>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='wg_conf'>WireGuard configuration (%s) - paste the .conf "
+    "file of your router to replace it:</label>"
+    "<textarea id='wg_conf' name='wg_conf' rows='6' maxlength='1000' "
+    "style='width:100%%;box-sizing:border-box' autocomplete='off' "
+    "spellcheck='false'></textarea>"
+    "</div>";
+#endif
+
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3 || \
     CONFIG_BOARD_MATRIXPORTAL_S3_WIDE || CONFIG_BOARD_TRONBYT_S3
 static const char *s_html_part3_start =
@@ -448,6 +469,24 @@ static esp_err_t root_handler(httpd_req_t *req) {
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
 
+#ifdef CONFIG_ENABLE_WIREGUARD
+    // Send WireGuard section
+    {
+      char *wg_html = malloc(1024);
+      if (wg_html == NULL) {
+        ret = ESP_ERR_NO_MEM;
+        break;
+      }
+      uint8_t wg_mode = nvs_get_wg_mode();
+      snprintf(wg_html, 1024, s_html_wg_fmt, wg_mode == 0 ? " selected" : "",
+               wg_mode == 1 ? " selected" : "", wg_mode == 2 ? " selected" : "",
+               nvs_get_wg_conf() ? "one is stored" : "none stored");
+      ret = httpd_resp_send_chunk(req, wg_html, HTTPD_RESP_USE_STRLEN);
+      free(wg_html);
+      if (ret != ESP_OK) break;
+    }
+#endif
+
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3 || \
     CONFIG_BOARD_MATRIXPORTAL_S3_WIDE || CONFIG_BOARD_TRONBYT_S3
     // Send Swap Colors Checkbox (Conditional)
@@ -733,6 +772,30 @@ static esp_err_t save_handler(httpd_req_t *req) {
       color_order = nvs_get_color_order();
     }
   }
+
+#ifdef CONFIG_ENABLE_WIREGUARD
+  // WireGuard: mode, and a new configuration if one was pasted
+  char wg_mode_val[4] = {0};
+  if (httpd_query_key_value(buf, "wg_mode", wg_mode_val,
+                            sizeof(wg_mode_val)) == ESP_OK &&
+      wg_mode_val[0] >= '0' && wg_mode_val[0] <= '2' && wg_mode_val[1] == 0) {
+    nvs_set_wg_mode((uint8_t)(wg_mode_val[0] - '0'));
+  }
+  char *wg_conf = heap_caps_malloc(3072, MALLOC_CAP_SPIRAM);
+  if (wg_conf != NULL) {
+    if (httpd_query_key_value(buf, "wg_conf", wg_conf, 3072) == ESP_OK) {
+      url_decode(wg_conf);
+      if (strstr(wg_conf, "PrivateKey") != NULL) {
+        if (nvs_set_wg_conf(wg_conf) == ESP_OK) {
+          ESP_LOGI(TAG, "New WireGuard configuration stored");
+        } else {
+          ESP_LOGW(TAG, "WireGuard configuration too long - ignored");
+        }
+      }
+    }
+    free(wg_conf);
+  }
+#endif
 
   url_decode(ssid);
   url_decode(password);

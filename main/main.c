@@ -28,6 +28,9 @@
 #endif
 #include "version.h"
 #include "wifi.h"
+#ifdef CONFIG_ENABLE_WIREGUARD
+#include "wg.h"
+#endif
 
 #if CONFIG_BUTTON_PIN >= 0
 #include <driver/gpio.h>
@@ -812,6 +815,12 @@ void app_main(void) {
 
   // image_url is now valid and usable here
   ESP_LOGI(TAG, "Proceeding with image URL: %s", image_url);
+
+#ifdef CONFIG_ENABLE_WIREGUARD
+  // Bring up the WireGuard tunnel if one is configured and needed (blocks
+  // until that is decided, at most 45 s; the tunnel keeps retrying after that)
+  wg_start(image_url, 45000);
+#endif
 
   char api_key[MAX_API_KEY_LEN + 1];
   if (nvs_get_api_key(api_key, sizeof(api_key)) == ESP_OK &&

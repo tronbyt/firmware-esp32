@@ -35,6 +35,10 @@
 #define NVS_KEY_API_KEY "api_key"
 #define NVS_KEY_BRIGHTNESS "brightness"
 #define NVS_KEY_VOLUME "volume"
+#ifdef CONFIG_ENABLE_WIREGUARD
+#define NVS_KEY_WG_CONF "wg_conf"
+#define NVS_KEY_WG_MODE "wg_mode"
+#endif
 
 #ifdef CONFIG_VOLUME_DEFAULT
 #define DEFAULT_VOLUME CONFIG_VOLUME_DEFAULT
@@ -62,6 +66,17 @@ static bool s_startup_sound = true;
 static char s_api_key[MAX_API_KEY_LEN + 1] = {0};
 static uint8_t s_brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 static uint8_t s_volume = DEFAULT_VOLUME;
+#ifdef CONFIG_ENABLE_WIREGUARD
+static char s_wg_conf[MAX_WG_CONF_LEN + 1] = {0};
+static uint8_t s_wg_mode = CONFIG_WG_DEFAULT_MODE;  // see wg.h
+// true if s_wg_conf was set at runtime (portal) and has to be stored in NVS;
+// the build-time default (wireguard.conf) is used straight from the binary.
+static bool s_wg_conf_from_nvs = false;
+
+// Build-time default WireGuard configuration (empty if none was provided)
+extern const char wg_default_conf_start[] asm("_binary_wg_default_conf_start");
+extern const char wg_default_conf_end[] asm("_binary_wg_default_conf_end");
+#endif
 
 // Hardcoded defaults (from secrets.json via generated secrets_gen.h)
 #include "secrets_gen.h"
@@ -247,8 +262,37 @@ esp_err_t nvs_settings_init(void) {
       s_api_key[0] = '\0';
     }
 
+#ifdef CONFIG_ENABLE_WIREGUARD
+    required_size = sizeof(s_wg_conf);
+    if (nvs_get_str(nvs_handle, NVS_KEY_WG_CONF, s_wg_conf, &required_size) ==
+            ESP_OK &&
+        s_wg_conf[0] != '\0') {
+      s_wg_conf_from_nvs = true;
+    } else {
+      s_wg_conf[0] = '\0';
+    }
+
+    if (nvs_get_u8(nvs_handle, NVS_KEY_WG_MODE, &val_u8) == ESP_OK &&
+        val_u8 <= 2) {
+      s_wg_mode = val_u8;
+    }
+#endif
+
     nvs_close(nvs_handle);
   }
+
+#ifdef CONFIG_ENABLE_WIREGUARD
+  // WireGuard: fall back to the configuration built into the firmware
+  if (s_wg_conf[0] == '\0') {
+    size_t len = wg_default_conf_end - wg_default_conf_start;
+    if (len > 0 && wg_default_conf_start[len - 1] == '\0') len--;
+    if (len > 0 && len <= MAX_WG_CONF_LEN &&
+        memchr(wg_default_conf_start, '=', len) != NULL) {
+      memcpy(s_wg_conf, wg_default_conf_start, len);
+      s_wg_conf[len] = '\0';
+    }
+  }
+#endif
 
   // Check hardcoded defaults if NVS didn't provide credentials
   bool save_defaults = false;
@@ -323,6 +367,28 @@ esp_err_t nvs_get_sntp_server(char *server, size_t max_len) {
   server[max_len - 1] = '\0';
   return ESP_OK;
 }
+
+#ifdef CONFIG_ENABLE_WIREGUARD
+const char *nvs_get_wg_conf(void) {
+  return (s_wg_conf[0] != '\0') ? s_wg_conf : NULL;
+}
+
+uint8_t nvs_get_wg_mode(void) { return s_wg_mode; }
+
+esp_err_t nvs_set_wg_conf(const char *conf) {
+  if (!conf) return ESP_ERR_INVALID_ARG;
+  if (strlen(conf) > MAX_WG_CONF_LEN) return ESP_ERR_INVALID_SIZE;
+  strcpy(s_wg_conf, conf);
+  s_wg_conf_from_nvs = true;
+  return ESP_OK;
+}
+
+esp_err_t nvs_set_wg_mode(uint8_t mode) {
+  if (mode > 2) return ESP_ERR_INVALID_ARG;
+  s_wg_mode = mode;
+  return ESP_OK;
+}
+#endif
 
 const char *nvs_get_image_url(void) {
   return (strlen(s_image_url) > 0) ? s_image_url : NULL;
@@ -597,6 +663,12 @@ esp_err_t nvs_save_settings(void) {
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_STARTUP_SOUND, s_startup_sound ? 1 : 0));
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_BRIGHTNESS, s_brightness));
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_VOLUME, s_volume));
+#ifdef CONFIG_ENABLE_WIREGUARD
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_WG_MODE, s_wg_mode));
+  if (s_wg_conf_from_nvs) {
+    CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_WG_CONF, s_wg_conf));
+  }
+#endif
 #undef CHECK_NVS_SET
 
   if (set_err != ESP_OK) {

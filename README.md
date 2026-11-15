@@ -71,6 +71,21 @@ make tidbyt-gen2-patched
 
 If your panel looks fine with the regular targets, you don't need these.
 
+#### Optional: WireGuard client
+
+The firmware can be built with a WireGuard client, so the device can reach an image server in a private network (for example at home) from any WiFi such as a phone hotspot or a guest network. It is **not** part of the default builds or the released binaries; enable it for your own build with:
+
+```bash
+make tidbyt-gen2 WIREGUARD=1
+```
+
+This adds `sdkconfig.defaults.wireguard` (`CONFIG_ENABLE_WIREGUARD=y`) to the build.
+
+- **Configuration:** a standard WireGuard `.conf` file as exported by the router or server for one client. Put it as `wireguard.conf` into the project root before building (it is git-ignored; after adding or removing the file run the `make` target again so the build is reconfigured), or paste it into the WiFi config portal. Stored keys are never shown again in the portal.
+- **Modes** (config portal, default from `CONFIG_WG_DEFAULT_MODE`): *off*, *auto* (the tunnel is only brought up if the image server cannot be reached directly, so no tunnel is used inside the home network) and *always*.
+- **Scope:** IPv4 only. Only the tunnel's own subnet (from the `Address` line) is routed through the tunnel; everything else keeps using WiFi directly.
+- **Notes:** the private key is stored on the device (in NVS, or in the firmware image when embedded at build time). The tunnel is only started after the clock has been set via SNTP, because the WireGuard handshake needs the current time. Tested on a Tidbyt Gen 2 in HTTP mode.
+
 ## Monitoring Logs
 
 To check the output of your running firmware, run the following:

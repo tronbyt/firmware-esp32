@@ -30,8 +30,42 @@ if(CONFIG_BOARD_TIDBYT_GEN2)
     list(APPEND SRCS "touch_control.c" "beep.c")
 endif()
 
+if(CONFIG_ENABLE_WIREGUARD)
+    list(APPEND SRCS "wg.c")
+endif()
+
 idf_component_register(SRCS ${SRCS}
                        INCLUDE_DIRS ".")
+
+if(CONFIG_ENABLE_WIREGUARD)
+    # Optional build-time default: wireguard.conf in the project root is
+    # embedded as is (an empty file if there is none).
+    set(_wg_src "${CMAKE_SOURCE_DIR}/wireguard.conf")
+    set(_wg_gen "${CMAKE_CURRENT_BINARY_DIR}/gen/wg_default.conf")
+    set(_wg_text "")
+    if(EXISTS "${_wg_src}")
+        file(SIZE "${_wg_src}" _wg_size)
+        if(_wg_size GREATER 1023)
+            message(FATAL_ERROR "wireguard.conf is larger than 1023 bytes")
+        endif()
+        file(READ "${_wg_src}" _wg_text)
+        message(STATUS "Embedding wireguard.conf as default WireGuard configuration")
+    endif()
+    set(_wg_old "\n")
+    if(EXISTS "${_wg_gen}")
+        file(READ "${_wg_gen}" _wg_old)
+    endif()
+    if(NOT "${_wg_old}" STREQUAL "${_wg_text}")
+        file(WRITE "${_wg_gen}" "${_wg_text}")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_wg_src}")
+    target_add_binary_data(${COMPONENT_LIB} "${_wg_gen}" TEXT)
+
+    # The WireGuard library has no Kconfig; its limits are plain defines.
+    # Besides the device's own address the peer needs room for the
+    # AllowedIPs networks.
+    idf_build_set_property(COMPILE_DEFINITIONS "-DCONFIG_WIREGUARD_MAX_SRC_IPS=4" APPEND)
+endif()
 
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_getaddrinfo" APPEND)
 
