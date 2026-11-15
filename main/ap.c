@@ -56,13 +56,40 @@ static const char *s_html_part1 =
     "<form action='/save' method='post' "
     "enctype='application/x-www-form-urlencoded'>"
     "<div class='form-group'>"
-    "<label for='ssid'>WiFi Network Name (2.4Ghz Only) :</label>"
-    "<input type='text' id='ssid' name='ssid' maxlength='32'>"
+    "<label for='nets'>WiFi Network (2.4Ghz Only):</label>"
+    "<select id='nets' style='width:100%;padding:8px;margin-bottom:5px' "
+    "onchange='pick()'><option value=''>Scanning...</option></select>"
+    "<button type='button' id='scan_btn' onclick='scan()' "
+    "style='margin-bottom:8px'>Scan again</button>"
+    "<input type='text' id='ssid' name='ssid' maxlength='32' "
+    "placeholder='Network name (or type a hidden one)'>"
     "</div>"
     "<div class='form-group'>"
-    "<label for='password'>WiFi Password:</label>"
+    "<label for='password'>WiFi Password (leave empty to keep the stored "
+    "one for the current network):</label>"
     "<input type='password' id='password' name='password' maxlength='64'>"
     "</div>"
+    "<script>"
+    "function pick(){var v=document.getElementById('nets').value;"
+    "if(v){document.getElementById('ssid').value=v;"
+    "document.getElementById('password').focus();}}"
+    "function scan(){var n=document.getElementById('nets'),"
+    "b=document.getElementById('scan_btn'),i=document.getElementById('ssid');"
+    "b.disabled=true;n.innerHTML='';n.add(new Option('Scanning...',''));"
+    "var x=new XMLHttpRequest();x.open('GET','/scan',true);x.timeout=20000;"
+    "x.onload=function(){b.disabled=false;n.innerHTML='';var d;"
+    "try{d=JSON.parse(x.responseText);}catch(e){d={aps:[]};}"
+    "if(d.cur&&!i.value){i.value=d.cur;}"
+    "n.add(new Option(d.aps.length?'Choose a network ('+d.aps.length+' found)'"
+    ":'No networks found',''));"
+    "d.aps.forEach(function(a){var o=new Option(a.s+'  ('+a.r+' dBm'+"
+    "(a.l?', secured':', open')+')',a.s);"
+    "if(a.s==i.value){o.selected=true;}n.add(o);});};"
+    "x.onerror=x.ontimeout=function(){b.disabled=false;n.innerHTML='';"
+    "n.add(new Option('Scan failed - type the name below',''));};"
+    "x.send();}"
+    "window.addEventListener('load',scan);"
+    "</script>"
     "<div class='form-group'>"
     "<label for='image_url'>Image URL:</label>"
     "<input type='text' id='image_url' name='image_url' maxlength='128' "
@@ -231,6 +258,7 @@ static esp_err_t root_handler(httpd_req_t *req);
 static esp_err_t save_handler(httpd_req_t *req);
 static esp_err_t update_handler(httpd_req_t *req);
 static esp_err_t captive_portal_handler(httpd_req_t *req);
+static esp_err_t scan_handler(httpd_req_t *req);
 static void url_decode(char *str);
 static void start_dns_server(void);
 static void stop_dns_server(void);
@@ -346,6 +374,7 @@ esp_err_t ap_start(void) {
   }
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.max_uri_handlers = 10;
   config.max_resp_headers = 16;
   config.recv_wait_timeout = 10;
   config.send_wait_timeout = 10;
@@ -376,6 +405,12 @@ esp_err_t ap_start(void) {
                             .handler = update_handler,
                             .user_ctx = NULL};
   httpd_register_uri_handler(s_server, &update_uri);
+
+  httpd_uri_t scan_uri = {.uri = "/scan",
+                          .method = HTTP_GET,
+                          .handler = scan_handler,
+                          .user_ctx = NULL};
+  httpd_register_uri_handler(s_server, &scan_uri);
 
   httpd_uri_t hotspot_detect_uri = {.uri = "/hotspot-detect.html",
                                     .method = HTTP_GET,
@@ -587,6 +622,76 @@ static esp_err_t root_handler(httpd_req_t *req) {
   return ret;
 }
 
+// Appends s as a JSON string (with quotes) to out; returns the new length.
+static size_t json_append_string(char *out, size_t pos, size_t cap,
+                                 const char *s) {
+  if (pos + 1 < cap) out[pos++] = '"';
+  for (; *s && pos + 8 < cap; s++) {
+    unsigned char ch = (unsigned char)*s;
+    if (ch == '"' || ch == '\\') {
+      out[pos++] = '\\';
+      out[pos++] = (char)ch;
+    } else if (ch < 0x20) {
+      pos += snprintf(out + pos, cap - pos, "\\u%04x", ch);
+    } else {
+      out[pos++] = (char)ch;
+    }
+  }
+  if (pos + 1 < cap) out[pos++] = '"';
+  out[pos] = '\0';
+  return pos;
+}
+
+#define SCAN_MAX_APS 20
+
+// GET /scan -> {"cur":"<stored ssid>","aps":[{"s":"name","r":-60,"l":1},..]}
+static esp_err_t scan_handler(httpd_req_t *req) {
+  const size_t cap = 2048;
+  wifi_ap_record_t *aps = calloc(SCAN_MAX_APS, sizeof(wifi_ap_record_t));
+  char *out = malloc(cap);
+  if (aps == NULL || out == NULL) {
+    free(aps);
+    free(out);
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server Error");
+    return ESP_FAIL;
+  }
+
+  int count = wifi_scan(aps, SCAN_MAX_APS);
+
+  char cur[MAX_SSID_LEN + 1] = {0};
+  nvs_get_ssid(cur, sizeof(cur));
+
+  size_t pos = snprintf(out, cap, "{\"cur\":");
+  pos = json_append_string(out, pos, cap, cur);
+  pos += snprintf(out + pos, cap - pos, ",\"aps\":[");
+  bool first = true;
+  for (int i = 0; i < count && pos + 80 < cap; i++) {
+    const char *ssid = (const char *)aps[i].ssid;
+    if (ssid[0] == '\0') continue;  // hidden network
+    bool seen = false;  // same name on several access points: keep strongest
+    for (int j = 0; j < i; j++) {
+      if (strcmp((const char *)aps[j].ssid, ssid) == 0) {
+        seen = true;
+        break;
+      }
+    }
+    if (seen) continue;
+    pos += snprintf(out + pos, cap - pos, "%s{\"s\":", first ? "" : ",");
+    pos = json_append_string(out, pos, cap, ssid);
+    pos += snprintf(out + pos, cap - pos, ",\"r\":%d,\"l\":%d}", aps[i].rssi,
+                    aps[i].authmode == WIFI_AUTH_OPEN ? 0 : 1);
+    first = false;
+  }
+  snprintf(out + pos, cap - pos, "]}");
+
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+  esp_err_t ret = httpd_resp_send(req, out, HTTPD_RESP_USE_STRLEN);
+  free(aps);
+  free(out);
+  return ret;
+}
+
 static void url_decode(char *str) {
   char *src = str;
   char *dst = str;
@@ -746,8 +851,17 @@ static esp_err_t save_handler(httpd_req_t *req) {
            skip_display_version ? "true" : "false",
            skip_boot_animation ? "true" : "false");
 
-  nvs_set_ssid(ssid);
-  nvs_set_password(password);
+  // An empty network name keeps the stored WiFi settings (so other settings
+  // can be changed on their own); an empty password keeps the stored one if
+  // the network name is unchanged.
+  char stored_ssid[MAX_SSID_LEN + 1] = {0};
+  nvs_get_ssid(stored_ssid, sizeof(stored_ssid));
+  if (ssid[0] != '\0') {
+    if (strcmp(ssid, stored_ssid) != 0 || password[0] != '\0') {
+      nvs_set_ssid(ssid);
+      nvs_set_password(password);
+    }
+  }
   nvs_set_image_url(strlen(image_url) < 6 ? NULL : image_url);
   nvs_set_swap_colors(swap_colors);
   nvs_set_disable_touch(disable_touch);
