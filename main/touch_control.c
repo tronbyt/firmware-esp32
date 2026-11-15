@@ -183,6 +183,7 @@ touch_event_t touch_control_check(void) {
           g_touch.state = STATE_IDLE;
           if (now - g_touch.last_event_time >= g_touch.debounce_ms) {
             event = TOUCH_EVENT_TAP;
+            touch_feedback(BEEP_TAP);
             g_touch.last_event_time = now;
           }
 #endif
@@ -216,6 +217,7 @@ touch_event_t touch_control_check(void) {
         uint32_t wait_time = now - g_touch.release_time;
         if (wait_time > DOUBLE_TAP_WINDOW_MS) {
           event = TOUCH_EVENT_TAP;
+          touch_feedback(BEEP_TAP);
           g_touch.last_event_time = now;
           g_touch.state = STATE_IDLE;
         }
