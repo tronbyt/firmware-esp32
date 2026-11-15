@@ -14,6 +14,9 @@
 
 #include "nvs_settings.h"
 #include "wifi.h"
+#ifdef CONFIG_ENABLE_WIREGUARD
+#include "wg.h"
+#endif
 #if CONFIG_BOARD_TIDBYT_GEN2
 #include "beep.h"
 #endif
@@ -774,26 +777,46 @@ static esp_err_t save_handler(httpd_req_t *req) {
   }
 
 #ifdef CONFIG_ENABLE_WIREGUARD
-  // WireGuard: mode, and a new configuration if one was pasted
+  // WireGuard: a pasted configuration is checked before anything is saved, so
+  // an incomplete paste cannot replace a working one
+  char *wg_conf = heap_caps_malloc_prefer(3072, 2, MALLOC_CAP_SPIRAM,
+                                          MALLOC_CAP_DEFAULT);
+  bool wg_conf_new = false;
+  bool wg_conf_bad = (wg_conf == NULL);
+  if (wg_conf != NULL) {
+    esp_err_t wg_err = httpd_query_key_value(buf, "wg_conf", wg_conf, 3072);
+    if (wg_err == ESP_OK) {
+      url_decode(wg_conf);
+      const char *p = wg_conf;
+      while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+      if (*p != '\0') {  // an empty field keeps the stored configuration
+        wg_conf_new = strlen(wg_conf) <= MAX_WG_CONF_LEN &&
+                      wg_conf_is_valid(wg_conf);
+        wg_conf_bad = !wg_conf_new;
+      }
+    } else if (wg_err == ESP_ERR_HTTPD_RESULT_TRUNC) {
+      wg_conf_bad = true;
+    }
+  }
+  if (wg_conf_bad) {
+    ESP_LOGW(TAG, "Rejected an incomplete or invalid WireGuard configuration");
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                        "The WireGuard configuration is incomplete or "
+                        "invalid. Nothing was saved.");
+    free(wg_conf);
+    free(buf);
+    return ESP_FAIL;
+  }
+  if (wg_conf_new && nvs_set_wg_conf(wg_conf) == ESP_OK) {
+    ESP_LOGI(TAG, "New WireGuard configuration stored");
+  }
+  free(wg_conf);
+
   char wg_mode_val[4] = {0};
   if (httpd_query_key_value(buf, "wg_mode", wg_mode_val,
                             sizeof(wg_mode_val)) == ESP_OK &&
       wg_mode_val[0] >= '0' && wg_mode_val[0] <= '2' && wg_mode_val[1] == 0) {
     nvs_set_wg_mode((uint8_t)(wg_mode_val[0] - '0'));
-  }
-  char *wg_conf = heap_caps_malloc(3072, MALLOC_CAP_SPIRAM);
-  if (wg_conf != NULL) {
-    if (httpd_query_key_value(buf, "wg_conf", wg_conf, 3072) == ESP_OK) {
-      url_decode(wg_conf);
-      if (strstr(wg_conf, "PrivateKey") != NULL) {
-        if (nvs_set_wg_conf(wg_conf) == ESP_OK) {
-          ESP_LOGI(TAG, "New WireGuard configuration stored");
-        } else {
-          ESP_LOGW(TAG, "WireGuard configuration too long - ignored");
-        }
-      }
-    }
-    free(wg_conf);
   }
 #endif
 

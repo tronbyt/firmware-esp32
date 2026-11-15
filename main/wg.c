@@ -50,6 +50,7 @@ typedef struct {
   char allowed_ip[WG_MAX_ALLOWED][16];
   char allowed_mask[WG_MAX_ALLOWED][16];
   int allowed_count;
+  int allowed_ignored;  // IPv4 AllowedIPs entries beyond WG_MAX_ALLOWED
 } wg_conf_t;
 
 typedef enum {
@@ -147,13 +148,16 @@ static bool parse_conf(const char* text, wg_conf_t* c) {
       for (char* item = strtok_r(val, ",", &save); item;
            item = strtok_r(NULL, ",", &save)) {
         int prefix;
-        if (c->allowed_count < WG_MAX_ALLOWED &&
-            parse_cidr(item, c->allowed_ip[c->allowed_count],
-                       sizeof(c->allowed_ip[0]), &prefix)) {
-          prefix_to_mask(prefix, c->allowed_mask[c->allowed_count],
-                         sizeof(c->allowed_mask[0]));
-          c->allowed_count++;
+        char ip[16];
+        if (!parse_cidr(item, ip, sizeof(ip), &prefix)) continue;  // IPv6
+        if (c->allowed_count >= WG_MAX_ALLOWED) {
+          c->allowed_ignored++;
+          continue;
         }
+        strlcpy(c->allowed_ip[c->allowed_count], ip, sizeof(c->allowed_ip[0]));
+        prefix_to_mask(prefix, c->allowed_mask[c->allowed_count],
+                       sizeof(c->allowed_mask[0]));
+        c->allowed_count++;
       }
     } else if (strcasecmp(key, "Endpoint") == 0) {
       char* colon = strrchr(val, ':');
@@ -358,6 +362,11 @@ static bool tunnel_connect(void) {
   return false;
 }
 
+// Auto mode without tunnel: how often the direct path is checked again, and
+// how many checks in a row have to fail before the tunnel is tried.
+#define DIRECT_CHECK_MS 60000
+#define DIRECT_MAX_FAILS 3
+
 static void wg_task(void* arg) {
   for (;;) {
     if (!wifi_is_connected()) {
@@ -369,8 +378,20 @@ static void wg_task(void* arg) {
       ESP_LOGI(TAG, "Server %s:%s reachable directly - tunnel not needed",
                s_probe_host, s_probe_port);
       s_state = WG_STATE_DIRECT;
-      vTaskDelete(NULL);
-      return;
+
+      // Keep checking: the network behind the WiFi can change without the
+      // device restarting (e.g. a travel router switching its uplink).
+      int fails = 0;
+      while (fails < DIRECT_MAX_FAILS) {
+        delay_ms(DIRECT_CHECK_MS);
+        if (!wifi_is_connected()) continue;
+        fails = probe_direct(3000) ? 0 : fails + 1;
+      }
+      ESP_LOGW(TAG,
+               "Server %s:%s no longer reachable directly - trying the "
+               "tunnel",
+               s_probe_host, s_probe_port);
+      s_state = WG_STATE_DOWN;
     }
 
     if (!tunnel_connect()) {
@@ -402,6 +423,15 @@ static void wg_task(void* arg) {
 
 bool wg_is_up(void) { return s_state == WG_STATE_UP; }
 
+bool wg_conf_is_valid(const char* text) {
+  if (text == NULL) return false;
+  wg_conf_t* c = malloc(sizeof(wg_conf_t));
+  if (c == NULL) return false;
+  bool ok = parse_conf(text, c);
+  free(c);
+  return ok;
+}
+
 void wg_start(const char* image_url, int wait_ms) {
   static bool started = false;
   if (started) return;
@@ -415,6 +445,12 @@ void wg_start(const char* image_url, int wait_ms) {
   if (!parse_conf(text, &s_conf)) {
     ESP_LOGE(TAG, "WireGuard configuration is incomplete or invalid");
     return;
+  }
+  if (s_conf.allowed_ignored > 0) {
+    ESP_LOGW(TAG,
+             "Only the first %d IPv4 AllowedIPs entries are used, %d "
+             "ignored",
+             WG_MAX_ALLOWED, s_conf.allowed_ignored);
   }
   if (s_mode == WG_MODE_AUTO &&
       !parse_url_host(image_url, s_probe_host, sizeof(s_probe_host),
