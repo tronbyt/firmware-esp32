@@ -581,6 +581,22 @@ static void gfx_loop(void *args) {
   }
 }
 
+// Waits until delay_ms after *start, but returns early when the animation is
+// told to stop (isAnimating == -1, e.g. a tap) or the loop is paused. Frames
+// can last several seconds; without this a skip only took effect afterwards.
+static void wait_frame(TickType_t start, int delay_ms,
+                       volatile int32_t* isAnimating) {
+  const TickType_t step = pdMS_TO_TICKS(20);
+  const TickType_t total = pdMS_TO_TICKS(delay_ms);
+  for (;;) {
+    TickType_t elapsed = xTaskGetTickCount() - start;
+    if (elapsed >= total) return;
+    if (*isAnimating == -1 || _state->paused) return;
+    TickType_t left = total - elapsed;
+    vTaskDelay(left > step ? step : left);
+  }
+}
+
 static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
                      volatile int32_t *isAnimating, char *notification_sound,
                      uint8_t notification_volume) {
@@ -643,7 +659,8 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
       int timestamp;
       WebPAnimDecoderGetNext(decoder, &pix, &timestamp);
       if (delay > 0) {
-        xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+        wait_frame(drawStartTick, delay, isAnimating);
+        if (*isAnimating == -1 || _state->paused) break;
       } else {
         vTaskDelay(10);  // small delay for yield.
       }
@@ -667,7 +684,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     WebPAnimDecoderReset(decoder);
 
     if (delay > 0) {
-      xTaskDelayUntil(&drawStartTick, pdMS_TO_TICKS(delay));
+      wait_frame(drawStartTick, delay, isAnimating);
     } else {
       vTaskDelay(
           pdMS_TO_TICKS(100));  // Add a small fallback delay to yield CPU
