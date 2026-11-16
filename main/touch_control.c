@@ -176,6 +176,9 @@ touch_event_t touch_control_check(void) {
           g_touch.state = STATE_IDLE;
         } else if (duration >= MIN_TAP_DURATION_MS) {
 #ifdef CONFIG_TOUCH_DOUBLE_TAP
+          // Feedback on release: TOUCH_EVENT_TAP only fires once the
+          // double-tap window has expired, too late to feel responsive
+          touch_feedback(BEEP_TAP);
           g_touch.release_time = now;
           g_touch.state = STATE_WAIT_FOR_DOUBLE_TAP;
 #else
@@ -183,6 +186,7 @@ touch_event_t touch_control_check(void) {
           g_touch.state = STATE_IDLE;
           if (now - g_touch.last_event_time >= g_touch.debounce_ms) {
             event = TOUCH_EVENT_TAP;
+            touch_feedback(BEEP_TAP);
             g_touch.last_event_time = now;
           }
 #endif

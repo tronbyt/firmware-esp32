@@ -1058,7 +1058,18 @@ void app_main(void) {
         }
       } else {
         // Successful remote_get
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+        // While the panel is off (hold), keep saved_brightness in sync with
+        // the server but do not apply brightness — that would turn it back on.
+        if (display_power_on) {
+          display_set_brightness(brightness_pct);
+          saved_brightness = brightness_pct;
+        } else if (brightness_pct > 0) {
+          saved_brightness = brightness_pct;
+        }
+#else
         display_set_brightness(brightness_pct);
+#endif
         ESP_LOGI(TAG, "Queuing new webp (%d bytes)", len);
 
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
@@ -1080,8 +1091,24 @@ void app_main(void) {
         // Wait for the current animation to finish (isAnimating will be 0)
         if (isAnimating > 0) {
           ESP_LOGI(TAG, "Waiting for current webp to finish");
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+          int touch_poll_ms = 0;
+#endif
           while (isAnimating > 0) {
             vTaskDelay(pdMS_TO_TICKS(1));
+#ifdef CONFIG_BOARD_TIDBYT_GEN2
+            // Poll the touch pad while the current app is on screen. Checking
+            // it only once per fetch (below) misses nearly every tap.
+            if (++touch_poll_ms >= 20) {
+              touch_poll_ms = 0;
+              if (!nvs_get_disable_touch()) {
+                touch_event_t touch_event = touch_control_check();
+                if (touch_event != TOUCH_EVENT_NONE) {
+                  handle_touch_event(touch_event);
+                }
+              }
+            }
+#endif
           }
         }
 
