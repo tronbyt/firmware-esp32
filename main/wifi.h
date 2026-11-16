@@ -2,6 +2,7 @@
 
 #include <esp_err.h>
 #include <esp_http_server.h>
+#include <esp_wifi_types.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -64,6 +65,18 @@ bool wifi_wait_for_ipv6(uint32_t timeout_ms);
  * @return true if connected, false otherwise
  */
 bool wifi_is_connected(void);
+
+/**
+ * @brief Scan for WiFi networks (blocking, a few seconds)
+ *
+ * Works while connected and while the config AP is up. A connection attempt
+ * that is in progress is paused for the scan and resumed afterwards.
+ *
+ * @param records Buffer for the results, strongest network first
+ * @param max     Number of entries in records
+ * @return number of networks stored, or -1 on error
+ */
+int wifi_scan(wifi_ap_record_t* records, uint16_t max);
 
 // Add new function to register config callback
 void wifi_register_config_callback(void (*callback)(void));

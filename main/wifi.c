@@ -46,6 +46,8 @@ static void (*s_config_callback)(void) = NULL;
 // Reconnection counter
 static int s_reconnect_attempts = 0;
 static bool s_connection_given_up = false;
+// true while wifi_scan() runs: the disconnect handler must not reconnect then
+static volatile bool s_scanning = false;
 
 // Counter for tracking consecutive WiFi disconnections
 static int s_wifi_disconnect_counter = 0;
@@ -269,6 +271,40 @@ bool wifi_wait_for_ipv6(uint32_t timeout_ms) {
   return false;
 }
 
+int wifi_scan(wifi_ap_record_t* records, uint16_t max) {
+  if (records == NULL || max == 0) return -1;
+
+  s_scanning = true;
+  esp_err_t err = esp_wifi_scan_start(NULL, true);
+  if (err == ESP_ERR_WIFI_STATE) {
+    // The station is in the middle of connecting; scanning is not possible
+    // then. Stop the attempt, scan, and let it continue afterwards.
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(200));
+    err = esp_wifi_scan_start(NULL, true);
+  }
+
+  int result = -1;
+  if (err == ESP_OK) {
+    uint16_t count = max;
+    if (esp_wifi_scan_get_ap_records(&count, records) == ESP_OK) {
+      result = count;
+    }
+  } else {
+    ESP_LOGW(TAG, "WiFi scan failed: %s", esp_err_to_name(err));
+  }
+  esp_wifi_clear_ap_list();
+  s_scanning = false;
+
+  // Resume connecting if the scan interrupted it
+  char saved_ssid[33] = {0};
+  nvs_get_ssid(saved_ssid, sizeof(saved_ssid));
+  if (!wifi_is_connected() && !s_connection_given_up && saved_ssid[0] != 0) {
+    esp_wifi_connect();
+  }
+  return result;
+}
+
 // Add new function to register config callback
 void wifi_register_config_callback(void (*callback)(void)) {
   s_config_callback = callback;
@@ -307,13 +343,19 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         }
         break;
       case WIFI_EVENT_STA_DISCONNECTED:
-        // Increment reconnection counter
-        s_reconnect_attempts++;
-
         // Clear connection bit and set fail bit
         xEventGroupClearBits(s_wifi_event_group,
                              WIFI_CONNECTED_BIT | WIFI_CONNECTED_IPV6_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+
+        if (s_scanning) {
+          // wifi_scan() interrupted the connection attempt and resumes it
+          // itself; this is not a failed attempt and must not count as one
+          break;
+        }
+
+        // Increment reconnection counter
+        s_reconnect_attempts++;
 
         // Check if we've reached the maximum number of reconnection attempts
         if (nvs_get_ap_mode() &&
