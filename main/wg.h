@@ -27,6 +27,12 @@ void wg_start(const char* image_url, int wait_ms);
 /** @return true while the tunnel is up. */
 bool wg_is_up(void);
 
+/** Send off-LAN traffic through the tunnel (paired with wg_route_release). */
+void wg_route_hold(void);
+
+/** Restore normal WiFi routing after wg_route_hold(). */
+void wg_route_release(void);
+
 /**
  * @brief Check a WireGuard configuration (.conf text) without applying it.
  *

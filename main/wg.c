@@ -423,6 +423,32 @@ static void wg_task(void* arg) {
 
 bool wg_is_up(void) { return s_state == WG_STATE_UP; }
 
+static esp_err_t op_set_default(void* arg) {
+  return esp_wireguard_set_default(&s_ctx);
+}
+
+static esp_err_t op_restore_default(void* arg) {
+  return esp_wireguard_restore_default(&s_ctx);
+}
+
+// Only while held: off-LAN traffic uses the tunnel netif. Leaving it on breaks
+// DNS/SNTP/background traffic and can panic lwIP; scope to outbound fetches.
+void wg_route_hold(void) {
+  if (s_state != WG_STATE_UP || s_ctx.netif == NULL) return;
+  esp_err_t err = esp_netif_tcpip_exec(op_set_default, NULL);
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Could not enable tunnel routing: %s", esp_err_to_name(err));
+  }
+}
+
+void wg_route_release(void) {
+  if (s_ctx.netif == NULL) return;
+  esp_err_t err = esp_netif_tcpip_exec(op_restore_default, NULL);
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Could not restore WiFi routing: %s", esp_err_to_name(err));
+  }
+}
+
 bool wg_conf_is_valid(const char* text) {
   if (text == NULL) return false;
   wg_conf_t* c = malloc(sizeof(wg_conf_t));
