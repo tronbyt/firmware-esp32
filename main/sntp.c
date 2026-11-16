@@ -14,7 +14,9 @@ void app_sntp_config(void) {
   ESP_LOGI(TAG, "Configuring SNTP");
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
 
-  char server[MAX_SNTP_SERVER_LEN + 1] = {0};
+  // lwIP keeps the pointer it is given instead of copying the name, so the
+  // buffer has to outlive this function.
+  static char server[MAX_SNTP_SERVER_LEN + 1];
   nvs_get_sntp_server(server, sizeof(server));
 
   // Set secondary fallbacks first (higher indexes)
