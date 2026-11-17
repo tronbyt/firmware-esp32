@@ -109,6 +109,13 @@ static esp_err_t send_client_info(void) {
     if (ci) {
       cJSON_AddStringToObject(ci, "firmware_version", FIRMWARE_VERSION);
       cJSON_AddStringToObject(ci, "firmware_type", "ESP32");
+      // Build variant, not a runtime setting: lets the server keep OTA updates
+      // on the matching *_8mhz binary.
+#ifdef CONFIG_PATCH_I2S_DIVIDER
+      cJSON_AddBoolToObject(ci, "clock_8mhz", true);
+#else
+      cJSON_AddBoolToObject(ci, "clock_8mhz", false);
+#endif
       cJSON_AddNumberToObject(ci, "protocol_version",
                               WEBSOCKET_PROTOCOL_VERSION);
 
