@@ -30,7 +30,7 @@ help:
 	@echo "  waveshare-s3             Build for Waveshare ESP32-S3-RGB-Matrix"
 	@echo "  waveshare-s3-wide        Build for Waveshare ESP32-S3-RGB-Matrix (128x64)"
 	@echo ""
-	@echo "8MHz Variants (apply HUB75 I2S divider fix for panels with red artifacts):"
+	@echo "8MHz Variants (clock_8mhz on by default, for panels with red artifacts):"
 	@echo "  tidbyt-gen1_8mhz          Build for Tidbyt Gen 1 at 8MHz"
 	@echo "  tidbyt-gen1_swap_8mhz     Build for Tidbyt Gen 1 Swap at 8MHz"
 	@echo "  tidbyt-gen2_8mhz          Build for Tidbyt Gen 2 at 8MHz"
@@ -80,7 +80,7 @@ tidbyt-gen1_swap:
 tidbyt-gen2:
 	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen2)
 
-# 8MHz variants — apply HUB75 I2S divider fix for affected Tidbyt panels.
+# 8MHz variants — same firmware with the clock_8mhz setting defaulted on.
 tidbyt-gen1_8mhz:
 	$(call build_device,esp32,sdkconfig.defaults.tidbyt-gen1,sdkconfig.defaults.patched)
 

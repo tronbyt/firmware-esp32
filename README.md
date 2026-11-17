@@ -59,17 +59,17 @@ To flash the built firmware to your device:
 idf.py flash
 ```
 
-#### 8MHz Variants (HUB75 I2S Divider Fix)
+#### 8MHz Pixel Clock (HUB75 I2S Divider Fix)
 
-Some Tidbyt Gen1/Gen2 panels show red pixel artifacts at the default pixel clock because the bundled ESP32-HUB75-MatrixPanel-DMA library snaps the clock to 20MHz/10MHz instead of honoring the requested frequency, so the requested 8MHz runs at 10MHz (see [mrcodetastic/ESP32-HUB75-MatrixPanel-DMA#816](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/issues/816)). The legacy Tidbyt OS used a divider derived from the requested frequency; the `_8mhz` targets restore that behavior by enabling `CONFIG_PATCH_I2S_DIVIDER`, which patches the downloaded library at configure time (and reverts it when disabled):
+Some Tidbyt Gen1/Gen2 panels show red pixel artifacts because the bundled ESP32-HUB75-MatrixPanel-DMA library runs the panel at 10MHz instead of the requested 8MHz (see [mrcodetastic/ESP32-HUB75-MatrixPanel-DMA#816](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/issues/816)). The build patches the library so the `clock_8mhz` setting (see Advanced Settings) can switch these panels to a true 8MHz. It's off by default and applies on reboot. If the library has changed and the patch doesn't match, the build skips it with a warning and `clock_8mhz` does nothing.
+
+To build with `clock_8mhz` on by default:
 
 ```bash
 make tidbyt-gen1_8mhz
 make tidbyt-gen1_swap_8mhz
 make tidbyt-gen2_8mhz
 ```
-
-These are also published with each release (`tidbyt-gen1_8mhz_firmware.bin`, `tidbyt-gen1_swap_8mhz_firmware.bin`, `tidbyt-gen2_8mhz_firmware.bin`). If your panel looks fine with the regular targets, you don't need these.
 
 ## Monitoring Logs
 
@@ -89,6 +89,7 @@ The firmware supports several advanced settings stored in Non-Volatile Storage (
 | **Syslog Address** | `syslog_addr` | Remote Syslog (RFC 5424) server in `host:port` format (e.g., `192.168.1.10:1517`). |
 | **SNTP Server** | `sntp_server` | Custom NTP server for time synchronization. Defaults to DHCP provided servers or `pool.ntp.org`. |
 | **Swap Colors** | `swap_colors` | Boolean (0/1) to swap RGB color order. Useful for specific panel variants. |
+| **8MHz Clock** | `clock_8mhz` | Boolean (0/1) to run the panel at a true 8MHz instead of 10MHz. Fixes red artifacts on some Tidbyt Gen1/Gen2 panels. Applied on reboot. Defaults to 0. |
 | **Color Order** | `color_order` | Color channel remap order (`rgb`, `rbg`, `grb`, `gbr`, `brg`, `bgr`). Defaults to `rgb`. |
 | **AP Mode** | `ap_mode` | Boolean (0/1) to enable/disable the fallback WiFi configuration portal. |
 | **WiFi Power Save**| `wifi_ps` | WiFi power management mode (0: None, 1: Min, 2: Max). |

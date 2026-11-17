@@ -51,9 +51,6 @@ jobs:
           - tidbyt-gen1
           - tidbyt-gen1_swap
           - tidbyt-gen2
-          - tidbyt-gen1_8mhz
-          - tidbyt-gen1_swap_8mhz
-          - tidbyt-gen2_8mhz
           - tronbyt-s3
           - tronbyt-s3-wide
           - pixoticker
@@ -122,20 +119,8 @@ jobs:
 
           BUILD_DIR="build_$target"
 
-          # *_8mhz variants are the base board plus the I2S divider patch
-          # (CONFIG_PATCH_I2S_DIVIDER), which clocks the panel at a true 8MHz
-          # instead of the library's 10MHz for panels that show red artifacts.
-          case "$target" in
-            *_8mhz)
-              defaults="sdkconfig.defaults;sdkconfig.defaults.${target%_8mhz};sdkconfig.defaults.patched"
-              ;;
-            *)
-              defaults="sdkconfig.defaults;sdkconfig.defaults.$target"
-              ;;
-          esac
-
           # Set the target and apply sdkconfig defaults
-          idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="$defaults" set-target "$chip"
+          idf.py -B "$BUILD_DIR" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.$target" set-target "$chip"
           idf.py -B "$BUILD_DIR" build
 
           if [ ! -f "$BUILD_DIR/firmware.bin" ]; then
