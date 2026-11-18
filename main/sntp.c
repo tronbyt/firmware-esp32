@@ -14,7 +14,9 @@ void app_sntp_config(void) {
   ESP_LOGI(TAG, "Configuring SNTP");
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
 
-  char server[MAX_SNTP_SERVER_LEN + 1] = {0};
+  // lwIP keeps the pointer it is given instead of copying the name, so the
+  // buffer has to outlive this function.
+  static char server[MAX_SNTP_SERVER_LEN + 1];
   nvs_get_sntp_server(server, sizeof(server));
 
   // Set secondary fallbacks first (higher indexes)
@@ -26,12 +28,10 @@ void app_sntp_config(void) {
     ESP_LOGI(TAG, "Using SNTP server from NVS: %s", server);
     esp_sntp_setservername(0, server);
   } else {
-    // 2. Use DHCP (if enabled)
-    ESP_LOGI(TAG, "Using SNTP from DHCP (fallback: pool.ntp.org)");
+    esp_sntp_setservername(0, "pool.ntp.org");
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     sntp_servermode_dhcp(1);
 #pragma GCC diagnostic pop
-    esp_sntp_setservername(0, "pool.ntp.org");
   }
 }
