@@ -27,8 +27,15 @@ void wg_start(const char* image_url, int wait_ms);
 /** @return true while the tunnel is up. */
 bool wg_is_up(void);
 
-/** Send off-LAN traffic through the tunnel (paired with wg_route_release). */
-void wg_route_hold(void);
+/**
+ * @brief Send off-LAN traffic through the tunnel (paired with
+ * wg_route_release).
+ *
+ * The host name in @p url is resolved first, while WiFi routing still
+ * applies, so the DNS lookup of the following request does not go into the
+ * tunnel.
+ */
+void wg_route_hold(const char* url);
 
 /** Restore normal WiFi routing after wg_route_hold(). */
 void wg_route_release(void);

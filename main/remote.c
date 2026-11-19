@@ -278,7 +278,7 @@ int remote_get(const char* url, uint8_t** buf, size_t* len,
 
   // Do the request
 #ifdef CONFIG_ENABLE_WIREGUARD
-  wg_route_hold();
+  wg_route_hold(url);
 #endif
   esp_err_t err = esp_http_client_perform(http);
 #ifdef CONFIG_ENABLE_WIREGUARD
