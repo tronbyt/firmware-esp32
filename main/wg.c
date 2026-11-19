@@ -423,68 +423,6 @@ static void wg_task(void* arg) {
 
 bool wg_is_up(void) { return s_state == WG_STATE_UP; }
 
-static esp_err_t op_set_default(void* arg) {
-  return esp_wireguard_set_default(&s_ctx);
-}
-
-static esp_err_t op_restore_default(void* arg) {
-  return esp_wireguard_restore_default(&s_ctx);
-}
-
-// Copies the host part of "scheme://[user@]host[:port][/path]" into host.
-static bool url_host(const char* url, char* host, size_t cap) {
-  const char* p = strstr(url, "://");
-  p = p != NULL ? p + 3 : url;
-  const char* end = p + strcspn(p, "/?#");
-  const char* at = memchr(p, '@', end - p);
-  if (at != NULL) p = at + 1;
-  if (*p == '[') return false;  // IPv6 literal, nothing to resolve
-  const char* colon = memchr(p, ':', end - p);
-  if (colon != NULL) end = colon;
-  size_t len = end - p;
-  if (len == 0 || len >= cap) return false;
-  memcpy(host, p, len);
-  host[len] = '\0';
-  return true;
-}
-
-// While the tunnel is the default route, a DNS query to a server outside the
-// local network goes into the tunnel and is dropped there unless the server
-// is in AllowedIPs. Looking the host up before switching, while WiFi routing
-// still applies, leaves its address in lwIP's DNS cache for the HTTP client.
-static void resolve_before_hold(const char* url) {
-  char host[128];
-  if (url == NULL || !url_host(url, host, sizeof(host))) return;
-  ip4_addr_t numeric;
-  if (ip4addr_aton(host, &numeric)) return;
-  struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM};
-  struct addrinfo* res = NULL;
-  if (getaddrinfo(host, NULL, &hints, &res) != 0 || res == NULL) {
-    ESP_LOGW(TAG, "Could not resolve %s before using the tunnel", host);
-    return;
-  }
-  freeaddrinfo(res);
-}
-
-// Only while held: off-LAN traffic uses the tunnel netif. Leaving it on breaks
-// DNS/SNTP/background traffic and can panic lwIP; scope to outbound fetches.
-void wg_route_hold(const char* url) {
-  if (s_state != WG_STATE_UP || s_ctx.netif == NULL) return;
-  resolve_before_hold(url);
-  esp_err_t err = esp_netif_tcpip_exec(op_set_default, NULL);
-  if (err != ESP_OK) {
-    ESP_LOGW(TAG, "Could not enable tunnel routing: %s", esp_err_to_name(err));
-  }
-}
-
-void wg_route_release(void) {
-  if (s_ctx.netif == NULL) return;
-  esp_err_t err = esp_netif_tcpip_exec(op_restore_default, NULL);
-  if (err != ESP_OK) {
-    ESP_LOGW(TAG, "Could not restore WiFi routing: %s", esp_err_to_name(err));
-  }
-}
-
 bool wg_conf_is_valid(const char* text) {
   if (text == NULL) return false;
   wg_conf_t* c = malloc(sizeof(wg_conf_t));
