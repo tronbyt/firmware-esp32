@@ -1,0 +1,5 @@
+# Optional WireGuard client. Add this file to SDKCONFIG_DEFAULTS, e.g.
+#   make tidbyt-gen2 WIREGUARD=1
+CONFIG_ENABLE_WIREGUARD=y
+# WireGuard handshakes (Curve25519) run in the lwIP thread
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=6144

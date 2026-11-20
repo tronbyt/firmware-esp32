@@ -11,3 +11,8 @@ dependencies:
     version: "3.0.14"
   libwebp:
     git: https://github.com/tronbyt/libwebp.git
+  # Only fetched and built when the WireGuard client is enabled
+  esphome/wireguard:
+    version: "0.4.8"
+    rules:
+      - if: "$CONFIG{ENABLE_WIREGUARD} == True"

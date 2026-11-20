@@ -14,6 +14,9 @@
 
 #include "nvs_settings.h"
 #include "wifi.h"
+#ifdef CONFIG_ENABLE_WIREGUARD
+#include "wg.h"
+#endif
 #if CONFIG_BOARD_TIDBYT_GEN2
 #include "beep.h"
 #endif
@@ -100,6 +103,27 @@ static const char *s_html_part1 =
 static const char *s_html_part2 =
     "'>"
     "</div>";
+
+#ifdef CONFIG_ENABLE_WIREGUARD
+// WireGuard section; the three %s mark the selected mode, the last one says
+// whether a configuration is stored. The stored keys are never sent back.
+static const char *s_html_wg_fmt =
+    "<div class='form-group'>"
+    "<label for='wg_mode'>WireGuard VPN:</label>"
+    "<select id='wg_mode' name='wg_mode' style='width:100%%;padding:8px'>"
+    "<option value='0'%s>Off</option>"
+    "<option value='1'%s>Auto (only if the server is not reachable)</option>"
+    "<option value='2'%s>Always</option>"
+    "</select>"
+    "</div>"
+    "<div class='form-group'>"
+    "<label for='wg_conf'>WireGuard configuration (%s) - paste the .conf "
+    "file of your router to replace it:</label>"
+    "<textarea id='wg_conf' name='wg_conf' rows='6' maxlength='1000' "
+    "style='width:100%%;box-sizing:border-box' autocomplete='off' "
+    "spellcheck='false'></textarea>"
+    "</div>";
+#endif
 
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3 || \
     CONFIG_BOARD_MATRIXPORTAL_S3_WIDE || CONFIG_BOARD_TRONBYT_S3
@@ -485,6 +509,24 @@ static esp_err_t root_handler(httpd_req_t *req) {
                                      HTTPD_RESP_USE_STRLEN)) != ESP_OK)
       break;
 
+#ifdef CONFIG_ENABLE_WIREGUARD
+    // Send WireGuard section
+    {
+      char *wg_html = malloc(1024);
+      if (wg_html == NULL) {
+        ret = ESP_ERR_NO_MEM;
+        break;
+      }
+      uint8_t wg_mode = nvs_get_wg_mode();
+      snprintf(wg_html, 1024, s_html_wg_fmt, wg_mode == 0 ? " selected" : "",
+               wg_mode == 1 ? " selected" : "", wg_mode == 2 ? " selected" : "",
+               nvs_get_wg_conf() ? "one is stored" : "none stored");
+      ret = httpd_resp_send_chunk(req, wg_html, HTTPD_RESP_USE_STRLEN);
+      free(wg_html);
+      if (ret != ESP_OK) break;
+    }
+#endif
+
 #if CONFIG_BOARD_TIDBYT_GEN1 || CONFIG_BOARD_MATRIXPORTAL_S3 || \
     CONFIG_BOARD_MATRIXPORTAL_S3_WIDE || CONFIG_BOARD_TRONBYT_S3
     // Send Swap Colors Checkbox (Conditional)
@@ -867,6 +909,50 @@ static esp_err_t save_handler(httpd_req_t *req) {
       color_order = nvs_get_color_order();
     }
   }
+
+#ifdef CONFIG_ENABLE_WIREGUARD
+  // WireGuard: a pasted configuration is checked before anything is saved, so
+  // an incomplete paste cannot replace a working one
+  char *wg_conf = heap_caps_malloc_prefer(3072, 2, MALLOC_CAP_SPIRAM,
+                                          MALLOC_CAP_DEFAULT);
+  bool wg_conf_new = false;
+  bool wg_conf_bad = (wg_conf == NULL);
+  if (wg_conf != NULL) {
+    esp_err_t wg_err = httpd_query_key_value(buf, "wg_conf", wg_conf, 3072);
+    if (wg_err == ESP_OK) {
+      url_decode(wg_conf);
+      const char *p = wg_conf;
+      while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+      if (*p != '\0') {  // an empty field keeps the stored configuration
+        wg_conf_new = strlen(wg_conf) <= MAX_WG_CONF_LEN &&
+                      wg_conf_is_valid(wg_conf);
+        wg_conf_bad = !wg_conf_new;
+      }
+    } else if (wg_err == ESP_ERR_HTTPD_RESULT_TRUNC) {
+      wg_conf_bad = true;
+    }
+  }
+  if (wg_conf_bad) {
+    ESP_LOGW(TAG, "Rejected an incomplete or invalid WireGuard configuration");
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                        "The WireGuard configuration is incomplete or "
+                        "invalid. Nothing was saved.");
+    free(wg_conf);
+    free(buf);
+    return ESP_FAIL;
+  }
+  if (wg_conf_new && nvs_set_wg_conf(wg_conf) == ESP_OK) {
+    ESP_LOGI(TAG, "New WireGuard configuration stored");
+  }
+  free(wg_conf);
+
+  char wg_mode_val[4] = {0};
+  if (httpd_query_key_value(buf, "wg_mode", wg_mode_val,
+                            sizeof(wg_mode_val)) == ESP_OK &&
+      wg_mode_val[0] >= '0' && wg_mode_val[0] <= '2' && wg_mode_val[1] == 0) {
+    nvs_set_wg_mode((uint8_t)(wg_mode_val[0] - '0'));
+  }
+#endif
 
   url_decode(ssid);
   url_decode(password);

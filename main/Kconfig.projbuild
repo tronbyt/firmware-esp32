@@ -83,6 +83,36 @@ menu "Application Configuration"
         help
             Skip displaying the firmware version on boot.
 
+    config ENABLE_WIREGUARD
+        bool "Enable WireGuard VPN client"
+        default n
+        select LWIP_PPP_SUPPORT
+        help
+            Build a WireGuard client into the firmware, so the device can reach
+            an image server in a private network (e.g. at home) from any WiFi.
+            Off by default; nothing is added to the firmware unless enabled.
+
+            The tunnel is configured with a standard WireGuard .conf file:
+            either wireguard.conf in the project root at build time, or pasted
+            into the config portal. Only IPv4 is supported, and only the
+            tunnel's own subnet is routed through the tunnel.
+
+            The handshake runs in the lwIP thread and needs
+            CONFIG_LWIP_TCPIP_TASK_STACK_SIZE >= 6144; see
+            sdkconfig.defaults.wireguard. LWIP_PPP_SUPPORT is selected because
+            esp-netif otherwise misreads the state pointer of the WireGuard
+            network interface.
+
+    config WG_DEFAULT_MODE
+        int "Default WireGuard mode (0 off, 1 auto, 2 always)"
+        depends on ENABLE_WIREGUARD
+        range 0 2
+        default 1
+        help
+            Used until a mode is saved from the config portal. "Auto" only
+            brings the tunnel up if the image server cannot be reached
+            directly, "always" brings it up unconditionally.
+
     config PREFER_IPV6
         bool "Prefer IPv6"
         default n

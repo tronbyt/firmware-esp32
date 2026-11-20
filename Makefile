@@ -16,6 +16,9 @@ help:
 	@echo "  monitor          Monitor the serial output"
 	@echo "  menuconfig       Open the configuration menu"
 	@echo ""
+	@echo "Options:"
+	@echo "  WIREGUARD=1      Add the optional WireGuard client to a device build"
+	@echo ""
 	@echo "Device Specific Builds (Builds, but does not flash):"
 	@echo "  tidbyt-gen1              Build for Tidbyt Gen 1"
 	@echo "  tidbyt-gen1_swap         Build for Tidbyt Gen 1 (Swap Colors)"
@@ -65,7 +68,7 @@ menuconfig:
 # Usage: $(call build_device,<target>,<defaults_file>[,<extra_defaults_file>])
 define build_device
 	rm -f sdkconfig
-	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)$(if $(3),;$(3))" set-target $(1)
+	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;$(2)$(if $(3),;$(3))$(if $(WIREGUARD),;sdkconfig.defaults.wireguard)" set-target $(1)
 	IDF_TARGET=$(1) $(PYTHON) $(IDFPY) build
 	cd build && esptool.py --chip $(1) merge_bin -o merged_firmware.bin @flash_args
 endef
