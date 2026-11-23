@@ -23,6 +23,7 @@
 #define NVS_KEY_SNTP_SERVER "sntp_server"
 #define NVS_KEY_IMAGE_URL "image_url"
 #define NVS_KEY_SWAP_COLORS "swap_colors"
+#define NVS_KEY_CLOCK_8MHZ "clock_8mhz"
 #define NVS_KEY_COLOR_ORDER "color_order"
 #define NVS_KEY_WIFI_POWER_SAVE "wifi_ps"
 #define NVS_KEY_SKIP_VERSION "skip_ver"
@@ -54,6 +55,7 @@ static char s_syslog_addr[MAX_SYSLOG_ADDR_LEN + 1] = {0};
 static char s_sntp_server[MAX_SNTP_SERVER_LEN + 1] = {0};
 static char s_image_url[MAX_URL_LEN + 1] = {0};
 static bool s_swap_colors = false;
+static bool s_clock_8mhz = false;
 static color_order_t s_color_order = COLOR_ORDER_RGB;
 static wifi_ps_type_t s_wifi_power_save = WIFI_PS_MIN_MODEM;
 static bool s_skip_display_version = false;
@@ -109,6 +111,8 @@ esp_err_t nvs_settings_init(void) {
 #else
   s_swap_colors = false;
 #endif
+
+  s_clock_8mhz = false;
 
 #if defined(CONFIG_COLOR_ORDER_RBG)
   s_color_order = COLOR_ORDER_RBG;
@@ -208,6 +212,10 @@ esp_err_t nvs_settings_init(void) {
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_SWAP_COLORS, &val_u8) == ESP_OK) {
       s_swap_colors = (val_u8 != 0);
+    }
+
+    if (nvs_get_u8(nvs_handle, NVS_KEY_CLOCK_8MHZ, &val_u8) == ESP_OK) {
+      s_clock_8mhz = (val_u8 != 0);
     }
 
     if (nvs_get_u8(nvs_handle, NVS_KEY_COLOR_ORDER, &val_u8) == ESP_OK &&
@@ -396,6 +404,8 @@ const char *nvs_get_image_url(void) {
 
 bool nvs_get_swap_colors(void) { return s_swap_colors; }
 
+bool nvs_get_clock_8mhz(void) { return s_clock_8mhz; }
+
 color_order_t nvs_get_color_order(void) { return s_color_order; }
 
 static const char *const kColorOrderNames[COLOR_ORDER_MAX] = {
@@ -542,6 +552,11 @@ esp_err_t nvs_set_swap_colors(bool swap_colors) {
   return ESP_OK;
 }
 
+esp_err_t nvs_set_clock_8mhz(bool clock_8mhz) {
+  s_clock_8mhz = clock_8mhz;
+  return ESP_OK;
+}
+
 esp_err_t nvs_set_color_order(color_order_t order) {
   if (order >= COLOR_ORDER_MAX) return ESP_ERR_INVALID_ARG;
   s_color_order = order;
@@ -652,6 +667,7 @@ esp_err_t nvs_save_settings(void) {
   CHECK_NVS_SET(nvs_set_str(nvs_handle, NVS_KEY_API_KEY, s_api_key));
 
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_SWAP_COLORS, s_swap_colors ? 1 : 0));
+  CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_CLOCK_8MHZ, s_clock_8mhz ? 1 : 0));
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_COLOR_ORDER, (uint8_t)s_color_order));
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_WIFI_POWER_SAVE, (uint8_t)s_wifi_power_save));
   CHECK_NVS_SET(nvs_set_u8(nvs_handle, NVS_KEY_SKIP_VERSION, s_skip_display_version ? 1 : 0));

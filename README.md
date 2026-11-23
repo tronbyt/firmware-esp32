@@ -59,17 +59,9 @@ To flash the built firmware to your device:
 idf.py flash
 ```
 
-#### Patched Variants (HUB75 I2S Divider Fix)
+#### 8MHz Pixel Clock (HUB75 I2S Divider Fix)
 
-Some Tidbyt Gen1/Gen2 panels show red pixel artifacts at the default pixel clock because the bundled ESP32-HUB75-MatrixPanel-DMA library snaps the clock to 20MHz/10MHz instead of honoring the requested frequency (see [mrcodetastic/ESP32-HUB75-MatrixPanel-DMA#816](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/issues/816)). The legacy Tidbyt OS used a divider derived from the requested frequency; the `-patched` targets restore that behavior by enabling `CONFIG_PATCH_I2S_DIVIDER`, which patches the downloaded library at configure time (and reverts it when disabled):
-
-```bash
-make tidbyt-gen1-patched
-make tidbyt-gen1_swap-patched
-make tidbyt-gen2-patched
-```
-
-If your panel looks fine with the regular targets, you don't need these.
+Some Tidbyt Gen1/Gen2 panels show red pixel artifacts at the default 10MHz pixel clock (see [mrcodetastic/ESP32-HUB75-MatrixPanel-DMA#816](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/issues/816)). The `clock_8mhz` setting (see Advanced Settings) runs these panels at 8MHz instead. It's off by default and applies on reboot.
 
 #### Optional: WireGuard client
 
@@ -104,6 +96,7 @@ The firmware supports several advanced settings stored in Non-Volatile Storage (
 | **Syslog Address** | `syslog_addr` | Remote Syslog (RFC 5424) server in `host:port` format (e.g., `192.168.1.10:1517`). |
 | **SNTP Server** | `sntp_server` | Custom NTP server for time synchronization. Defaults to DHCP provided servers or `pool.ntp.org`. |
 | **Swap Colors** | `swap_colors` | Boolean (0/1) to swap RGB color order. Useful for specific panel variants. |
+| **8MHz Clock** | `clock_8mhz` | Boolean (0/1) to run the panel at a true 8MHz instead of 10MHz. Fixes red artifacts on some Tidbyt Gen1/Gen2 panels. Applied on reboot. Defaults to 0. |
 | **Color Order** | `color_order` | Color channel remap order (`rgb`, `rbg`, `grb`, `gbr`, `brg`, `bgr`). Defaults to `rgb`. |
 | **AP Mode** | `ap_mode` | Boolean (0/1) to enable/disable the fallback WiFi configuration portal. |
 | **WiFi Power Save**| `wifi_ps` | WiFi power management mode (0: None, 1: Min, 2: Max). |

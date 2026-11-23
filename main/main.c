@@ -131,6 +131,7 @@ static esp_err_t send_client_info(void) {
       cJSON_AddStringToObject(ci, "sntp_server", sntp_server);
       cJSON_AddStringToObject(ci, "image_url", image_url);
       cJSON_AddBoolToObject(ci, "swap_colors", nvs_get_swap_colors());
+      cJSON_AddBoolToObject(ci, "clock_8mhz", nvs_get_clock_8mhz());
       cJSON_AddStringToObject(ci, "color_order",
                               nvs_color_order_to_string(nvs_get_color_order()));
       cJSON_AddNumberToObject(ci, "wifi_power_save", nvs_get_wifi_power_save());
@@ -291,6 +292,15 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
                 bool val = cJSON_IsTrue(swap_colors_item);
                 nvs_set_swap_colors(val);
                 ESP_LOGI(TAG, "Updated swap_colors to %d", val);
+                settings_changed = true;
+              }
+
+              // Check for "clock_8mhz" (applied on next boot)
+              cJSON* clock_8mhz_item = cJSON_GetObjectItem(root, "clock_8mhz");
+              if (cJSON_IsBool(clock_8mhz_item)) {
+                bool val = cJSON_IsTrue(clock_8mhz_item);
+                nvs_set_clock_8mhz(val);
+                ESP_LOGI(TAG, "Updated clock_8mhz to %d", val);
                 settings_changed = true;
               }
 
