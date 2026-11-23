@@ -223,8 +223,9 @@ int display_initialize(void) {
 #endif
   }
 
-  ESP_LOGI(TAG, "Initializing display with swap_colors=%s",
-           swap_colors ? "true" : "false");
+  ESP_LOGI(TAG, "Initializing display with swap_colors=%s clock_8mhz=%s",
+           swap_colors ? "true" : "false",
+           nvs_get_clock_8mhz() ? "true" : "false");
 
   // Initialize the panel.
   HUB75_I2S_CFG::i2s_pins pins = {pin_R1,  pin_G1, pin_BL1, pin_R2, pin_G2,
@@ -244,7 +245,7 @@ int display_initialize(void) {
                          HUB75_I2S_CFG::FM6126A,  // driver chip
                          HUB75_I2S_CFG::TYPE138,  // line driver
                          true,                    // double-buffering
-                         HUB75_I2S_CFG::HZ_10M,   // clock speed
+                         nvs_get_clock_8mhz() ? HUB75_I2S_CFG::HZ_8M : HUB75_I2S_CFG::HZ_10M,   // clock speed
                          1,                       // latch blanking
                          invert_clock_phase       // invert clock phase
   );

@@ -35,6 +35,9 @@ esp_err_t nvs_get_sntp_server(char *server, size_t max_len);
 const char *nvs_get_image_url(void);
 esp_err_t nvs_get_api_key(char *api_key, size_t max_len);
 bool nvs_get_swap_colors(void);
+// True 8MHz HUB75 pixel clock instead of the library's 10MHz (Tidbyt Gen1 /
+// Gen2 panels with red artifacts). Read once at display init.
+bool nvs_get_clock_8mhz(void);
 
 // Channel remap applied to every pixel at draw time, after the board's pin
 // mapping and any swap_colors swap - a correction relative to the board's
@@ -79,6 +82,7 @@ esp_err_t nvs_set_sntp_server(const char *server);
 esp_err_t nvs_set_image_url(const char *image_url);
 esp_err_t nvs_set_api_key(const char *api_key);
 esp_err_t nvs_set_swap_colors(bool swap_colors);
+esp_err_t nvs_set_clock_8mhz(bool clock_8mhz);
 esp_err_t nvs_set_color_order(color_order_t order);
 esp_err_t nvs_set_wifi_power_save(wifi_ps_type_t power_save);
 esp_err_t nvs_set_skip_display_version(bool skip);
