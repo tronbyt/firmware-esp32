@@ -76,6 +76,7 @@ This adds `sdkconfig.defaults.wireguard` (`CONFIG_ENABLE_WIREGUARD=y`) to the bu
 - **Configuration:** a standard WireGuard `.conf` file as exported by the router or server for one client. Put it as `wireguard.conf` into the project root before building (it is git-ignored; after adding or removing the file run the `make` target again so the build is reconfigured), or paste it into the WiFi config portal. Stored keys are never shown again in the portal.
 - **Modes** (config portal, default from `CONFIG_WG_DEFAULT_MODE`): *off*, *auto* (the tunnel is only brought up if the image server cannot be reached directly, so no tunnel is used inside the home network; the direct path is checked again every minute) and *always*.
 - **Scope:** IPv4 only; at most three IPv4 `AllowedIPs` entries are used (further ones are ignored with a warning in the log). Only the tunnel's own subnet (from the `Address` line) is routed through the tunnel; everything else keeps using WiFi directly.
+- **MTU:** the tunnel uses an MTU of 1280 so that it also works on networks with a smaller path MTU (the firmware cannot reassemble fragmented packets). An `MTU` line in the `[Interface]` section (576–1420) overrides it.
 - **Notes:** the private key is stored on the device (in NVS, or in the firmware image when embedded at build time). The tunnel is only started after the clock has been set via SNTP, because the WireGuard handshake needs the current time. Tested on a Tidbyt Gen 2 in HTTP mode.
 
 ## Monitoring Logs

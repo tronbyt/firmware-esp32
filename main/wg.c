@@ -17,6 +17,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 #include <lwip/netdb.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +39,14 @@ _Static_assert(CONFIG_LWIP_TCPIP_TASK_STACK_SIZE >= 6144,
 #define WG_MAX_ALLOWED 3   // + the device's own address = 4 source IPs
 #define WG_HOST_LEN 96
 
+// Tunnel MTU. The library default (1420) only fits a full 1500-byte path;
+// on networks with a smaller path MTU the outer UDP packets get fragmented,
+// and lwIP here does not reassemble, so every large response is lost.
+// 1280 (the IPv6 minimum) is what most WireGuard clients fall back to.
+#define WG_DEFAULT_MTU 1280
+#define WG_MIN_MTU 576
+#define WG_MAX_MTU 1420
+
 typedef struct {
   char private_key[WG_KEY_STR_LEN + 4];
   char public_key[WG_KEY_STR_LEN + 4];
@@ -47,6 +56,7 @@ typedef struct {
   char endpoint[WG_HOST_LEN];
   int port;
   int keepalive;
+  int mtu;
   char allowed_ip[WG_MAX_ALLOWED][16];
   char allowed_mask[WG_MAX_ALLOWED][16];
   int allowed_count;
@@ -109,6 +119,7 @@ static bool parse_conf(const char* text, wg_conf_t* c) {
   memset(c, 0, sizeof(*c));
   c->port = 51820;
   c->keepalive = 25;
+  c->mtu = WG_DEFAULT_MTU;
   int address_prefix = 32;
 
   char* copy = strdup(text);
@@ -134,6 +145,9 @@ static bool parse_conf(const char* text, wg_conf_t* c) {
       strlcpy(c->preshared_key, val, sizeof(c->preshared_key));
     } else if (strcasecmp(key, "PersistentKeepalive") == 0) {
       c->keepalive = atoi(val);
+    } else if (strcasecmp(key, "MTU") == 0) {
+      int mtu = atoi(val);
+      if (mtu >= WG_MIN_MTU && mtu <= WG_MAX_MTU) c->mtu = mtu;
     } else if (strcasecmp(key, "Address") == 0) {
       char* save = NULL;
       for (char* item = strtok_r(val, ",", &save); item;
@@ -283,7 +297,12 @@ static esp_err_t op_init(void* arg) {
   return esp_wireguard_init(&s_wg_config, &s_ctx);
 }
 
-static esp_err_t op_connect(void* arg) { return esp_wireguard_connect(&s_ctx); }
+static esp_err_t op_connect(void* arg) {
+  esp_err_t err = esp_wireguard_connect(&s_ctx);
+  // TCP derives its MSS from the netif MTU, so set it before any connection
+  if (err == ESP_OK && s_ctx.netif != NULL) s_ctx.netif->mtu = s_conf.mtu;
+  return err;
+}
 
 static esp_err_t op_allow(void* arg) {
   for (int i = 0; i < s_conf.allowed_count; i++) {
@@ -351,8 +370,8 @@ static bool tunnel_connect(void) {
 
   for (int i = 0; i < 60; i++) {  // up to 15 s for the handshake
     if (esp_netif_tcpip_exec(op_is_up, NULL) == ESP_OK) {
-      ESP_LOGI(TAG, "Tunnel up: %s/%s via %s:%d", s_conf.address,
-               s_conf.netmask, s_conf.endpoint, s_conf.port);
+      ESP_LOGI(TAG, "Tunnel up: %s/%s via %s:%d, MTU %d", s_conf.address,
+               s_conf.netmask, s_conf.endpoint, s_conf.port, s_conf.mtu);
       return true;
     }
     delay_ms(250);
