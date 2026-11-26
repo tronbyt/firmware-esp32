@@ -20,3 +20,5 @@ void gfx_display_text(const char* text, int x, int y, uint8_t r, uint8_t g,
 void gfx_stop(void);
 void gfx_start(void);
 void gfx_shutdown(void);
+/** Subtle fetch/connect error dot at (0,0); shown on each animation frame. */
+void gfx_set_error_indicator(bool show);

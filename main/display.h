@@ -21,7 +21,8 @@ void display_clear(void);
 void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
 void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
                        uint8_t b);
-void draw_error_indicator_pixel(void);
+/** When true, a red dot at (0,0) is drawn before each display_draw() flip. */
+void display_set_error_indicator(bool show);
 void display_text(const char* text, int x, int y, uint8_t r, uint8_t g,
                   uint8_t b, int scale);
 void display_flip(void);

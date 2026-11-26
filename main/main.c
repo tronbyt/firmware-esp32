@@ -603,7 +603,7 @@ static void websocket_event_handler(void* handler_args, esp_event_base_t base,
         free(webp);
         webp = NULL;
       }
-      draw_error_indicator_pixel();
+      gfx_set_error_indicator(true);
       break;
   }
 }
@@ -963,7 +963,7 @@ void app_main(void) {
             }
           }
         }
-        draw_error_indicator_pixel();
+        gfx_set_error_indicator(true);
         // Normal disconnection within threshold: library reconnects via
         // reconnect_timeout_ms
       }
@@ -1061,7 +1061,7 @@ void app_main(void) {
         ESP_LOGE(TAG, "No WiFi or Failed to get webp with code %d",
                  status_code);
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
-        draw_error_indicator_pixel();  // Add this
+        gfx_set_error_indicator(true);
         if (status_code == 0) {
           ESP_LOGI(TAG, "No connection");
         } else if (status_code == 404 || status_code == 400) {
@@ -1077,6 +1077,7 @@ void app_main(void) {
         }
       } else {
         // Successful remote_get
+        gfx_set_error_indicator(false);
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
         // While the panel is off (hold), keep saved_brightness in sync with
         // the server but do not apply brightness — that would turn it back on.

@@ -480,6 +480,8 @@ void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
   display_text(text, x, y, r, g, b, scale);
 }
 
+void gfx_set_error_indicator(bool show) { display_set_error_indicator(show); }
+
 void gfx_shutdown(void) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
   if (_state && _state->pending_sound) {
@@ -566,7 +568,7 @@ static void gfx_loop(void *args) {
       if (draw_webp(webp, len, dwell_secs, &isAnimating, notification_sound,
                     notification_volume)) {
         ESP_LOGE(TAG, "Could not draw webp");
-        draw_error_indicator_pixel();
+        gfx_set_error_indicator(true);
         vTaskDelay(pdMS_TO_TICKS(1 * 1000));
         isAnimating = 0;
         // Free the invalid buffer to prevent re-drawing it
@@ -628,7 +630,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   WebPAnimDecoder *decoder = WebPAnimDecoderNew(&webpData, &decoderOptions);
   if (decoder == NULL) {
     ESP_LOGE(TAG, "Could not create WebP decoder");
-    draw_error_indicator_pixel();
+    gfx_set_error_indicator(true);
     if (notification_sound != NULL) {
       free(notification_sound);
     }
@@ -638,7 +640,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
   WebPAnimInfo animation;
   if (!WebPAnimDecoderGetInfo(decoder, &animation)) {
     ESP_LOGE(TAG, "Could not get WebP animation");
-    draw_error_indicator_pixel();
+    gfx_set_error_indicator(true);
     WebPAnimDecoderDelete(decoder);  // Clean up decoder before returning
     if (notification_sound != NULL) {
       free(notification_sound);

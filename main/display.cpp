@@ -188,6 +188,8 @@ static MatrixPanel_I2S_DMA *_matrix;
 static uint8_t _brightness = DISPLAY_DEFAULT_BRIGHTNESS;
 static const char *TAG = "display";
 
+static volatile bool s_show_error_dot = false;
+
 // Per-board ceiling for the 0-100% -> setBrightness8() (0-255) mapping.
 // Genuine Tidbyt hardware (Gen1/Gen2) defines this as 100 in its board block
 // above, matching the stock HDK convention where the brightness percentage
@@ -345,6 +347,15 @@ static inline void apply_color_order(uint8_t *r, uint8_t *g, uint8_t *b) {
   *b = ch[kChannelOrder[order][2]];
 }
 
+void display_set_error_indicator(bool show) { s_show_error_dot = show; }
+
+static void paint_error_dot_if_enabled(void) {
+  if (!s_show_error_dot || _matrix == NULL) return;
+  uint8_t r = 100, g = 0, b = 0;
+  apply_color_order(&r, &g, &b);
+  _matrix->drawPixelRGB888(0, 0, r, g, b);
+}
+
 void display_draw(const uint8_t *pix, int width, int height, int channels,
                   int ixR, int ixG, int ixB) {
   color_order_t order = nvs_get_color_order();
@@ -377,6 +388,7 @@ void display_draw(const uint8_t *pix, int width, int height, int channels,
       }
     }
   }
+  paint_error_dot_if_enabled();
   _matrix->flipDMABuffer();
 }
 
@@ -389,8 +401,6 @@ void display_draw_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
     _matrix->flipDMABuffer();
   }
 }
-
-void draw_error_indicator_pixel(void) { display_draw_pixel(0, 0, 100, 0, 0); }
 
 void display_fill_rect(int x, int y, int w, int h, uint8_t r, uint8_t g,
                        uint8_t b) {
