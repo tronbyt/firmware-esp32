@@ -250,6 +250,8 @@ int gfx_update_with_sound(void *webp, size_t len, int32_t dwell_secs,
                           const char *sound, uint8_t volume) {
   if (!_state) return -1;
 
+  display_set_error_indicator(false);
+
   if (pdTRUE != xSemaphoreTake(_state->mutex, portMAX_DELAY)) {
     ESP_LOGE(TAG, "Could not take gfx mutex");
     return -1;  // Return negative on error
@@ -480,7 +482,16 @@ void gfx_display_text(const char *text, int x, int y, uint8_t r, uint8_t g,
   display_text(text, x, y, r, g, b, scale);
 }
 
-void gfx_set_error_indicator(bool show) { display_set_error_indicator(show); }
+void gfx_set_error_indicator(bool show) {
+  static bool was_shown = false;
+  display_set_error_indicator(show);
+  // A cleared flag does not repaint until the next display_draw; nudge gfx so
+  // the dot disappears promptly (e.g. static webp dwelling without new frames).
+  if (was_shown && !show) {
+    isAnimating = -1;
+  }
+  was_shown = show;
+}
 
 void gfx_shutdown(void) {
 #ifdef CONFIG_BOARD_TIDBYT_GEN2
@@ -715,7 +726,7 @@ static int draw_webp(const uint8_t *buf, size_t len, int32_t dwell_secs,
     notification_sound = NULL;
   }
 
-  // ESP_LOGI(TAG, "Setting isAnimating to 0");
+  display_set_error_indicator(false);
   if (*isAnimating != -1) {
     *isAnimating = 0;
   }
